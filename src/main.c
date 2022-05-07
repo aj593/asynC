@@ -44,12 +44,12 @@ void read_cb(void* arg){
 }
 
 int main(int argc, char* argv[]){
-    pthread_t event_loop_id = initialize_event_loop();
+    event_queue_init();
 
     struct aiocb aio;
     async_open(argv[1], O_RDONLY, open_cb, &aio);
 
-    wait_on_event_loop(event_loop_id);
+    event_loop_wait();
 
     return 0;
 }
