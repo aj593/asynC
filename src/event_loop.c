@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <aio.h>
 
+int is_first_pass_done = 0;
+
 pthread_t initialize_event_loop(){
     initialize_linked_list(&event_queue);
     initialize_linked_list(&execute_queue);

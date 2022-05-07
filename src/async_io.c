@@ -1,12 +1,12 @@
 #include "singly_linked_list.h"
 #include "event_loop.h"
+#include "async_io.h"
 
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <aio.h>
 #include <stdio.h>
-
 
 void async_open(char* filename, int flags, callback open_cb, void* cb_arg){
     //TODO: make this async somehow
@@ -17,7 +17,7 @@ void async_open(char* filename, int flags, callback open_cb, void* cb_arg){
     new_node->callback = open_cb; //TODO: is it ok to assign callback like this even if async_open will exit by time callback executes?
     new_node->callback_arg = cb_arg;
 
-    write(STDOUT_FILENO, "im in async open\n", 17);
+    //printf("async_open, my fd is %d\n", open_fd);
 
     //TODO: move locking, appending, and unlocking into own enqueue function?
     pthread_mutex_lock(&event_queue_mutex);
