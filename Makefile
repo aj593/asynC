@@ -8,7 +8,7 @@ all: $(BINS)
 main: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ -pthread -lrt
 
-obj/%.o: %.c
+obj/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $^ -pthread -lrt
 
 clean:
