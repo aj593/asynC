@@ -6,7 +6,7 @@
 #include "singly_linked_list.h"
 
 linked_list event_queue;
-//int is_first_pass_done = 0;
+int is_first_pass_done = 0;
 pthread_mutex_t event_queue_mutex;
 
 linked_list execute_queue;

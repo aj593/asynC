@@ -21,7 +21,7 @@ pthread_t initialize_event_loop(){
 }
 
 void wait_on_event_loop(pthread_t event_loop_id){
-    //is_first_pass_done = 1;
+    is_first_pass_done = 1;
     pthread_join(event_loop_id, NULL);
 
     destroy_linked_list(&event_queue);
@@ -33,7 +33,7 @@ void* event_loop(void* arg){
     //TODO: check event queue every iteration
     //TODO: are these right conditions to check, and do we use && or ||?
     //TODO: put mutex lock on checking if empty?
-    while(!is_linked_list_empty(&event_queue) /*|| !is_first_pass_done*/){
+    while(!is_linked_list_empty(&event_queue) || !is_first_pass_done){
         //TODO: put checking of event queue in separate function?
         pthread_mutex_lock(&event_queue_mutex);
 
