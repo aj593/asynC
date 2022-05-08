@@ -1,53 +1,37 @@
-#include <pthread.h>
-#include <aio.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "singly_linked_list.h"
-#include "event_loop.h"
 #include "async_io.h"
 
 //TODO: error check for NULL with malloc and calloc
 
-typedef struct{
-    int fd;
-    char* buffer;
-    int num_bytes;
-} io_info;
+void open_cb(int open_fd, void* arg);
+void read_cb(int read_fd, void* buffer, int num_bytes, void* arg);
 
-void read_cb(void* arg);
-void open_cb(void* arg);
-
-void open_cb(void* arg){
-    struct aiocb* ptr_aio = (struct aiocb*)(arg);
-    printf("hi my fd is %d\n", ptr_aio->aio_fildes);
+void open_cb(int open_fd, void* arg){
     int num_bytes_to_read = 10;
-    ptr_aio->aio_buf = malloc(num_bytes_to_read * sizeof(char));
+    char* buffer = (char*)malloc(num_bytes_to_read * sizeof(char));
 
-    async_read(ptr_aio, read_cb, ptr_aio);
+    async_read(open_fd, buffer, num_bytes_to_read, read_cb, buffer);
 }
 
-void read_cb(void* arg){
-    if(arg == NULL){
-        char message[] = "Wrong!!\n";
-        write(STDOUT_FILENO, message, sizeof(message));
-        return;
-    }
+//TODO: need read_fd param?
+void read_cb(int read_fd, void* buffer, int num_bytes, void* arg){
+    char* char_buf = (char*)buffer;
+    write(STDOUT_FILENO, char_buf, num_bytes);
+    free(char_buf);
+}
+
+void write_cb(int write_fd, void* buffer, int num_bytes, void* arg){
     
-    char message[] = "I'm in the read callback\n";
-    write(STDOUT_FILENO, message, sizeof(message));
-    //write(STDOUT_FILENO, my_io_info.buffer, my_io_info.num_bytes);
 }
 
 int main(int argc, char* argv[]){
     event_queue_init();
 
-    struct aiocb aio;
-    async_open(argv[1], O_RDONLY, open_cb, &aio);
+    async_open(argv[1], O_RDONLY, open_cb, NULL);
 
     event_loop_wait();
 

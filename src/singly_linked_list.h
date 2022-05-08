@@ -1,12 +1,11 @@
 #ifndef SINGLY_LINKED_LIST
 #define SINGLY_LINKED_LIST
 
-typedef void(*callback)(void* arg);
-
 #include <aio.h>
 
 typedef struct event_node{
-    callback callback;
+    int callback_index;
+    void* callback;
     void* callback_arg;
     struct aiocb aio_block;
     struct event_node *next;   //next pointer in linked list
