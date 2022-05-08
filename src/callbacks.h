@@ -1,15 +1,19 @@
 #ifndef CALLBACKS
 #define CALLBACKS
 
+#include "singly_linked_list.h"
+
 //TODO: make code go into .c file but only array left here!
 
 void open_cb_interm(event_node* exec_node);
 void read_cb_interm(event_node* exec_node);
+void write_cb_interm(event_node* exec_node);
 
 //TODO: make elements in array invisible?
 void(*interm_func_arr[])(event_node* exec_node) = {
     open_cb_interm,
-    read_cb_interm
+    read_cb_interm,
+    write_cb_interm
 };
 
 void open_cb_interm(event_node* exec_node){
@@ -32,7 +36,7 @@ void read_cb_interm(event_node* exec_node){
 }
 
 void write_cb_interm(event_node* exec_node){
-    
+    void(*write_cb)(int) exec_node->callback
 }
 
 #endif
