@@ -8,6 +8,7 @@ typedef struct event_node{
     void* callback;
     void* callback_arg;
     struct aiocb aio_block;
+    int file_offset; //TODO: make different int datatype? off_t?
     struct event_node *next;   //next pointer in linked list
 } event_node;
 

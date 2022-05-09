@@ -5,15 +5,17 @@
 
 //TODO: make code go into .c file but only array left here!
 
-void open_cb_interm(event_node* exec_node);
-void read_cb_interm(event_node* exec_node);
-void write_cb_interm(event_node* exec_node);
+void open_cb_interm(event_node*);
+void read_cb_interm(event_node*);
+void write_cb_interm(event_node*);
+void read_file_cb_interm(event_node*);
 
 //TODO: make elements in array invisible?
 void(*interm_func_arr[])(event_node* exec_node) = {
     open_cb_interm,
     read_cb_interm,
-    write_cb_interm
+    write_cb_interm,
+    read_file_cb_interm,
 };
 
 void open_cb_interm(event_node* exec_node){
@@ -36,7 +38,17 @@ void read_cb_interm(event_node* exec_node){
 }
 
 void write_cb_interm(event_node* exec_node){
-    void(*write_cb)(int) exec_node->callback
+    //void(*write_cb)(int) exec_node->callback
+}
+
+void read_file_cb_interm(event_node* exec_node){
+    void(*rf_callback)(volatile void*, int, void*) = 
+              (void(*)(volatile void*, int, void*))exec_node->callback;
+    volatile void* buffer = exec_node->aio_block.aio_buf;
+    int buffer_size = exec_node->aio_block.aio_nbytes;
+    void* cb_arg = exec_node->callback_arg;
+
+    rf_callback(buffer, buffer_size, cb_arg);
 }
 
 #endif
