@@ -32,7 +32,7 @@ void read_cb_interm(event_node* exec_node){
           (void(*)(int, buffer*, int, void*))exec_node->callback;
     int read_fd = exec_node->aio_block.aio_fildes;
     buffer* read_buff = exec_node->buff_ptr;
-    int num_bytes = exec_node->aio_block.aio_nbytes;
+    int num_bytes = aio_return(&exec_node->aio_block);
     void* cb_arg = exec_node->callback_arg;
 
     read_cb(read_fd, read_buff, num_bytes, cb_arg);
@@ -43,7 +43,7 @@ void write_cb_interm(event_node* exec_node){
            (void(*)(int, buffer*, int, void*))exec_node->callback;
     int write_fd = exec_node->aio_block.aio_fildes;
     buffer* write_buff = exec_node->buff_ptr;
-    int num_bytes = exec_node->aio_block.aio_nbytes;
+    int num_bytes = aio_return(&exec_node->aio_block);
     void* cb_arg = exec_node->callback_arg;
 
     write_cb(write_fd, write_buff, num_bytes, cb_arg);

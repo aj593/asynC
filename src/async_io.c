@@ -1,19 +1,19 @@
 #include "async_io.h"
 #include "singly_linked_list.h"
+#include "buffer.h"
 
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include "buffer.h"
 
 //TODO: make it so offset in file changes whenever reading or writing
 //TODO: handle case if callback is NULL?
 
 void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg){
     //TODO: make this async somehow
-    int open_fd = open(filename, flags, mode);
+    int open_fd = open(filename, flags | O_NONBLOCK, mode);
 
     event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
     new_node->aio_block.aio_fildes = open_fd;
@@ -37,6 +37,8 @@ void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read
     new_node->callback_index = 1;
     new_node->callback_arg = cb_arg;
 
+    //zero_internal_buffer(read_buff_ptr);
+
     int result = aio_read(&new_node->aio_block);
     //TODO: is this proper error checking?
     if(result == -1){
@@ -52,14 +54,14 @@ void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read
 }
 
 //TODO: check if this works
-void async_write(int write_fd, buffer* write_buff_ptr, size_t size, void(*write_callback)(int, buffer*, int, void*), void* cb_arg){
+void async_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes, void(*write_callback)(int, buffer*, int, void*), void* cb_arg){
     event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
     new_node->buff_ptr = write_buff_ptr;
 
     new_node->aio_block.aio_fildes = write_fd;
     new_node->aio_block.aio_buf = get_internal_buffer(write_buff_ptr);
-    new_node->aio_block.aio_nbytes = size;
-    new_node->aio_block.aio_offset = 0; //TODO: is this offset correct?
+    new_node->aio_block.aio_nbytes = num_bytes;
+    new_node->aio_block.aio_offset = lseek(write_fd, num_bytes, SEEK_CUR) - num_bytes; //TODO: is this offset correct?
     new_node->callback = write_callback;
     new_node->callback_index = 2;
     new_node->callback_arg = cb_arg;
