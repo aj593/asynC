@@ -6,13 +6,14 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include "buffer.h"
 
 //TODO: make it so offset in file changes whenever reading or writing
 //TODO: handle case if callback is NULL?
 
-void async_open(char* filename, int flags, void(*open_callback)(int, void*), void* cb_arg){
+void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg){
     //TODO: make this async somehow
-    int open_fd = open(filename, flags);
+    int open_fd = open(filename, flags, mode);
 
     event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
     new_node->aio_block.aio_fildes = open_fd;
@@ -24,11 +25,12 @@ void async_open(char* filename, int flags, void(*open_callback)(int, void*), voi
     append(&event_queue, new_node);
 }
 
-void async_read(int read_fd, volatile void* buffer, size_t num_bytes, void(*read_callback)(int, volatile void*, int, void*), void* cb_arg){
+void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read_callback)(int, buffer*, int, void*), void* cb_arg){
     event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
+    new_node->buff_ptr = read_buff_ptr;
 
     new_node->aio_block.aio_fildes = read_fd;
-    new_node->aio_block.aio_buf = buffer;
+    new_node->aio_block.aio_buf = get_internal_buffer(read_buff_ptr);
     new_node->aio_block.aio_nbytes = num_bytes;
     new_node->aio_block.aio_offset = lseek(read_fd, num_bytes, SEEK_CUR) - num_bytes; //TODO: is this offset correct?
     new_node->callback = read_callback;
@@ -50,11 +52,12 @@ void async_read(int read_fd, volatile void* buffer, size_t num_bytes, void(*read
 }
 
 //TODO: check if this works
-void async_write(int write_fd, volatile void* buffer, size_t size, void(*write_callback)(int, volatile void*, int, void*), void* cb_arg){
+void async_write(int write_fd, buffer* write_buff_ptr, size_t size, void(*write_callback)(int, buffer*, int, void*), void* cb_arg){
     event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
+    new_node->buff_ptr = write_buff_ptr;
 
     new_node->aio_block.aio_fildes = write_fd;
-    new_node->aio_block.aio_buf = buffer;
+    new_node->aio_block.aio_buf = get_internal_buffer(write_buff_ptr);
     new_node->aio_block.aio_nbytes = size;
     new_node->aio_block.aio_offset = 0; //TODO: is this offset correct?
     new_node->callback = write_callback;
@@ -70,19 +73,20 @@ void async_write(int write_fd, volatile void* buffer, size_t size, void(*write_c
 }
 
 //TODO: error check return values
-void read_file(char* file_name, void(*rf_callback)(volatile void*, int, void*), void* arg){
+void read_file(char* file_name, void(*rf_callback)(buffer*, int, void*), void* arg){
     struct stat file_stats;
     /*int return_code = */stat(file_name, &file_stats);
     int file_size = file_stats.st_size;
 
     int read_fd = open(file_name, O_RDONLY);
 
-    void* read_buffer = malloc(file_size);
 
     event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
+    buffer* read_buffer = create_buffer(file_size);
+    new_node->buff_ptr = read_buffer;
 
     new_node->aio_block.aio_fildes = read_fd;
-    new_node->aio_block.aio_buf = read_buffer;
+    new_node->aio_block.aio_buf = get_internal_buffer(read_buffer);
     new_node->aio_block.aio_nbytes = file_size;
     new_node->aio_block.aio_offset = 0;
     new_node->callback = rf_callback;
