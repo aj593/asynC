@@ -6,6 +6,15 @@
 //#include "callbacks.h"
 #include "buffer.h"
 
+typedef struct io_block {
+    int io_index;
+    void* callback;
+    void* callback_arg;
+    struct aiocb aio_block; //TODO: should this be actual struct or pointer to it? would have to malloc() inside async functions
+    //int file_offset; //TODO: make different int datatype? off_t?, do i need this?
+    buffer* buff_ptr;
+} async_io;
+
 void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg);
 void async_read (int read_fd,  buffer* buff_ptr, size_t size, void(*read_callback)(int, buffer*,  int, void*), void* cb_arg);
 void async_write(int write_fd, buffer* buff_ptr, size_t size, void(*write_callback)(int, buffer*, int, void*), void* cb_arg);

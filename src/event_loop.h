@@ -3,9 +3,9 @@
 
 #include "singly_linked_list.h"
 
-linked_list event_queue;
-
 void event_queue_init();
 void event_loop_wait();
+
+void enqueue_event(event_node* event_node);
 
 #endif

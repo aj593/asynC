@@ -6,12 +6,8 @@
 
 //TODO: make aiocb a pointer not the actual struct?
 typedef struct event_node{
-    int callback_index;
-    void* callback;
-    void* callback_arg;
-    struct aiocb aio_block;
-    int file_offset; //TODO: make different int datatype? off_t?
-    buffer* buff_ptr;
+    int event_index;
+    void* event_data;
     struct event_node *next;   //next pointer in linked list
 } event_node;
 
