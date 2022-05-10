@@ -7,6 +7,7 @@
 #include "async_io.h"
 
 //TODO: error check for NULL with malloc and calloc
+//TODO: put newline at end of each file?
 
 void after_first_open(int open_fd, void* arg);
 void after_second_open(int open2_fd, void* arg);
@@ -15,6 +16,7 @@ void after_read (int read_fd,  buffer* read_buff, int num_bytes, void* arg);
 void after_write(int write_fd, buffer* write_buff, int num_bytes, void* arg);
 
 void read_file_cb(buffer* rf_buffer, int buffer_size, void* cb_arg);
+void after_file_write(buffer* wf_buffer, void* cb_arg);
 
 int main(int argc, char* argv[]){
     if(argc < 3){
@@ -26,8 +28,8 @@ int main(int argc, char* argv[]){
 
     clock_t before = clock();
 
-    async_open(argv[1], O_RDONLY, 0666, after_first_open, argv[2]);
-    //read_file(argv[1], read_file_cb, NULL);
+    //async_open(argv[1], O_RDONLY, 0666, after_first_open, argv[2]);
+    read_file(argv[1], read_file_cb, argv[2]);
 
     clock_t after_1 = clock();
 
@@ -38,8 +40,18 @@ int main(int argc, char* argv[]){
     printf("Difference between after_1 and before = %ld\n", after_1 - before);
     printf("Difference between after_2 and before = %ld\n", after_2 - before);
 
-
     return 0;
+}
+
+void read_file_cb(buffer* rf_buffer, int buffer_size, void* cb_arg){
+    if(rf_buffer != NULL){
+        char* filename = (char*)cb_arg;
+        write_file(filename, rf_buffer, 0666, O_CREAT | O_RDWR, after_file_write, NULL);
+    }
+}
+
+void after_file_write(buffer* wf_buffer, void* cb_arg){
+    destroy_buffer(wf_buffer);
 }
 
 void after_first_open(int open_fd, void* arg){
@@ -76,7 +88,9 @@ void after_read(int read_fd, buffer* read_buff, int num_bytes, void* arg){
     //also destroy buffer and free() fd_array
     
     int* fd_array = (int*)arg;
-    if(num_bytes == 0){
+    char* char_buff = (char*)get_internal_buffer(read_buff);
+    //TODO: make better method to know when to stop reading? when buffer size < buffer capacity? when total bytes read from file == file size?
+    if(char_buff[0] == 0){
         free(fd_array);
         destroy_buffer(read_buff);
     }
@@ -88,12 +102,4 @@ void after_read(int read_fd, buffer* read_buff, int num_bytes, void* arg){
 void after_write(int write_fd, buffer* write_buff, int num_bytes, void* arg){
     int* fd_array = (int*)arg;
     async_read(fd_array[0], write_buff, num_bytes, after_read, fd_array);
-}
-
-void read_file_cb(buffer* rf_buffer, int buffer_size, void* cb_arg){
-    if(rf_buffer != NULL){
-        char* char_buff = (char*)get_internal_buffer(rf_buffer);
-        write(STDOUT_FILENO, char_buff, buffer_size);
-        destroy_buffer(rf_buffer);
-    }
 }

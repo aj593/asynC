@@ -9,13 +9,15 @@ void open_cb_interm(event_node*);
 void read_cb_interm(event_node*);
 void write_cb_interm(event_node*);
 void read_file_cb_interm(event_node*);
+void write_file_cb_interm(event_node*);
 
 //TODO: make elements in array invisible?
-void(*interm_func_arr[])(event_node* exec_node) = {
+void(*interm_func_arr[])(event_node*) = {
     open_cb_interm,
     read_cb_interm,
     write_cb_interm,
     read_file_cb_interm,
+    write_file_cb_interm,
 };
 
 void open_cb_interm(event_node* exec_node){
@@ -57,6 +59,16 @@ void read_file_cb_interm(event_node* exec_node){
     void* cb_arg = exec_node->callback_arg;
 
     rf_callback(read_file_buffer, buffer_size, cb_arg);
+}
+
+void write_file_cb_interm(event_node* exec_node){
+    void(*wf_callback)(buffer*, void*) = 
+               (void(*)(buffer*, void*))exec_node->callback;
+    buffer* write_file_buffer = exec_node->buff_ptr;
+    //int buffer_size = exec_node->aio_block.aio_nbytes;
+    void* cb_arg = exec_node->callback_arg;
+
+    wf_callback(write_file_buffer, cb_arg);
 }
 
 #endif

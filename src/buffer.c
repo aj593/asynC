@@ -4,9 +4,9 @@
 
 //TODO: need both size and capacity?
 typedef struct event_buffer {
-    void* internal_buffer; //TODO: make volatile?
-    size_t size;
-    size_t capacity;
+    void* internal_buffer;  //TODO: make volatile?
+    size_t size;            //TODO: set size properly somewhere
+    size_t capacity; 
 } buffer;
 
 //TODO: check if calloc calls return null?
@@ -36,6 +36,4 @@ size_t get_capacity(buffer* buff_ptr){
 //TODO: make case if capacity == 0?
 void zero_internal_buffer(buffer* buff_ptr){
     memset(buff_ptr->internal_buffer, 0, buff_ptr->capacity);
-    /*char* char_buff = (char*)(buff_ptr->internal_buffer);
-    char_buff[0] = '\0';*/
 }

@@ -13,3 +13,6 @@ obj/%.o: src/%.c
 
 clean:
 	rm -rf *.dSYM $(BINS)
+	#rm -rf obj/
+
+#TODO: make it so object files in obj folder get deleted after compiling executable

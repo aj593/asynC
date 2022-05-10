@@ -33,11 +33,12 @@ void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read
     new_node->aio_block.aio_buf = get_internal_buffer(read_buff_ptr);
     new_node->aio_block.aio_nbytes = num_bytes;
     new_node->aio_block.aio_offset = lseek(read_fd, num_bytes, SEEK_CUR) - num_bytes; //TODO: is this offset correct?
+
     new_node->callback = read_callback;
     new_node->callback_index = 1;
     new_node->callback_arg = cb_arg;
 
-    //zero_internal_buffer(read_buff_ptr);
+    zero_internal_buffer(read_buff_ptr);
 
     int result = aio_read(&new_node->aio_block);
     //TODO: is this proper error checking?
@@ -46,8 +47,7 @@ void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read
         //perror("aio_read: ");
     }
 
-    //if(new_node->file_offset > )
-
+    //TODO: need this?
     new_node->file_offset += num_bytes;
 
     append(&event_queue, new_node);
@@ -62,6 +62,7 @@ void async_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes, void(*w
     new_node->aio_block.aio_buf = get_internal_buffer(write_buff_ptr);
     new_node->aio_block.aio_nbytes = num_bytes;
     new_node->aio_block.aio_offset = lseek(write_fd, num_bytes, SEEK_CUR) - num_bytes; //TODO: is this offset correct?
+
     new_node->callback = write_callback;
     new_node->callback_index = 2;
     new_node->callback_arg = cb_arg;
@@ -75,13 +76,13 @@ void async_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes, void(*w
 }
 
 //TODO: error check return values
+//TODO: need int in callback params?
+//TODO: condense this code by using async_read() call in here?
 void read_file(char* file_name, void(*rf_callback)(buffer*, int, void*), void* arg){
+    int read_fd = open(file_name, O_RDONLY | O_NONBLOCK); //TODO: need NONBLOCK flag here?
     struct stat file_stats;
-    /*int return_code = */stat(file_name, &file_stats);
+    /*int return_code = */fstat(read_fd, &file_stats); //TODO: make this stat call async somehow?
     int file_size = file_stats.st_size;
-
-    int read_fd = open(file_name, O_RDONLY);
-
 
     event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
     buffer* read_buffer = create_buffer(file_size);
@@ -91,6 +92,7 @@ void read_file(char* file_name, void(*rf_callback)(buffer*, int, void*), void* a
     new_node->aio_block.aio_buf = get_internal_buffer(read_buffer);
     new_node->aio_block.aio_nbytes = file_size;
     new_node->aio_block.aio_offset = 0;
+
     new_node->callback = rf_callback;
     new_node->callback_index = 3;
     new_node->callback_arg = arg;
@@ -103,6 +105,28 @@ void read_file(char* file_name, void(*rf_callback)(buffer*, int, void*), void* a
     append(&event_queue, new_node);
 }
 
-void write_file(char* file_name, volatile void* buffer, int flags, void(*wf_callback)(volatile void*, void*), void* arg){
-    
+//TODO: need int variable for number of bytes written to file?
+//TODO: make file creation async?
+//TODO: condense this by using async_write in here instead of this new code block?
+void write_file(char* file_name, buffer* write_buff, int mode, int flags, void(*wf_callback)(buffer*, void*), void* arg){
+    int open_fd = open(file_name, flags, mode);
+    event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
+    new_node->buff_ptr = write_buff;
+
+    new_node->callback = wf_callback;
+    new_node->callback_arg = arg;
+    new_node->callback_index = 4;
+    new_node->file_offset = 0; //TODO: need this field at all?
+
+    new_node->aio_block.aio_fildes = open_fd;
+    new_node->aio_block.aio_buf = get_internal_buffer(write_buff);
+    new_node->aio_block.aio_nbytes = get_capacity(write_buff);
+    new_node->aio_block.aio_offset = 0;
+
+    int result = aio_write(&new_node->aio_block);
+    if(result == -1){
+
+    }
+
+    append(&event_queue, new_node);
 }
