@@ -11,17 +11,17 @@
 //TODO: error check for NULL with malloc and calloc
 //TODO: put newline at end of each file?
 
-void after_first_open(int open_fd, void* arg);
-void after_second_open(int open2_fd, void* arg);
+void after_first_open(int open_fd, callback_arg* arg);
+void after_second_open(int open2_fd, callback_arg* arg);
 
-void after_read (int read_fd,  buffer* read_buff, int num_bytes, void* arg);
-void after_write(int write_fd, buffer* write_buff, int num_bytes, void* arg);
+void after_read (int read_fd,  buffer* read_buff, int num_bytes, callback_arg* arg);
+void after_write(int write_fd, buffer* write_buff, int num_bytes, callback_arg* arg);
 
-void read_file_cb(buffer* rf_buffer, int buffer_size, void* cb_arg);
-void after_file_write(buffer* wf_buffer, void* cb_arg);
+void read_file_cb(buffer* rf_buffer, int buffer_size, callback_arg* cb_arg);
+void after_file_write(buffer* wf_buffer, callback_arg* cb_arg);
 
 void child_function(void* arg);
-void child_fcn_callback(pid_t, int, void*);
+void child_fcn_callback(pid_t, int, callback_arg*);
 
 typedef struct {
     char* string;
@@ -31,15 +31,15 @@ typedef struct {
 int main(int argc, char* argv[]){
     event_queue_init();
     
+    //TODO: test with making child processes in loop?
     char message[] = "I'm the child\n";
-    int max_str_len = 100;
+    callback_arg* my_string = create_cb_arg(message, sizeof(message));
+    spawn_child_func(child_function, my_string, child_fcn_callback, my_string);
 
-    c_string* my_string = (c_string*)malloc(sizeof(c_string));
-    my_string->len = strnlen(message, max_str_len);
-    my_string->string = (char*)malloc(my_string->len * sizeof(char));
-    strncpy(my_string->string, message, my_string->len);
-
-    spawn_child_func(child_function, my_string, child_fcn_callback, NULL);
+    /*int max_str_len = 100;
+    int str_len = strnlen(argv[2], max_str_len);
+    callback_arg* rf_cb_arg = create_cb_arg(argv[2], str_len);
+    read_file(argv[1], read_file_cb, rf_cb_arg);*/
 
     event_loop_wait();
 
@@ -52,75 +52,85 @@ void child_function(void* arg){
 
     free(message->string);
     free(message);
+
 }
 
-void child_fcn_callback(pid_t pid, int status, void* cb_arg){
+void child_fcn_callback(pid_t pid, int status, callback_arg* cb_arg){
     if(pid < 0){
         printf("child failed!\n");
     }
     else{
         printf("child status: %d\n", status);
     }
+
+    c_string* message = (c_string*)cb_arg;
+    free(message->string);
+    free(message);
 }
 
-void read_file_cb(buffer* rf_buffer, int buffer_size, void* cb_arg){
+void read_file_cb(buffer* rf_buffer, int buffer_size, callback_arg* output_filename_arg){
     if(rf_buffer != NULL){
-        char* filename = (char*)cb_arg;
-        write_file(filename, rf_buffer, 0666, O_CREAT | O_RDWR, after_file_write, filename);
+        char* filename = (char*)get_arg_data(output_filename_arg);
+        write_file(filename, rf_buffer, 0666, O_CREAT | O_RDWR, after_file_write, output_filename_arg); //TODO: is ok to make last arg NULL?
+    }
+    else{
+        //TODO: what should i do here?
     }
 }
 
-void after_file_write(buffer* wf_buffer, void* cb_arg){
+void after_file_write(buffer* wf_buffer, callback_arg* cb_arg){
     destroy_buffer(wf_buffer);
-    free(cb_arg);
+    destroy_cb_arg(cb_arg); //TODO: is it ok to put destroy() call after write_file() in read_file_cb?
 }
 
-void after_first_open(int open_fd, void* arg){
+void after_first_open(int open_fd, callback_arg* arg){
     if(open_fd == -1){
         printf("unable to open first file\n");
         return;
     }
 
-    char* filename = (char*)arg;
+    char* filename = (char*)get_arg_data(arg);
     int* fd_array = (int*)malloc(2 * sizeof(int));
     fd_array[0] = open_fd;
     int flags = O_CREAT /*| O_APPEND*/ | O_RDWR;
-    async_open(filename, flags, 0666, after_second_open, fd_array);
+    async_open(filename, flags, 0666, after_second_open, arg);
 }
 
-void after_second_open(int open2_fd, void* arg){
+void after_second_open(int open2_fd, callback_arg* arg){
     if(open2_fd == -1){
         printf("unable to open second file\n");
         return;
     }
 
-    int* fd_array = (int*)arg;
+    int* fd_array = (int*)get_arg_data(arg);
     fd_array[1] = open2_fd;
 
     int num_bytes = 1000;
     buffer* read_buff = create_buffer(num_bytes);
 
-    async_read(fd_array[0], read_buff, num_bytes, after_read, fd_array);
+    async_read(fd_array[0], read_buff, num_bytes, after_read, arg);
 }
 
 //TODO: need read_fd param?
-void after_read(int read_fd, buffer* read_buff, int num_bytes, void* arg){
+void after_read(int read_fd, buffer* read_buff, int num_bytes, callback_arg* arg){
     //TODO: make it so if 0 bytes read, don't make async_write() call
     //also destroy buffer and free() fd_array
     
-    int* fd_array = (int*)arg;
+    int* fd_array = (int*)get_arg_data(arg);
     char* char_buff = (char*)get_internal_buffer(read_buff);
     //TODO: make better method to know when to stop reading? when buffer size < buffer capacity? when total bytes read from file == file size?
     if(char_buff[0] == 0){
-        free(fd_array);
+        close(fd_array[0]);
+        close(fd_array[1]);
         destroy_buffer(read_buff);
+        destroy_cb_arg(arg);
     }
     else{
-        async_write(fd_array[1], read_buff, num_bytes, after_write, fd_array);
+        async_write(fd_array[1], read_buff, num_bytes, after_write, arg);
     }
 }
 
-void after_write(int write_fd, buffer* write_buff, int num_bytes, void* arg){
-    int* fd_array = (int*)arg;
-    async_read(fd_array[0], write_buff, num_bytes, after_read, fd_array);
+void after_write(int write_fd, buffer* write_buff, int num_bytes, callback_arg* arg){
+    int* fd_array = (int*)get_arg_data(arg);
+    async_read(fd_array[0], write_buff, num_bytes, after_read, arg);
 }

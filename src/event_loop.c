@@ -37,8 +37,9 @@ int is_child_done(event_node* child_node, int* event_index_ptr){
     int child_pid = waitpid(child_info->child_pid, &child_info->status, WNOHANG);
 
     //TODO: use waitpid() return value or child's status to check if child process is done?
-    return child_pid != -1;
-    //return WIFEXITED(child_info->status);
+    return child_pid == -1; //TODO: compare to > 0 instead?
+    //int has_returned = WIFEXITED(child_info->status);
+    //return !has_returned;
 }
 
 //array of array of function pointers
@@ -51,6 +52,7 @@ void(**exec_cb_array[])(event_node*) = {
 int(*event_check_array[])(event_node*, int*) = {
     is_io_done,
     is_child_done,
+
 };
 
 int is_event_completed(event_node* node_check, int* event_index_ptr){

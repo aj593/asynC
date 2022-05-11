@@ -24,13 +24,13 @@
 /*typedef struct io_block {
     int io_index;
     void* callback;
-    void* callback_arg;
+    callback_arg* callback_arg;
     struct aiocb aio_block; //TODO: should this be actual struct or pointer to it? would have to malloc() inside async functions, if pointer we allocate optionally, how will we tell when io event is done with EINPROGRESS?
     //int file_offset; //TODO: make different int datatype? off_t?, do i need this?
     buffer* buff_ptr;
 } async_io;*/
 
-void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg){
+void async_open(char* filename, int flags, int mode, void(*open_callback)(int, callback_arg*), callback_arg* cb_arg){
     //TODO: make this async somehow
     int open_fd = open(filename, flags | O_NONBLOCK, mode);
 
@@ -49,7 +49,7 @@ void async_open(char* filename, int flags, int mode, void(*open_callback)(int, v
     enqueue_event(new_open_event);
 }
 
-void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read_callback)(int, buffer*, int, void*), void* cb_arg){
+void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read_callback)(int, buffer*, int, callback_arg*), callback_arg* cb_arg){
     event_node* new_read_event = (event_node*)calloc(1, sizeof(event_node));
     new_read_event->event_index = IO_EVENT;
     new_read_event->event_data = calloc(1, sizeof(async_io)); //TODO: make sure to free() read_data too
@@ -83,7 +83,7 @@ void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read
 }
 
 //TODO: check if this works
-void async_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes, void(*write_callback)(int, buffer*, int, void*), void* cb_arg){
+void async_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes, void(*write_callback)(int, buffer*, int, callback_arg*), callback_arg* cb_arg){
     event_node* new_write_event = (event_node*)calloc(1, sizeof(event_node));
     new_write_event->event_index = IO_EVENT;
     new_write_event->event_data = calloc(1, sizeof(async_io));
@@ -111,7 +111,7 @@ void async_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes, void(*w
 //TODO: error check return values
 //TODO: need int in callback params?
 //TODO: condense this code by using async_read() call in here?
-void read_file(char* file_name, void(*rf_callback)(buffer*, int, void*), void* arg){
+void read_file(char* file_name, void(*rf_callback)(buffer*, int, callback_arg*), callback_arg* arg){
     int read_fd = open(file_name, O_RDONLY | O_NONBLOCK); //TODO: need NONBLOCK flag here?
     struct stat file_stats;
     /*int return_code = */fstat(read_fd, &file_stats); //TODO: make this stat call async somehow?
@@ -144,7 +144,7 @@ void read_file(char* file_name, void(*rf_callback)(buffer*, int, void*), void* a
 //TODO: need int variable for number of bytes written to file?
 //TODO: make file creation async?
 //TODO: condense this by using async_write in here instead of this new code block?
-void write_file(char* file_name, buffer* write_buff, int mode, int flags, void(*wf_callback)(buffer*, void*), void* arg){
+void write_file(char* file_name, buffer* write_buff, int mode, int flags, void(*wf_callback)(buffer*, callback_arg*), callback_arg* arg){
     int write_fd = open(file_name, flags, mode);
     event_node* new_writefile_event = (event_node*)calloc(1, sizeof(event_node));
     new_writefile_event->event_index = IO_EVENT;

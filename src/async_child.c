@@ -3,13 +3,14 @@
 
 #include "event_loop.h"
 #include "async_child.h"
+#include "callback_arg.h"
 
 #define CHILD_EVENT 1
 
 #define CHILD_FUNC_EVENT 0
 
 //TODO: have argument in child callback for buffer* containing child's stdout? (from a pipe()?, and for child's exit status?)
-void spawn_child_func(void(*child_fcn)(void* arg), void* child_arg, void (*child_callback)(pid_t, int, void*), void* cb_arg){
+void spawn_child_func(void(*child_fcn)(void* arg), void* child_arg, void (*child_callback)(pid_t, int, callback_arg*), callback_arg* cb_arg){
     pid_t pid = fork();
 
     if(pid == 0){
