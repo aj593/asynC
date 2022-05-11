@@ -1,6 +1,6 @@
 CC = gcc
 BINS = main
-OBJS = obj/main.o obj/async_io.o obj/event_loop.o obj/singly_linked_list.o obj/buffer.o
+OBJS = obj/main.o obj/async_io.o obj/event_loop.o obj/singly_linked_list.o obj/buffer.o obj/async_child.o
 CFLAGS = -g -Wall -Werror
 
 all: $(BINS)

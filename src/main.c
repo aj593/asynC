@@ -2,9 +2,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <time.h>
+#include <string.h>
 
-#include "async_io.h"
+#include "asynC.h"
 
 //TODO: error check for NULL with malloc and calloc
 //TODO: put newline at end of each file?
@@ -18,40 +20,59 @@ void after_write(int write_fd, buffer* write_buff, int num_bytes, void* arg);
 void read_file_cb(buffer* rf_buffer, int buffer_size, void* cb_arg);
 void after_file_write(buffer* wf_buffer, void* cb_arg);
 
+void child_function(void* arg);
+void child_fcn_callback(pid_t, int, void*);
+
+typedef struct {
+    char* string;
+    int len;
+} c_string;
+
 int main(int argc, char* argv[]){
-    if(argc < 3){
-        printf("Need more arguments\n");
-        return 1;
-    }
-
     event_queue_init();
+    
+    char message[] = "I'm the child\n";
+    int max_str_len = 100;
 
-    clock_t before = clock();
+    c_string* my_string = (c_string*)malloc(sizeof(c_string));
+    my_string->len = strnlen(message, max_str_len);
+    my_string->string = (char*)malloc(my_string->len * sizeof(char));
+    strncpy(my_string->string, message, my_string->len);
 
-    //async_open(argv[1], O_RDONLY, 0666, after_first_open, argv[2]);
-    read_file(argv[1], read_file_cb, argv[2]);
-
-    clock_t after_1 = clock();
+    spawn_child_func(child_function, my_string, child_fcn_callback, NULL);
 
     event_loop_wait();
 
-    clock_t after_2 = clock();
-
-    printf("Difference between after_1 and before = %ld\n", after_1 - before);
-    printf("Difference between after_2 and before = %ld\n", after_2 - before);
-
     return 0;
+}
+
+void child_function(void* arg){
+    c_string* message = (c_string*)arg;
+    write(STDOUT_FILENO, message->string, message->len);
+
+    free(message->string);
+    free(message);
+}
+
+void child_fcn_callback(pid_t pid, int status, void* cb_arg){
+    if(pid < 0){
+        printf("child failed!\n");
+    }
+    else{
+        printf("child status: %d\n", status);
+    }
 }
 
 void read_file_cb(buffer* rf_buffer, int buffer_size, void* cb_arg){
     if(rf_buffer != NULL){
         char* filename = (char*)cb_arg;
-        write_file(filename, rf_buffer, 0666, O_CREAT | O_RDWR, after_file_write, NULL);
+        write_file(filename, rf_buffer, 0666, O_CREAT | O_RDWR, after_file_write, filename);
     }
 }
 
 void after_file_write(buffer* wf_buffer, void* cb_arg){
     destroy_buffer(wf_buffer);
+    free(cb_arg);
 }
 
 void after_first_open(int open_fd, void* arg){

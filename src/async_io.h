@@ -2,9 +2,10 @@
 #define ASYNC_IO
 
 #include <stddef.h>
+
 #include "event_loop.h"
-//#include "callbacks.h"
 #include "buffer.h"
+//#include "callbacks.h" //TODO: make callbacks typedef'd so theyre neater?
 
 typedef struct io_block {
     int io_index;

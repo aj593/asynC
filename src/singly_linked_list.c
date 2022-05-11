@@ -1,14 +1,14 @@
 #include "singly_linked_list.h"
 #include <stdlib.h>
 
-void initialize_linked_list(linked_list* list){
+void linked_list_init(linked_list* list){
     list->head = (event_node*)calloc(1, sizeof(event_node));
     list->tail = list->head;
     list->tail->next = NULL;
     list->size = 0;
 }
 
-void destroy_linked_list(linked_list* list){
+void linked_list_destroy(linked_list* list){
     event_node* currPCB = list->head;
 
     while(currPCB != NULL){

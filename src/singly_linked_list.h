@@ -6,19 +6,19 @@
 
 //TODO: make aiocb a pointer not the actual struct?
 typedef struct event_node{
-    int event_index;
-    void* event_data;
-    struct event_node *next;   //next pointer in linked list
+    int event_index;            //integer value so we know which index in function array within array to look at
+    void* event_data;           //pointer to data block/struct holding data pertaining to event
+    struct event_node *next;    //next pointer in linked list
 } event_node;
 
 typedef struct linked_list{
     event_node *head;
     event_node *tail;
-    int size;
+    unsigned int size;
 } linked_list;
 
-void initialize_linked_list(linked_list* list);
-void destroy_linked_list(linked_list* list);
+void linked_list_init(linked_list* list);
+void linked_list_destroy(linked_list* list);
 int is_linked_list_empty(linked_list* list);
 
 void add_next(linked_list* list, event_node* curr, event_node* new_node);

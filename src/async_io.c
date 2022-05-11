@@ -1,6 +1,5 @@
 #include "async_io.h"
 #include "singly_linked_list.h"
-#include "buffer.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -15,6 +14,8 @@
 #define WRITE_INDEX 2
 #define READ_FILE_INDEX 3
 #define WRITE_FILE_INDEX 4
+
+//TODO: make sure to close file descriptors if user doesn't have access to them, like in read_file and write_file
 
 //TODO: make it so offset in file changes whenever reading or writing
 //TODO: handle case if callback is NULL?

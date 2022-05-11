@@ -1,5 +1,8 @@
-#ifndef CALLBACKS
-#define CALLBACKS
+#ifndef IO_CALLBACKS
+#define IO_CALLBACKS
+
+#include <unistd.h>
+#include <stdio.h>
 
 #include "singly_linked_list.h"
 #include "async_io.h"
@@ -64,6 +67,7 @@ void write_cb_interm(event_node* exec_node){
 
 void read_file_cb_interm(event_node* exec_node){
     async_io* io_data = (async_io*)exec_node->event_data;
+    close(io_data->aio_block.aio_fildes); //TODO: is it right to do this here? error check?
     
     void(*rf_callback)(buffer*, int, void*) = 
               (void(*)(buffer*, int, void*))io_data->callback;
@@ -78,6 +82,7 @@ void read_file_cb_interm(event_node* exec_node){
 
 void write_file_cb_interm(event_node* exec_node){
     async_io* io_data = (async_io*)exec_node->event_data;
+    close(io_data->aio_block.aio_fildes); //TODO: is it right to do this here? error check?
 
     void(*wf_callback)(buffer*, void*) = 
                (void(*)(buffer*, void*))io_data->callback;
