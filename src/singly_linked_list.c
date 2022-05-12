@@ -49,6 +49,7 @@ void append(linked_list* list, event_node* new_tail){
     add_next(list, list->tail, new_tail);
 }
 
+//TODO: change names of following functions to include "list_" in their names
 event_node* remove_next(linked_list* list, event_node* current){
     if(list->size == 0){
         return NULL;
@@ -73,6 +74,7 @@ event_node* remove_first(linked_list* list){
 event_node* remove_last(linked_list* list){
     event_node* curr = list->head;
 
+    //TODO: double check this condition
     while(curr != list->tail && curr->next != list->tail){
         curr = curr->next;
     }

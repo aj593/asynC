@@ -23,27 +23,34 @@ void after_file_write(buffer* wf_buffer, callback_arg* cb_arg);
 void child_function(void* arg);
 void child_fcn_callback(pid_t, int, callback_arg*);
 
+void say_msg(event_emitter*, event_arg*);
+
 typedef struct {
     char* string;
     int len;
 } c_string;
 
 int main(int argc, char* argv[]){
-    event_queue_init();
+    asynC_init();
     
-    //TODO: test with making child processes in loop?
-    char message[] = "I'm the child\n";
-    callback_arg* my_string = create_cb_arg(message, sizeof(message));
-    spawn_child_func(child_function, my_string, child_fcn_callback, my_string);
+    int string_len = 6;
+    char* my_data = (char*)calloc(string_len, sizeof(char));
+    strncpy(my_data, "hello", string_len);
 
-    /*int max_str_len = 100;
-    int str_len = strnlen(argv[2], max_str_len);
-    callback_arg* rf_cb_arg = create_cb_arg(argv[2], str_len);
-    read_file(argv[1], read_file_cb, rf_cb_arg);*/
+    event_emitter* new_emitter = create_emitter(my_data);
+    subscribe(new_emitter, "hello", say_msg);
 
-    event_loop_wait();
+    event_arg* hello_arg = create_emitter_arg(my_data, string_len);
+    emit(new_emitter, "hello", hello_arg);
+
+    asynC_wait();
 
     return 0;
+}
+
+void say_msg(event_emitter* emitter, event_arg* emitter_arg){
+    char* string = (char*)emitter_arg->data;
+    printf("%s\n", string);
 }
 
 void child_function(void* arg){

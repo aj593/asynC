@@ -1,9 +1,12 @@
 #include "event_loop.h"
 #include "io_callbacks.h"
 #include "child_callbacks.h"
+#include "hash_table.h"
+#include "c_vector.h"
 
 #include "async_io.h"
 #include "async_child.h"
+#include "event_emitter.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -14,11 +17,16 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
+//TODO: use linux/unix's hash table?
+//#include <search.h>
+
 linked_list event_queue; //TODO: should this go in .c or .h file for visibility?
+hash_table* subscriber_hash_table; //TODO: put this in a different file?
 
 //TODO: error check this so user can error check it
-void event_queue_init(){
-    linked_list_init(&event_queue);
+void asynC_init(){
+    linked_list_init(&event_queue); //TODO: error check singly_linked_list.c
+    subscriber_hash_table = ht_create();
 }
 
 int is_io_done(event_node* io_node, int* event_index_ptr){
@@ -46,7 +54,7 @@ int is_child_done(event_node* child_node, int* event_index_ptr){
 void(**exec_cb_array[])(event_node*) = {
     io_interm_func_arr,
     child_interm_func_arr,
-
+    //TODO: need custom emission fcn ptr array here?
 };
 
 int(*event_check_array[])(event_node*, int*) = {
@@ -61,18 +69,18 @@ int is_event_completed(event_node* node_check, int* event_index_ptr){
     return event_checker(node_check, event_index_ptr);
 }
 
-//TODO: use is_linked_list_empty() instead (but uses extra function call)
+//TODO: use is_linked_list_empty() instead? (but uses extra function call)
 int is_event_queue_empty(){
     return event_queue.size == 0;
 }
 
 //TODO: error check this?
-void event_loop_wait(){
+void asynC_wait(){
     while(!is_event_queue_empty()){
         event_node* curr = event_queue.head;
         while(curr != event_queue.tail){
             //TODO: is this if-else statement correct? curr = curr->next?
-            int internal_event_index;
+            int internal_event_index; //TODO: initialize this value?
             if(is_event_completed(curr->next, &internal_event_index)){
                 event_node* exec_node = remove_next(&event_queue, curr);
                 //TODO: check if exec_cb is NULL?
@@ -90,6 +98,7 @@ void event_loop_wait(){
     }
 
     linked_list_destroy(&event_queue);
+    ht_destroy(subscriber_hash_table);
 }
 
 void enqueue_event(event_node* event_node){

@@ -2,9 +2,14 @@
 #define EVENT_LOOP
 
 #include "singly_linked_list.h"
+#include "hash_table.h"
 
-void event_queue_init();
-void event_loop_wait();
+//put this here so event_emitter can use this
+hash_table* subscriber_hash_table; //TODO: put this in a different file?
+
+
+void asynC_init();
+void asynC_wait();
 
 void enqueue_event(event_node* event_node);
 
