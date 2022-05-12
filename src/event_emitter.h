@@ -16,7 +16,7 @@ typedef struct ev_arg {
 typedef struct emit_item {
     event_emitter* emitter;
     void(*event_callback)(event_emitter*, event_arg*);
-    event_arg* emitter_arg;
+    event_arg* emitter_arg; //TODO: do i need this?
 } emitter_item;
 
 event_emitter* create_emitter(void* data);

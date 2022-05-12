@@ -39,6 +39,7 @@ int main(int argc, char* argv[]){
 
     event_emitter* new_emitter = create_emitter(my_data);
     subscribe(new_emitter, "hello", say_msg);
+    subscribe(new_emitter, "hello", say_msg);
 
     event_arg* hello_arg = create_emitter_arg(my_data, string_len);
     emit(new_emitter, "hello", hello_arg);

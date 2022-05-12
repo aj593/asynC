@@ -87,7 +87,7 @@ void emit(event_emitter* announcing_emitter, char* event_name, event_arg* emissi
         
         void(*emitter_callback)(event_emitter*, event_arg*) = vector_item.event_callback;
         event_emitter* listening_emitter = vector_item.emitter;
-        event_arg* listener_arg = vector_item.emitter_arg; //TODO: how to work with event_arg, work with pointer or hard copy every loop iteration?
+        event_arg* listener_arg = emission_data; //TODO: how to work with event_arg, work with pointer or hard copy every loop iteration?
 
         //synchronously execute emitter's callback in this loop iteration
         emitter_callback(listening_emitter, listener_arg);
