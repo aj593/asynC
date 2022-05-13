@@ -1,7 +1,7 @@
 #ifndef ASYNC_CHILD
 #define ASYNC_CHILD
 
-#include "callback_arg.h"
+#include "../async_types/callback_arg.h"
 
 //TODO: make this visibile in async_child.h?
 typedef struct child_data {

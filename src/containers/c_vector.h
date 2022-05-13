@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "event_emitter.h"
+#include "../async_types/event_emitter.h"
 
 typedef struct c_vector vector;
 

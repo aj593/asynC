@@ -3,9 +3,9 @@
 
 #include <stddef.h>
 
-#include "event_loop.h"
-#include "buffer.h"
-#include "callback_arg.h"
+#include "../event_loop.h"
+#include "../async_types/buffer.h"
+#include "../async_types/callback_arg.h"
 //#include "callbacks.h" //TODO: make callbacks typedef'd so theyre neater?
 
 typedef struct io_block {

@@ -1,12 +1,15 @@
 #include "event_loop.h"
-#include "io_callbacks.h"
-#include "child_callbacks.h"
-#include "hash_table.h"
-#include "c_vector.h"
 
-#include "async_io.h"
-#include "async_child.h"
-#include "event_emitter.h"
+#include "async_types/event_emitter.h"
+
+#include "callback_handlers/io_callbacks.h"
+#include "callback_handlers/child_callbacks.h"
+
+#include "containers/hash_table.h"
+#include "containers/c_vector.h"
+
+#include "async_lib/async_io.h"
+#include "async_lib/async_child.h"
 
 #include <errno.h>
 #include <stdlib.h>

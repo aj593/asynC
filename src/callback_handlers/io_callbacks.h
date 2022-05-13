@@ -4,8 +4,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#include "singly_linked_list.h"
-#include "async_io.h"
+#include "../containers/singly_linked_list.h"
+#include "../async_lib/async_io.h"
 
 //TODO: make code go into .c file but only array left here!
 

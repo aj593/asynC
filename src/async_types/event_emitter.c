@@ -1,8 +1,8 @@
 #include "event_emitter.h"
 
-#include "event_loop.h"
-#include "hash_table.h"
-#include "c_vector.h"
+#include "../event_loop.h"
+#include "../containers/hash_table.h"
+#include "../containers/c_vector.h"
 
 #include <stddef.h>
 #include <stdlib.h>

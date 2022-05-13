@@ -1,7 +1,5 @@
 #include "c_vector.h"
 
-#include "event_emitter.h"
-
 #include <stdlib.h>
 
 //TODO: rename this to emitter_vector so its always array of emitter_item structs, or keep name as c_vector
