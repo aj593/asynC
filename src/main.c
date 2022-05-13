@@ -33,16 +33,16 @@ typedef struct {
 int main(int argc, char* argv[]){
     asynC_init();
     
-    int string_len = 6;
-    char* my_data = (char*)calloc(string_len, sizeof(char));
-    strncpy(my_data, "hello", string_len);
+    char my_data[] = "greetings";
 
     event_emitter* new_emitter = create_emitter(my_data);
     subscribe(new_emitter, "hello", say_msg);
     subscribe(new_emitter, "hello", say_msg);
 
-    event_arg* hello_arg = create_emitter_arg(my_data, string_len);
-    emit(new_emitter, "hello", hello_arg);
+    void* data_ptr = &my_data;
+    size_t data_size = sizeof(&my_data);
+
+    emit(new_emitter, "hello", data_ptr, data_size);
 
     asynC_wait();
 
@@ -52,6 +52,8 @@ int main(int argc, char* argv[]){
 void say_msg(event_emitter* emitter, event_arg* emitter_arg){
     char* string = (char*)emitter_arg->data;
     printf("%s\n", string);
+    string[3] = 'a';
+    destroy_emitter_arg(emitter_arg);
 }
 
 void child_function(void* arg){

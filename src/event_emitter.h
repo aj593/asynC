@@ -20,11 +20,15 @@ typedef struct emit_item {
 } emitter_item;
 
 event_emitter* create_emitter(void* data);
+void destroy_emitter(event_emitter* emitter);
 
+//TODO: need this to be public for user?
 event_arg* create_emitter_arg(void* data, size_t data_size);
+
+void destroy_emitter_arg(event_arg* event_arg);
 
 void subscribe(event_emitter* emitter, char* event_name, void(*event_callback)(event_emitter*, event_arg*));
 
-void emit(event_emitter* announcing_emitter, char* event_name, event_arg* event_data);
+void emit(event_emitter* announcing_emitter, char* event_name, void* original_data, size_t size_of_original_data);
 
 #endif

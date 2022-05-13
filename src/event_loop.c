@@ -50,6 +50,20 @@ int is_child_done(event_node* child_node, int* event_index_ptr){
     //return !has_returned;
 }
 
+//TODO: make elements in array invisible?
+//array of IO function pointers for intermediate functions to use callbacks
+void(*io_interm_func_arr[])(event_node*) = {
+    open_cb_interm,
+    read_cb_interm,
+    write_cb_interm,
+    read_file_cb_interm,
+    write_file_cb_interm,
+};
+
+void(*child_interm_func_arr[])(event_node*) = {
+    child_func_interm
+};
+
 //array of array of function pointers
 void(**exec_cb_array[])(event_node*) = {
     io_interm_func_arr,
