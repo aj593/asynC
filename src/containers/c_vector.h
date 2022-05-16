@@ -23,7 +23,7 @@ int vec_add_first(vector* vector, emitter_item new_item);
 
 int vec_add_last(vector* vector, emitter_item new_item);
 
-size_t get_size(vector* vector);
+size_t vector_size(vector* vector);
 
 emitter_item get_index(vector* vector, size_t index);
 
