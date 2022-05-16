@@ -21,6 +21,8 @@ void linked_list_init(linked_list* list);
 void linked_list_destroy(linked_list* list);
 int is_linked_list_empty(linked_list* list);
 
+event_node* create_event_node(int event_index, size_t event_data_size);
+
 void add_next(linked_list* list, event_node* curr, event_node* new_node);
 void prepend(linked_list* list, event_node* new_first);
 void append(linked_list* list, event_node* new_tail);

@@ -86,7 +86,7 @@ int vec_add_last(vector* vector, emitter_item new_item){
     return add_at_index(vector, new_item, vector->size);
 }
 
-size_t get_size(vector* vector){
+size_t vector_size(vector* vector){
     return vector->size;
 }
 

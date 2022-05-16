@@ -7,7 +7,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-#define IO_EVENT 0
+#define IO_EVENT_INDEX 0
 
 #define OPEN_INDEX 0
 #define READ_INDEX 1
@@ -30,80 +30,97 @@
     buffer* buff_ptr;
 } async_io;*/
 
-void async_open(char* filename, int flags, int mode, void(*open_callback)(int, callback_arg*), callback_arg* cb_arg){
-    //TODO: make this async somehow
-    int open_fd = open(filename, flags | O_NONBLOCK, mode);
+event_node* io_event_init(int io_index, buffer* io_buffer, /*grouped_cbs callback,*/ callback_arg* cb_arg){
+    event_node* new_io_event = create_event_node(IO_EVENT_INDEX, sizeof(async_io));
+    async_io* io_block = (async_io*)new_io_event->event_data;
 
-    event_node* new_open_event = (event_node*)calloc(1, sizeof(event_node));
-    new_open_event->event_index = IO_EVENT;
-    new_open_event->event_data = calloc(1, sizeof(async_io));
+    io_block->io_index = io_index;
+    io_block->buff_ptr = io_buffer;
+    //io_block->io_callback = callback;
+    io_block->callback_arg = cb_arg;
 
-    async_io* open_data = (async_io*)new_open_event->event_data;
-
-    open_data->aio_block.aio_fildes = open_fd;
-
-    open_data->callback = open_callback;
-    open_data->io_index = OPEN_INDEX; //TODO: make preprocessor macros for these indexes?
-    open_data->callback_arg = cb_arg;
-
-    enqueue_event(new_open_event);
+    return new_io_event;
 }
 
-void async_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes, void(*read_callback)(int, buffer*, int, callback_arg*), callback_arg* cb_arg){
-    event_node* new_read_event = (event_node*)calloc(1, sizeof(event_node));
-    new_read_event->event_index = IO_EVENT;
-    new_read_event->event_data = calloc(1, sizeof(async_io)); //TODO: make sure to free() read_data too
+typedef int(*aio_op)(struct aiocb*);
 
-    async_io* read_data = (async_io*)new_read_event->event_data;
+void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for_aio, int num_bytes, int offset, aio_op async_op){
+    aio_ptr->aio_fildes = file_descriptor;
+    aio_ptr->aio_buf = buff_for_aio;
+    aio_ptr->aio_nbytes = num_bytes;
+    aio_ptr->aio_offset = offset;
 
-    read_data->io_index = READ_INDEX;
-    read_data->buff_ptr = read_buff_ptr;
-    read_data->callback = read_callback;
-    read_data->callback_arg = cb_arg;
-
-    read_data->aio_block.aio_fildes = read_fd;
-    read_data->aio_block.aio_buf = get_internal_buffer(read_buff_ptr);
-    read_data->aio_block.aio_nbytes = num_bytes;
-    read_data->aio_block.aio_offset = lseek(read_fd, num_bytes, SEEK_CUR) - num_bytes; //TODO: is this offset correct?
-
-    //TODO: make another method to know when file is done reading? aio_return?
-    zero_internal_buffer(read_buff_ptr); 
-
-    int result = aio_read(&read_data->aio_block);
-    //TODO: is this proper error checking?
+    int result = async_op(aio_ptr);
+    //TODO: is this proper error checking? may need extra parameter in this function to show how to handle error, or int return type?
     if(result == -1){
         //new_read_event->callback_arg = NULL;
         //perror("aio_read: ");
     }
+}
 
-    //TODO: need this?
-    //io_data->file_offset += num_bytes;
+void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg){
+    event_node* new_open_event = 
+        io_event_init(
+            OPEN_INDEX, 
+            NULL, 
+            //open_cb, 
+            cb_arg
+        );
+
+    async_io* io_open_block = (async_io*)new_open_event->event_data;
+    io_open_block->io_callback.open_cb = open_cb;
+    io_open_block->aio_block.aio_fildes = open(filename, flags | O_NONBLOCK, mode); //TODO: make this async somehow
+
+    enqueue_event(new_open_event);
+}
+
+//TODO: throw exception or error handle if num_bytes_to_read > read_buff_ptr capacity?
+void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
+    event_node* new_read_event = 
+        io_event_init(
+            READ_INDEX, 
+            read_buff_ptr, 
+            //read_cb, 
+            cb_arg
+        );
+
+    async_io* io_read_block = (async_io*)new_read_event->event_data;
+    io_read_block->io_callback.read_cb = read_cb;
+
+    make_aio_request(
+        &io_read_block->aio_block, 
+        read_fd, 
+        get_internal_buffer(read_buff_ptr), 
+        num_bytes_to_read, 
+        lseek(read_fd, num_bytes_to_read, SEEK_CUR) - num_bytes_to_read,
+        aio_read
+    );
 
     enqueue_event(new_read_event);
 }
 
 //TODO: check if this works
-void async_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes, void(*write_callback)(int, buffer*, int, callback_arg*), callback_arg* cb_arg){
-    event_node* new_write_event = (event_node*)calloc(1, sizeof(event_node));
-    new_write_event->event_index = IO_EVENT;
-    new_write_event->event_data = calloc(1, sizeof(async_io));
+//TODO: throw exception or error handle if num_bytes_to_write > read_buff_ptr capacity?
+void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg){
+    event_node* new_write_event = 
+        io_event_init(
+            WRITE_INDEX, 
+            write_buff_ptr, 
+            //write_cb, 
+            cb_arg
+        );
 
-    async_io* write_data = (async_io*)new_write_event->event_data;
+    async_io* io_write_block = (async_io*)new_write_event->event_data;
+    io_write_block->io_callback.write_cb = write_cb;
 
-    write_data->io_index = WRITE_INDEX;
-    write_data->buff_ptr = write_buff_ptr;
-    write_data->callback = write_callback;
-    write_data->callback_arg = cb_arg;
-
-    write_data->aio_block.aio_fildes = write_fd;
-    write_data->aio_block.aio_buf = get_internal_buffer(write_buff_ptr);
-    write_data->aio_block.aio_nbytes = num_bytes;
-    write_data->aio_block.aio_offset = lseek(write_fd, num_bytes, SEEK_CUR) - num_bytes; //TODO: is this offset correct?
-
-    int result = aio_write(&write_data->aio_block);
-    if(result == -1){
-        //TODO: implement error check
-    }
+    make_aio_request(
+        &io_write_block->aio_block,
+        write_fd, 
+        get_internal_buffer(write_buff_ptr), 
+        num_bytes_to_write, 
+        lseek(write_fd, num_bytes_to_write, SEEK_CUR) - num_bytes_to_write, 
+        aio_write
+    );
 
     enqueue_event(new_write_event);
 }
@@ -111,32 +128,31 @@ void async_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes, void(*w
 //TODO: error check return values
 //TODO: need int in callback params?
 //TODO: condense this code by using async_read() call in here?
-void read_file(char* file_name, void(*rf_callback)(buffer*, int, callback_arg*), callback_arg* arg){
+void read_file(char* file_name, readfile_callback rf_callback, callback_arg* cb_arg){
     int read_fd = open(file_name, O_RDONLY | O_NONBLOCK); //TODO: need NONBLOCK flag here?
     struct stat file_stats;
     /*int return_code = */fstat(read_fd, &file_stats); //TODO: make this stat call async somehow?
     int file_size = file_stats.st_size;
 
-    event_node* new_readfile_event = (event_node*)calloc(1, sizeof(event_node));
-    new_readfile_event->event_index = IO_EVENT;
-    new_readfile_event->event_data = calloc(1, sizeof(async_io));
+    event_node* new_readfile_event = 
+        io_event_init(
+            READ_FILE_INDEX, 
+            create_buffer(file_size), 
+            //rf_callback, 
+            cb_arg
+        );
 
     async_io* readfile_data = (async_io*)new_readfile_event->event_data;
-    readfile_data->buff_ptr = create_buffer(file_size);
+    readfile_data->io_callback.rf_cb = rf_callback;
 
-    readfile_data->aio_block.aio_fildes = read_fd;
-    readfile_data->aio_block.aio_buf = get_internal_buffer(readfile_data->buff_ptr);
-    readfile_data->aio_block.aio_nbytes = file_size;
-    readfile_data->aio_block.aio_offset = 0;
-
-    readfile_data->io_index = READ_FILE_INDEX;
-    readfile_data->callback = rf_callback;
-    readfile_data->callback_arg = arg;
-
-    int result = aio_read(&readfile_data->aio_block);
-    if(result == -1){
-        //TODO: error check
-    }
+    make_aio_request(
+        &readfile_data->aio_block,
+        read_fd,
+        get_internal_buffer(readfile_data->buff_ptr),
+        file_size,
+        0,
+        aio_read
+    );
 
     enqueue_event(new_readfile_event);
 }
@@ -144,28 +160,27 @@ void read_file(char* file_name, void(*rf_callback)(buffer*, int, callback_arg*),
 //TODO: need int variable for number of bytes written to file?
 //TODO: make file creation async?
 //TODO: condense this by using async_write in here instead of this new code block?
-void write_file(char* file_name, buffer* write_buff, int mode, int flags, void(*wf_callback)(buffer*, callback_arg*), callback_arg* arg){
-    int write_fd = open(file_name, flags, mode);
-    event_node* new_writefile_event = (event_node*)calloc(1, sizeof(event_node));
-    new_writefile_event->event_index = IO_EVENT;
-    new_writefile_event->event_data = calloc(1, sizeof(async_io));
+//TODO: throw exception or error handle if num_bytes_to_write > read_buff_ptr capacity?
+void write_file(char* file_name, buffer* write_buff, int num_bytes_to_write, int mode, int flags, writefile_callback wf_cb, callback_arg* cb_arg){
+    event_node* new_writefile_event = 
+        io_event_init(
+            WRITE_FILE_INDEX,
+            write_buff,
+            //wf_cb,
+            cb_arg
+        );
 
-    async_io* writefile_data = (async_io*)new_writefile_event->event_data;
-    writefile_data->buff_ptr = write_buff;
+    async_io* io_wf_block = (async_io*)new_writefile_event;
+    io_wf_block->io_callback.wf_cb = wf_cb;
 
-    writefile_data->aio_block.aio_fildes = write_fd;
-    writefile_data->aio_block.aio_buf = get_internal_buffer(write_buff);
-    writefile_data->aio_block.aio_nbytes = get_capacity(write_buff);
-    writefile_data->aio_block.aio_offset = 0; //TODO allow user to decide this parameter?
-
-    writefile_data->io_index = WRITE_FILE_INDEX;
-    writefile_data->callback = wf_callback;
-    writefile_data->callback_arg = arg;
-
-    int result = aio_write(&writefile_data->aio_block);
-    if(result == -1){
-
-    }
+    make_aio_request(
+        &io_wf_block->aio_block,
+        open(file_name, flags, mode),
+        get_internal_buffer(write_buff),
+        num_bytes_to_write,
+        0,
+        aio_write
+    );
 
     enqueue_event(new_writefile_event);
 }

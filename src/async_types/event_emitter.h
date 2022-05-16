@@ -25,6 +25,12 @@ void destroy_emitter(event_emitter* emitter);
 //TODO: need this to be public for user?
 event_arg* create_emitter_arg(void* data, size_t data_size);
 
+void unsubscribe_from_all_events(event_emitter* unsubscribing_emitter);
+
+void unsubscribe_all_listeners_from_event(event_emitter* unsubscribing_emitter, char* event_name);
+
+void unsubscribe_single_listener_from_event(event_emitter* unsubscribing_emitter, char* event_name);
+
 void destroy_emitter_arg(event_arg* event_arg);
 
 void subscribe(event_emitter* emitter, char* event_name, void(*event_callback)(event_emitter*, event_arg*));

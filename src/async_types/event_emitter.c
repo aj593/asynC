@@ -20,6 +20,7 @@ typedef struct ev_emitter {
     int event_type; //TODO: can be custom, for i/o, child processes? MAY NOT NEED THIS BECAUSE EMITTERS DONT GET USED WITH EVENT QUEUE
     //TODO: other fields?
     void* data; //TODO: what is this useful for? i forgot?? do i even need this???
+    //TODO: add vector for remove event listener callback?
 } event_emitter;
 
 //TODO: also make function to create pointer to emitter's original data?
@@ -37,30 +38,69 @@ void destroy_emitter(event_emitter* emitter){
 
 //TODO: make callback function for if subscription is successful (cuz realloc() in vector may fail)?
 //TODO: check if any args are NULL, use this (non null) attribute? https://www.keil.com/support/man/docs/armcc/armcc_chr1359124976631.htm
-void subscribe(event_emitter* subbing_emitter, char* event_name, void(*new_sub_callback)(event_emitter*, event_arg*)){
-    emitter_item new_item = {
-        emitter: subbing_emitter,
-        event_callback: new_sub_callback
-    };
-
+void subscribe(event_emitter* subscriber, char* event_name, void(*new_sub_callback)(event_emitter*, event_arg*)){
     //TODO: is this right way to do this? TEST THIS
     //if item not in hash table (key gets us NULL value) then add the new key-value pair into it
-    vector* hash_vector = (vector*)ht_get(subscriber_hash_table, event_name);
-    if(hash_vector == NULL){
-        vector* new_event_vector = create_vector(INITIAL_MAX_LISTENERS, EVENT_VEC_RESIZE_FACTOR);
-        vec_add_last(new_event_vector, new_item);
-        //TODO: make it so hash table points to vector* specifically, not void*
-        ht_set(subscriber_hash_table, event_name, new_event_vector);
-    }
-    //case for when event string is already in hash table
-    else{
-        //TODO: is it ok to just add item to vector without calling ht_get(), will adding item here make it persist with item returned from ht_get()?
-        vec_add_last(hash_vector, new_item);
+    vector* vector_from_hash = (vector*)ht_get(subscriber_hash_table, event_name);
+    if(vector_from_hash == NULL){
+        vector_from_hash = create_vector(INITIAL_MAX_LISTENERS, EVENT_VEC_RESIZE_FACTOR);
+
+        //TODO: make it so hash table points to vector* specifically, not void*?
+        ht_set(subscriber_hash_table, event_name, vector_from_hash);
     }
 
-    //TODO: this is too simple, use if/else branches above so we can add or remove multiple event listeners
-    //ht_set(subscriber_hash_table, event_name, event_callback);
+    //define new emitter_item based on event emitter struct and event callback function pointer
+    emitter_item new_item = {
+        .emitter = subscriber,
+        .event_callback = new_sub_callback
+    };
+
+    //add this new item to the vector of subscribers
+    vec_add_last(vector_from_hash, new_item);
 }
+
+//TODO: destroy vector and make hash table event key point to NULL if vector is empty after unsubscribing?
+void unsubscribe_from_all_events(event_emitter* unsubscribing_emitter){
+    //TODO: iterate through hash_table for this
+}
+
+//TODO: make return value for whether items were successfully unsubbed?
+void unsubscribe_all_listeners_from_event(event_emitter* unsubscribing_emitter, char* event_name){
+    vector* subscriber_vector = (vector*)ht_get(subscriber_hash_table, event_name);
+    if(subscriber_vector == NULL){
+        return;
+    }
+
+    //TODO: need to make any calls to free() or destroy_item() here?
+    //traverse backwards cuz traversing forward and removing items can mess up indexes
+    for(int vec_index = vector_size(subscriber_vector) - 1; vec_index >= 0; vec_index--){
+        event_emitter* curr_emitter = get_index(subscriber_vector, vec_index).emitter;
+        if(curr_emitter == unsubscribing_emitter){
+            remove_at_index(subscriber_vector, vec_index);
+        }
+    }
+}
+
+//TODO: make return value for whether items were successfully unsubbed?
+void unsubscribe_single_listener_from_event(event_emitter* unsubscribing_emitter, char* event_name){
+    vector* subscriber_vector = (vector*)ht_get(subscriber_hash_table, event_name);
+    if(subscriber_vector == NULL){
+        return;
+    }
+
+    //TODO: need to make any calls to free() or destroy_item() here?
+    //traverse backwards cuz traversing forward and removing items can mess up indexes
+    for(int vec_index = 0; vec_index < vector_size(subscriber_vector); vec_index++){
+        event_emitter* curr_emitter = get_index(subscriber_vector, vec_index).emitter;
+        if(curr_emitter == unsubscribing_emitter){
+            remove_at_index(subscriber_vector, vec_index);
+            break;
+        }
+    }
+}
+
+//TODO: implement this
+//void unsubscribe_listener_from_event()
 
 //TODO: make create() and destroy() functions for event_arg* emission data!!
 
@@ -93,7 +133,7 @@ void emit(event_emitter* announcing_emitter, char* event_name, void* original_da
 
     //TODO: should i enqueue requests here, or execute listener's callbacks right away when emitting?
     //FOR NOW: im enqueueing requests here for now
-    for(int vec_index = 0; vec_index < get_size(event_subscribers); vec_index++){
+    for(int vec_index = 0; vec_index < vector_size(event_subscribers); vec_index++){
         emitter_item vector_item = get_index(event_subscribers, vec_index);
         
         void(*emitter_callback)(event_emitter*, event_arg*) = vector_item.event_callback;
