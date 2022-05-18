@@ -7,7 +7,6 @@
 //put this here so event_emitter can use this
 hash_table* subscriber_hash_table; //TODO: put this in a different file?
 
-
 void asynC_init();
 void asynC_wait();
 

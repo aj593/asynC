@@ -37,6 +37,9 @@ int main(int argc, char* argv[]){
 
     read_file(argv[2], read_file_cb, NULL);
 
+    char buffer[] = "\n\nhi im the child\n\n";
+    spawn_child_func(child_function, buffer, child_fcn_callback, NULL);
+
     /*int fd = open(argv[1], O_RDONLY);
     int max_bytes = 3000;
     async_read(fd, create_buffer(max_bytes), NULL, NULL);*/
@@ -89,12 +92,8 @@ void say_msg(event_emitter* emitter, event_arg* emitter_arg){
 }
 
 void child_function(void* arg){
-    c_string* message = (c_string*)arg;
-    write(STDOUT_FILENO, message->string, message->len);
-
-    free(message->string);
-    free(message);
-
+    char* message = (char*)arg;
+    write(STDOUT_FILENO, message, strnlen(message, 100));
 }
 
 void child_fcn_callback(pid_t pid, int status, callback_arg* cb_arg){
@@ -105,9 +104,9 @@ void child_fcn_callback(pid_t pid, int status, callback_arg* cb_arg){
         printf("child status: %d\n", status);
     }
 
-    c_string* message = (c_string*)cb_arg;
+    /*c_string* message = (c_string*)cb_arg;
     free(message->string);
-    free(message);
+    free(message);*/
 }
 
 void after_first_open(int open_fd, callback_arg* arg){

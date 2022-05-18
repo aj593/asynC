@@ -38,6 +38,11 @@ event_node* create_event_node(int event_index, size_t event_data_size){
     return new_node;
 }
 
+void destroy_event_node(event_node* node_to_destroy){
+    free(node_to_destroy->event_data); //TODO: is this best place to free() node's event_data?
+    free(node_to_destroy);
+}
+
 void add_next(linked_list* list, event_node* curr, event_node* new_node){
     event_node* after_curr = curr->next;
     curr->next = new_node;

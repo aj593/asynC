@@ -125,9 +125,7 @@ void asynC_wait(){
                 void(*exec_cb)(event_node*) = exec_cb_array[exec_node->event_index][internal_event_index];
                 exec_cb(exec_node);
 
-                //TODO: make these free() calls into its own function?
-                free(exec_node->event_data); //TODO: is this best place to free() node's event_data?
-                free(exec_node);
+                destroy_event_node(exec_node);
             }
             else{
                 curr = curr->next;
