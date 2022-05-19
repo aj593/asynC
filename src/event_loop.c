@@ -4,12 +4,14 @@
 
 #include "callback_handlers/io_callbacks.h"
 #include "callback_handlers/child_callbacks.h"
+#include "callback_handlers/readstream_callbacks.h"
 
 #include "containers/hash_table.h"
 #include "containers/c_vector.h"
 
 #include "async_lib/async_io.h"
 #include "async_lib/async_child.h"
+#include "async_lib/readstream.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -25,6 +27,11 @@ linked_list event_queue; //singly linked list that keeps track of items and even
 
 //TODO: put this in a different file?
 hash_table* subscriber_hash_table; //hash table that maps null-terminated strings to vectors of emitter items so we keep track of which emitters subscribed what events
+
+//TODO: use is_linked_list_empty() instead? (but uses extra function call)
+int is_event_queue_empty(){
+    return event_queue.size == 0;
+}
 
 /**
  * @brief function put into event_check_array so it gets called by is_event_completed() so we can check whether an I/O event is completed
@@ -68,6 +75,26 @@ int is_child_done(event_node* child_node, int* event_index_ptr){
     //return !has_returned;
 }
 
+int is_readstream_data_done(event_node* readstream_node, int* event_index_ptr){
+    readstream* readstream_info = (readstream*)readstream_node->event_data;
+    *event_index_ptr = readstream_info->event_index;
+
+    return aio_error(&readstream_info->aio_block) != EINPROGRESS;
+}
+
+//array of function pointers
+int(*event_check_array[])(event_node*, int*) = {
+    is_io_done,
+    is_child_done,
+    is_readstream_data_done,
+};
+
+int is_event_completed(event_node* node_check, int* event_index_ptr){
+    int(*event_checker)(event_node*, int*) = event_check_array[node_check->event_index];
+
+    return event_checker(node_check, event_index_ptr);
+}
+
 //TODO: make elements in array invisible?
 //array of IO function pointers for intermediate functions to use callbacks
 void(*io_interm_func_arr[])(event_node*) = {
@@ -82,29 +109,17 @@ void(*child_interm_func_arr[])(event_node*) = {
     child_func_interm
 };
 
+void(*readstream_func_arr[])(event_node*) = {
+    readstream_data_interm,
+};
+
 //array of array of function pointers
 void(**exec_cb_array[])(event_node*) = {
     io_interm_func_arr,
     child_interm_func_arr,
+    readstream_func_arr,
     //TODO: need custom emission fcn ptr array here?
 };
-
-int(*event_check_array[])(event_node*, int*) = {
-    is_io_done,
-    is_child_done,
-
-};
-
-int is_event_completed(event_node* node_check, int* event_index_ptr){
-    int(*event_checker)(event_node*, int*) = event_check_array[node_check->event_index];
-
-    return event_checker(node_check, event_index_ptr);
-}
-
-//TODO: use is_linked_list_empty() instead? (but uses extra function call)
-int is_event_queue_empty(){
-    return event_queue.size == 0;
-}
 
 //TODO: error check this so user can error check it
 void asynC_init(){
@@ -118,7 +133,7 @@ void asynC_wait(){
         event_node* curr = event_queue.head;
         while(curr != event_queue.tail){
             //TODO: is this if-else statement correct? curr = curr->next?
-            int internal_event_index; //TODO: initialize this value?
+            int internal_event_index = 0; //TODO: initialize this value?
             if(is_event_completed(curr->next, &internal_event_index)){
                 event_node* exec_node = remove_next(&event_queue, curr);
                 //TODO: check if exec_cb is NULL?

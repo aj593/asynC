@@ -11,7 +11,7 @@
 #define INITIAL_MAX_LISTENERS 5
 #define EVENT_VEC_RESIZE_FACTOR 2
 
-#define CUSTOM_EMITTER_INDEX 2
+#define CUSTOM_EMITTER_INDEX 10
 
 #define MAX_EVENT_NAME_LEN 50
 
@@ -50,13 +50,15 @@ void subscribe(event_emitter* subscriber, char* event_name, void(*new_sub_callba
     }
 
     //define new emitter_item based on event emitter struct and event callback function pointer
+    vec_types vec_entry;
     emitter_item new_item = {
         .emitter = subscriber,
         .event_callback = new_sub_callback
     };
+    vec_entry.emitter_item = new_item;
 
     //add this new item to the vector of subscribers
-    vec_add_last(vector_from_hash, new_item);
+    vec_add_last(vector_from_hash, vec_entry);
 }
 
 //TODO: destroy vector and make hash table event key point to NULL if vector is empty after unsubscribing?
@@ -74,7 +76,7 @@ void unsubscribe_all_listeners_from_event(event_emitter* unsubscribing_emitter, 
     //TODO: need to make any calls to free() or destroy_item() here?
     //traverse backwards cuz traversing forward and removing items can mess up indexes
     for(int vec_index = vector_size(subscriber_vector) - 1; vec_index >= 0; vec_index--){
-        event_emitter* curr_emitter = get_index(subscriber_vector, vec_index).emitter;
+        event_emitter* curr_emitter = get_index(subscriber_vector, vec_index).emitter_item.emitter;
         if(curr_emitter == unsubscribing_emitter){
             remove_at_index(subscriber_vector, vec_index);
         }
@@ -91,7 +93,7 @@ void unsubscribe_single_listener_from_event(event_emitter* unsubscribing_emitter
     //TODO: need to make any calls to free() or destroy_item() here?
     //traverse backwards cuz traversing forward and removing items can mess up indexes
     for(int vec_index = 0; vec_index < vector_size(subscriber_vector); vec_index++){
-        event_emitter* curr_emitter = get_index(subscriber_vector, vec_index).emitter;
+        event_emitter* curr_emitter = get_index(subscriber_vector, vec_index).emitter_item.emitter;
         if(curr_emitter == unsubscribing_emitter){
             remove_at_index(subscriber_vector, vec_index);
             break;
@@ -134,7 +136,7 @@ void emit(event_emitter* announcing_emitter, char* event_name, void* original_da
     //TODO: should i enqueue requests here, or execute listener's callbacks right away when emitting?
     //FOR NOW: im enqueueing requests here for now
     for(int vec_index = 0; vec_index < vector_size(event_subscribers); vec_index++){
-        emitter_item vector_item = get_index(event_subscribers, vec_index);
+        emitter_item vector_item = get_index(event_subscribers, vec_index).emitter_item;
         
         void(*emitter_callback)(event_emitter*, event_arg*) = vector_item.event_callback;
         event_emitter* listening_emitter = vector_item.emitter;

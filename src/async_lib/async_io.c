@@ -38,9 +38,6 @@ event_node* io_event_init(int io_index, buffer* io_buffer, /*grouped_cbs callbac
     return new_io_event; //return created event node, will be enqueued into event queue by caller
 }
 
-//define our own type of function pointer that match the function signature of aio_read() and aio_write()
-typedef int(*aio_op)(struct aiocb*);
-
 //where we will make our asynchronous I/O request with our aiocb block, aio operation, and other needed parameters
 void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for_aio, int num_bytes, int offset, aio_op async_op){
     //set the aiocb block's file descriptor, buffer, number of bytes to do for I/O, and the offset in the file based on passed-in args
@@ -102,10 +99,12 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_
         read_fd,                                                            //use the file descriptor passed-in for reading
         get_internal_buffer(read_buff_ptr),                                 //void* data we fill buffer with from aio_read
         num_bytes_to_read,                                                  //number of bytes to read from file, TODO:make min(num_bytes_to_read, buffer.capacity)?
-        //first, lseek() sets the file descriptor's offset to the current offset + num_bytes, returns that value, then subtract num_bytes from it
-        lseek(read_fd, num_bytes_to_read, SEEK_CUR) - num_bytes_to_read,    //get the current offset for our current read and use lseek() to set the offset for the next read
+        io_read_block->file_offset,                                         //offset from which we start reading file
         aio_read                                                            //function pointer for our aio_read() operation
     );
+
+    //increment file offset we want to read from in case we call async_read() again
+    io_read_block->file_offset += num_bytes_to_read;
 
     //enqueue event node onto event queue
     enqueue_event(new_read_event);
@@ -134,10 +133,12 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, w
         write_fd,                                                               //file descriptor we write into
         get_internal_buffer(write_buff_ptr),                                    //void* data buffer we copy bytes from into file
         num_bytes_to_write,                                                     //number of bytes to write to file
-        //first, lseek() sets the file descriptor's offset to the current offset + num_bytes, returns that value, then subtract num_bytes from it
-        lseek(write_fd, num_bytes_to_write, SEEK_CUR) - num_bytes_to_write,     //offset we write into file from, we get the assign the new offset with lseek() and subtract num_bytes_to_write for where we are currently writing in file
+        io_write_block->file_offset,                                            //file offset we start writing from
         aio_write                                                               //aio_op function pointer we call in make_aio_request()
     );
+
+    //increment file offset we want to read from in case we call async_read() again
+    io_write_block->file_offset += num_bytes_to_write;
 
     //enqueue event node onto event queue
     enqueue_event(new_write_event);

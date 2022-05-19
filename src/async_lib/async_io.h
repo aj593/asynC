@@ -15,6 +15,11 @@ typedef void(*write_callback)(int, buffer*, int, callback_arg*);
 typedef void(*readfile_callback)(buffer*, int, callback_arg*);
 typedef void(*writefile_callback)(buffer*, int, callback_arg*);
 
+//define our own type of function pointer that match the function signature of aio_read() and aio_write()
+typedef int(*aio_op)(struct aiocb*);
+
+void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for_aio, int num_bytes, int offset, aio_op async_op);
+
 typedef union io_callbacks_group {
     open_callback open_cb;
     read_callback read_cb;
@@ -28,7 +33,7 @@ typedef struct io_block {
     grouped_io_cbs io_callback;
     callback_arg* callback_arg;
     struct aiocb aio_block; //TODO: should this be actual struct or pointer to it? would have to malloc() inside async functions
-    //int file_offset; //TODO: make different int datatype? off_t?, do i need this?
+    int file_offset; //TODO: make different int datatype? off_t?, do i need this?
     buffer* buff_ptr;
 } async_io;
 

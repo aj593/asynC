@@ -32,13 +32,20 @@ typedef struct {
 
 void after_test_read(int, buffer*, int, callback_arg*);
 
+void readstream_callback(buffer* buffer, int num_bytes_read, callback_arg* cb_arg){
+    printf("curr data: %s\n\n", (char*)get_internal_buffer(buffer));
+}
+
 int main(int argc, char* argv[]){
     asynC_init();
 
-    read_file(argv[2], read_file_cb, NULL);
+    readstream* read_stream_test = create_readstream(argv[1], 50, NULL);
+    add_data_handler(read_stream_test, readstream_callback);
+
+    /*read_file(argv[2], read_file_cb, NULL);
 
     char buffer[] = "\n\nhi im the child\n\n";
-    spawn_child_func(child_function, buffer, child_fcn_callback, NULL);
+    spawn_child_func(child_function, buffer, child_fcn_callback, NULL);*/
 
     /*int fd = open(argv[1], O_RDONLY);
     int max_bytes = 3000;
