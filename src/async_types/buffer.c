@@ -1,6 +1,7 @@
+#include "buffer.h"
+
 #include <stdlib.h>
 #include <string.h>
-#include "buffer.h"
 
 //TODO: need both size and capacity?
 typedef struct event_buffer {

@@ -1,5 +1,9 @@
 #include "readstream_callbacks.h"
 
+#include "readstream.h"
+
+#include "../../containers/event_node.h"
+
 void readstream_data_interm(event_node* readstream_data_node){
     readstream* old_readstream_data = (readstream*)readstream_data_node->event_data;
 
@@ -12,7 +16,7 @@ void readstream_data_interm(event_node* readstream_data_node){
 
         for(int i = 0; i < vector_size(&old_readstream_data->data_cbs); i++){
             readstream_data_cb curr_cb = old_readstream_data->data_cbs.array->rs_data_cb;
-            curr_cb(data_buffer, num_bytes_read, cb_arg);
+            curr_cb(old_readstream_data, data_buffer, num_bytes_read, cb_arg);
         }
 
         event_node* new_readstream_node = create_event_node(READSTREAM_INDEX, sizeof(readstream));

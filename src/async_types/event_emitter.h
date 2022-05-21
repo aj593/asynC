@@ -1,9 +1,9 @@
 #ifndef EVENT_EMITTER
 #define EVENT_EMITTER
 
-#define MAX_EVENT_NAME_LEN 50
-
 #include <stddef.h>
+
+#define MAX_EVENT_NAME_LEN 50
 
 typedef struct ev_emitter event_emitter;
 

@@ -1,8 +1,12 @@
 #ifndef ASYNC_CHILD
 #define ASYNC_CHILD
 
-#include "../async_types/callback_arg.h"
-#include "../callback_handlers/callback_handler.h"
+#include <unistd.h>
+
+#include "../../async_types/buffer.h"
+#include "../../async_types/callback_arg.h"
+
+#include "child_callbacks.h"
 
 //function pointer type for child process that takes in function to execute
 typedef void(*child_func_callback)(pid_t, int, callback_arg*);

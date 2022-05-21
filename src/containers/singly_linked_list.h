@@ -1,14 +1,9 @@
 #ifndef SINGLY_LINKED_LIST
 #define SINGLY_LINKED_LIST
 
-#include <aio.h>
-#include "../async_types/buffer.h"
-
-typedef struct event_node{
-    int event_index;            //integer value so we know which index in function array within array to look at
-    void* event_data;           //pointer to data block/struct holding data pertaining to event
-    struct event_node *next;    //next pointer in linked list
-} event_node;
+//#include <aio.h>
+//#include "../async_types/buffer.h"
+#include "event_node.h"
 
 typedef struct linked_list{
     event_node *head;
@@ -19,9 +14,6 @@ typedef struct linked_list{
 void linked_list_init(linked_list* list);
 void linked_list_destroy(linked_list* list);
 int is_linked_list_empty(linked_list* list);
-
-event_node* create_event_node(int event_index, size_t event_data_size);
-void destroy_event_node(event_node* node_to_destroy);
 
 void add_next(linked_list* list, event_node* curr, event_node* new_node);
 void prepend(linked_list* list, event_node* new_first);

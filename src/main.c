@@ -32,8 +32,9 @@ typedef struct {
 
 void after_test_read(int, buffer*, int, callback_arg*);
 
-void readstream_callback(buffer* buffer, int num_bytes_read, callback_arg* cb_arg){
+void readstream_callback(readstream* rs, buffer* buffer, int num_bytes_read, callback_arg* cb_arg){
     printf("curr data: %s\n\n", (char*)get_internal_buffer(buffer));
+    
 }
 
 int main(int argc, char* argv[]){

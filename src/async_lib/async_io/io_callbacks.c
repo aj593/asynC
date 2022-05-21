@@ -1,5 +1,7 @@
 #include "io_callbacks.h"
 
+#include "async_io.h"
+
 void open_cb_interm(event_node* exec_node){
     async_io* io_data = (async_io*)exec_node->event_data;
 

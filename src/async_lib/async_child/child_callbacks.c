@@ -1,6 +1,11 @@
 #include "child_callbacks.h"
 
-#include "../containers/singly_linked_list.h"
+#include "../../containers/singly_linked_list.h"
+#include "async_child.h"
+
+#include <unistd.h>
+//#include "../events/event_loop.h"
+//#include "../async_types/callback_arg.h"
 
 void child_func_interm(event_node* child_node){
     async_child* child_data = (async_child*)child_node->event_data;
