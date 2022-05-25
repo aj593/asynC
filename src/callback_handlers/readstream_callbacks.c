@@ -11,6 +11,7 @@ void readstream_data_interm(event_node* readstream_data_node){
         callback_arg* cb_arg = old_readstream_data->cb_arg; //TODO: make copies of cb_arg instead of using same cb_arg for each one?
 
         event_node* new_readstream_node = create_event_node(READSTREAM_INDEX, sizeof(readstream));
+        new_readstream_node->callback_handler = readstream_data_node->callback_handler;
         readstream* new_readstream_data = (readstream*)new_readstream_node->event_data;
         *new_readstream_data = *old_readstream_data;
 

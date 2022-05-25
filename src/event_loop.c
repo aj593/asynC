@@ -47,11 +47,9 @@ int is_event_queue_empty(){
  */
 
 //function put into event_check_array so it gets called by is_event_completed() so we can check whether an I/O event is completed
-int is_io_done(event_node* io_node, int* event_index_ptr){
+int is_io_done(event_node* io_node){
     //get I/O data from event_node's data pointer
     async_io* io_info = (async_io*)io_node->event_data;
-    //set index pointer's value based on I/O data's index so we know which function pointer in the fcn ptr array to execute
-    *event_index_ptr = io_info->io_index;
 
     //TODO: is this valid logic? != or ==?
     //return true if I/O is completed, false otherwise
@@ -66,9 +64,8 @@ int is_io_done(event_node* io_node, int* event_index_ptr){
  * @return int 
  */
 
-int is_child_done(event_node* child_node, int* event_index_ptr){
+int is_child_done(event_node* child_node){
     async_child* child_info = (async_child*)child_node->event_data;
-    *event_index_ptr = child_info->child_index;
 
     //TODO: can specify other flags in 3rd param?
     int child_pid = waitpid(child_info->child_pid, &child_info->status, WNOHANG);
@@ -79,33 +76,34 @@ int is_child_done(event_node* child_node, int* event_index_ptr){
     //return !has_returned;
 }
 
-int is_readstream_data_done(event_node* readstream_node, int* event_index_ptr){
+int is_readstream_data_done(event_node* readstream_node){
     readstream* readstream_info = (readstream*)readstream_node->event_data;
-    *event_index_ptr = readstream_info->event_index;
 
     return aio_error(&readstream_info->aio_block) != EINPROGRESS && !is_readstream_paused(readstream_info);
 }
 
-int is_fs_done(event_node* fs_node, int* event_index_ptr){
+int is_fs_done(event_node* fs_node){
     task_info* thread_task = (task_info*)fs_node->event_data;
-    *event_index_ptr = thread_task->fs_index;
+    //*event_index_ptr = thread_task->fs_index;
 
     return thread_task->is_done;
 }
 
 //array of function pointers
-int(*event_check_array[])(event_node*, int*) = {
+int(*event_check_array[])(event_node*) = {
     is_io_done,
     is_child_done,
     is_readstream_data_done,
     is_fs_done,
 };
 
-int is_event_completed(event_node* node_check, int* event_index_ptr){
-    int(*event_checker)(event_node*, int*) = event_check_array[node_check->event_index];
+int is_event_completed(event_node* node_check){
+    int(*event_checker)(event_node*) = event_check_array[node_check->event_index];
 
-    return event_checker(node_check, event_index_ptr);
+    return event_checker(node_check);
 }
+
+/*
 
 //TODO: make elements in array invisible?
 //array of IO function pointers for intermediate functions to use callbacks
@@ -139,6 +137,8 @@ void(**exec_cb_array[])(event_node*) = {
     //TODO: need custom emission fcn ptr array here?
 };
 
+*/
+
 //TODO: error check this so user can error check it
 void asynC_init(){
     linked_list_init(&event_queue); //TODO: error check singly_linked_list.c
@@ -152,11 +152,10 @@ void asynC_wait(){
         event_node* curr = event_queue.head;
         while(curr != event_queue.tail){
             //TODO: is this if-else statement correct? curr = curr->next?
-            int internal_event_index = 0; //TODO: initialize this value?
-            if(is_event_completed(curr->next, &internal_event_index)){
+            if(is_event_completed(curr->next)){
                 event_node* exec_node = remove_next(&event_queue, curr);
                 //TODO: check if exec_cb is NULL?
-                void(*exec_cb)(event_node*) = exec_cb_array[exec_node->event_index][internal_event_index];
+                void(*exec_cb)(event_node*) = exec_node->callback_handler;
                 exec_cb(exec_node);
 
                 destroy_event_node(exec_node);
@@ -170,6 +169,7 @@ void asynC_wait(){
     //TODO: destroy all vectors in hash_table too and clean up other stuff
     linked_list_destroy(&event_queue);
     ht_destroy(subscriber_hash_table);
+    thread_pool_destroy();
 }
 
 //TODO: add a mutex lock and make mutex calls to this when appending and removing items?

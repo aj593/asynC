@@ -39,7 +39,7 @@ typedef struct io_block {
 
 //TODO: make it so async I/O calls need desired buffer size passed in, and also a parameter for it in callback?
 
-void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
+//void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
 void async_read (int read_fd,  buffer* buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg);
 void async_write(int write_fd, buffer* buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg);
 

@@ -2,6 +2,7 @@
 
 #include "async_io.h"
 #include "../containers/thread_pool.h"
+#include "../callback_handlers/fs_callbacks.h"
 #include <stdlib.h>
 
 #define FS_EVENT_INDEX 3
@@ -19,12 +20,14 @@ void open_task_handler(thread_async_ops open_task){
     *open_info.is_done_ptr = 1;
 }
 
-void REAL_async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg){
+void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg){
     event_node* open_node = create_event_node(FS_EVENT_INDEX, sizeof(task_info));
+    open_node->callback_handler = fs_open_interm;
+
     task_info* new_task = (task_info*)open_node->event_data;
     new_task->fs_cb.open_cb = open_cb;
     new_task->cb_arg = cb_arg;
-    new_task->fs_index = OPEN_INDEX;
+    //new_task->fs_index = OPEN_INDEX;
     
     event_node* task_node = (event_node*)calloc(1, sizeof(event_node));
     task_node->event_data = (task_block*)malloc(sizeof(task_block));

@@ -3,6 +3,6 @@
 
 #include "../containers/singly_linked_list.h"
 
-void fs_open_interm(event_node* open_node);
+void fs_open_interm(event_node*);
 
 #endif

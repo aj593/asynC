@@ -25,6 +25,7 @@ typedef struct readablestream {
     buffer* read_buffer;
     struct aiocb aio_block;
     callback_arg* cb_arg;
+    //void(*readstream_data_interm)(event_node*);
     vector data_cbs;
     vector end_cbs;
 } readstream;

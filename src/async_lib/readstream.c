@@ -16,6 +16,9 @@ readstream* create_readstream(char* filename, int num_read_bytes, callback_arg* 
     }
 
     event_node* readstream_event_node = create_event_node(READSTREAM_INDEX, sizeof(readstream));
+
+    readstream_event_node->callback_handler = readstream_data_interm;
+
     readstream* new_readstream = (readstream*)readstream_event_node->event_data;
 
     new_readstream->event_index = READSTREAM_DATA_INDEX;

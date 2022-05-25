@@ -25,13 +25,17 @@ void spawn_child_func(void(*child_fcn)(void* arg), void* child_arg, child_func_c
     else{
         //create new event queue node for child process event
         event_node* new_child_func_event = create_event_node(CHILD_EVENT_INDEX, sizeof(async_child));
+
+        new_child_func_event->callback_handler = child_func_interm;
+
+
         //get event data's pointer that was created with event node
         async_child* child_stats = (async_child*)new_child_func_event->event_data;
 
         //TODO: if pid == -1, check error here or allow user programmer to check for error pid?
         //assign fields for event data's pointer for child process
         child_stats->child_pid = pid; //assign child pid value given by fork()
-        child_stats->child_index = CHILD_FUNC_EVENT; //assign index for event where child's function is executed
+        //child_stats->child_index = CHILD_FUNC_EVENT; //assign index for event where child's function is executed
         
         //TODO: check child status field here?
 

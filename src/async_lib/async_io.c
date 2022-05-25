@@ -23,9 +23,12 @@
 
 //initialize the I/O event we're going to perform by creating an event node for it, which will later be enqueued into the event queue
 //this will be used repeatedly in our different asynchronous I/O operations
-event_node* io_event_init(int io_index, buffer* io_buffer, /*grouped_cbs callback,*/ callback_arg* cb_arg){
+event_node* io_event_init(int io_index, buffer* io_buffer, void(*io_callback_handler)(event_node*), callback_arg* cb_arg){
     //create the event node, and also allocate a block of data for its respective piece of data, the size of an async_io struct
     event_node* new_io_event = create_event_node(IO_EVENT_INDEX, sizeof(async_io));
+    
+    new_io_event->callback_handler = io_callback_handler;
+
     //obtain our pointer to our async_io struct so we can assign values to it in the next few lines
     async_io* io_block = (async_io*)new_io_event->event_data;
 
@@ -85,7 +88,7 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_
         io_event_init(
             READ_INDEX,     //we're using the intermediate function that handles the async_read's callback
             read_buff_ptr,  //buffer* that will have its data pointer filled with bytes
-            //read_cb, 
+            read_cb_interm, 
             cb_arg          //callback argument from passed-in cb_arg
         );
 
@@ -99,7 +102,7 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_
         read_fd,                                                            //use the file descriptor passed-in for reading
         get_internal_buffer(read_buff_ptr),                                 //void* data we fill buffer with from aio_read
         num_bytes_to_read,                                                  //number of bytes to read from file, TODO:make min(num_bytes_to_read, buffer.capacity)?
-        io_read_block->file_offset,                                         //offset from which we start reading file
+        lseek(read_fd, num_bytes_to_read, SEEK_CUR) - num_bytes_to_read,                                         //offset from which we start reading file
         aio_read                                                            //function pointer for our aio_read() operation
     );
 
@@ -119,7 +122,7 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, w
         io_event_init(
             WRITE_INDEX,    //write index so we know which function pointer intermediate callback handler calls
             write_buff_ptr, //the buffer that will get its bytes copied from for our write operation
-            //write_cb, 
+            write_cb_interm,
             cb_arg          //callback argument passed into callback
         );
 
@@ -161,7 +164,7 @@ void read_file(char* file_name, readfile_callback rf_callback, callback_arg* cb_
         io_event_init(
             READ_FILE_INDEX,            //we use the index corresponding to the intermediate callback handler's function in the function pointer array
             create_buffer(file_size),   //buffer of size "file_size"
-            //rf_callback, 
+            read_file_cb_interm, 
             cb_arg                      //callback argument that will be passed into callback
         );
 
@@ -192,7 +195,7 @@ void write_file(char* file_name, buffer* write_buff, int num_bytes_to_write, int
         io_event_init(
             WRITE_FILE_INDEX,   //integer index for function pointer in fcn ptr array that we call intermediate callback handler
             write_buff,         //buffer we write into file
-            //wf_cb,
+            write_file_cb_interm,
             cb_arg              //callback argument passed into callback
         );
 

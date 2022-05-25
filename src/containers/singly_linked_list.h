@@ -7,6 +7,7 @@
 typedef struct event_node{
     int event_index;            //integer value so we know which index in function array within array to look at
     void* event_data;           //pointer to data block/struct holding data pertaining to event
+    void(*callback_handler)(struct event_node*);
     struct event_node *next;    //next pointer in linked list
 } event_node;
 

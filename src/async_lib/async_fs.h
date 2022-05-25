@@ -33,6 +33,6 @@ typedef struct task_handler_block {
     thread_async_ops async_task;
 } task_block;
 
-void REAL_async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
+void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
 
 #endif

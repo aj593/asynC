@@ -4,6 +4,7 @@
 #include "../async_lib/async_fs.h"
 
 #include <pthread.h>
+#include <signal.h>
 
 //TODO: allow user to decide number of threads in thread pool?
 #define NUM_THREADS 10
@@ -26,6 +27,17 @@ void thread_pool_init(){
         //TODO: use pthread_create() return value later?
         /*int ret = */pthread_create(&thread_id_array[i], NULL, task_waiter, NULL);
     }
+}
+
+//TODO: is this best way to destroy threads?
+void thread_pool_destroy(){
+    /*for(int i = 0; i < NUM_THREADS; i++){
+        pthread_kill(thread_id_array[i], SIGKILL);
+    }
+
+    for(int i = 0; i < NUM_THREADS; i++){
+        pthread_join(thread_id_array[i], NULL);
+    }*/
 }
 
 void* task_waiter(void* arg){

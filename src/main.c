@@ -46,20 +46,81 @@ void readstream_callback(readstream* rs, buffer* buffer, int num_bytes_read, cal
     printf("number of bytes read = %d\n", *num_bytes_ptr);*/
 
     //pause_readstream(rs);
-    async_write(open_fd, buffer, num_bytes_read, after_write_from_rs, NULL);
+    //async_write(open_fd, buffer, num_bytes_read, after_write_from_rs, NULL);
+    write(STDOUT_FILENO, get_internal_buffer(buffer), num_bytes_read);
+}
+
+char* input_filename;
+char* output_filename;
+int num_read_bytes = 100;
+
+void after_read_test(int read_fd, buffer* buffer, int num_read_bytes, callback_arg* cb_arg);
+
+void after_write_test(int fd, buffer* buffer, int num_written_bytes, callback_arg* cb_arg){
+    if(num_written_bytes == -1){
+        perror("");
+        return;
+    }
+    
+    int* fds = (int*)get_arg_data(cb_arg);
+    
+    async_read(fds[0], buffer, num_read_bytes, after_read_test, cb_arg);
+}
+
+void after_read_test(int read_fd, buffer* buffer, int num_read_bytes, callback_arg* cb_arg){
+    int* fds = (int*)get_arg_data(cb_arg);
+    
+    if(num_read_bytes > 0){
+        async_write(fds[1], buffer, num_read_bytes, after_write_test, cb_arg);
+    }
+    else{
+        destroy_cb_arg(cb_arg);
+        close(fds[0]);
+        close(fds[1]);
+    }
+}
+
+void after_open_test(int new_fd, callback_arg* cb_arg){
+    int* fds = (int*)get_arg_data(cb_arg);
+    fds[1] = new_fd;
+
+    buffer* read_buff = create_buffer(num_read_bytes);
+    async_read(fds[0], read_buff, num_read_bytes, after_read_test, cb_arg);
 }
 
 void after_real_open(int fd, callback_arg* cb_arg){
-    printf("my fd is %d\n", fd);
+    if(fd == -1){
+        printf("invalid file name!\n");
+        return;
+    }
+
+    int read_write_fds[2];
+    read_write_fds[0] = fd;
+    callback_arg* read_fd_cb_arg = create_cb_arg(read_write_fds, 2 * sizeof(int));
+    async_open(output_filename, O_WRONLY | O_CREAT, 0644, after_open_test, read_fd_cb_arg);
 }
 
 int main(int argc, char* argv[]){
     asynC_init();
 
+    input_filename = argv[1];
+    output_filename = argv[2];
+
+    //int fd = open(argv[1], O_RDONLY);
+
     clock_t before = clock();
 
     //open(argv[1], O_RDONLY);
-    REAL_async_open(argv[1], O_RDONLY, 0644, after_real_open, NULL);
+    //lseek(fd, 0, SEEK_CUR);
+
+    //async_open(input_filename, O_RDONLY, 0644, after_real_open, NULL);
+
+    int total_num_bytes_read = 0;
+    callback_arg* rs_cb_arg = create_cb_arg(&total_num_bytes_read, sizeof(int));
+    readstream* read_stream_test = create_readstream(argv[1], 50, rs_cb_arg);
+    add_data_handler(read_stream_test, readstream_callback);
+
+    //spawn_child_func(child_function, "hello\n", child_fcn_callback, NULL);
 
     clock_t after = clock();
 
@@ -147,7 +208,7 @@ void child_fcn_callback(pid_t pid, int status, callback_arg* cb_arg){
     free(message);*/
 }
 
-void after_first_open(int open_fd, callback_arg* arg){
+/*void after_first_open(int open_fd, callback_arg* arg){
     if(open_fd == -1){
         printf("unable to open first file\n");
         return;
@@ -156,9 +217,9 @@ void after_first_open(int open_fd, callback_arg* arg){
     char* filename = (char*)get_arg_data(arg);
     int* fd_array = (int*)malloc(2 * sizeof(int));
     fd_array[0] = open_fd;
-    int flags = O_CREAT /*| O_APPEND*/ | O_RDWR;
+    int flags = O_CREAT | O_APPEND | O_RDWR;
     async_open(filename, flags, 0666, after_second_open, arg);
-}
+}*/
 
 void after_second_open(int open2_fd, callback_arg* arg){
     if(open2_fd == -1){
