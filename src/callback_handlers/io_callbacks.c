@@ -1,6 +1,6 @@
 #include "io_callbacks.h"
 
-void open_cb_interm(event_node* exec_node){
+/*void open_cb_interm(event_node* exec_node){
     async_io* io_data = (async_io*)exec_node->event_data;
 
     open_callback open_cb = io_data->io_callback.open_cb;
@@ -9,7 +9,7 @@ void open_cb_interm(event_node* exec_node){
     callback_arg* cb_arg = io_data->callback_arg;
 
     open_cb(open_fd, cb_arg);
-}
+}*/
 
 void read_cb_interm(event_node* exec_node){
     async_io* io_data = (async_io*)exec_node->event_data;

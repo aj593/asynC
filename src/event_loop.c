@@ -5,11 +5,15 @@
 #include "callback_handlers/io_callbacks.h"
 #include "callback_handlers/child_callbacks.h"
 #include "callback_handlers/readstream_callbacks.h"
+#include "callback_handlers/fs_callbacks.h"
+
 
 #include "containers/hash_table.h"
 #include "containers/c_vector.h"
+#include "containers/thread_pool.h"
 
 #include "async_lib/async_io.h"
+#include "async_lib/async_fs.h"
 #include "async_lib/async_child.h"
 #include "async_lib/readstream.h"
 
@@ -79,7 +83,14 @@ int is_readstream_data_done(event_node* readstream_node, int* event_index_ptr){
     readstream* readstream_info = (readstream*)readstream_node->event_data;
     *event_index_ptr = readstream_info->event_index;
 
-    return aio_error(&readstream_info->aio_block) != EINPROGRESS;
+    return aio_error(&readstream_info->aio_block) != EINPROGRESS && !is_readstream_paused(readstream_info);
+}
+
+int is_fs_done(event_node* fs_node, int* event_index_ptr){
+    task_info* thread_task = (task_info*)fs_node->event_data;
+    *event_index_ptr = thread_task->fs_index;
+
+    return thread_task->is_done;
 }
 
 //array of function pointers
@@ -87,6 +98,7 @@ int(*event_check_array[])(event_node*, int*) = {
     is_io_done,
     is_child_done,
     is_readstream_data_done,
+    is_fs_done,
 };
 
 int is_event_completed(event_node* node_check, int* event_index_ptr){
@@ -98,7 +110,7 @@ int is_event_completed(event_node* node_check, int* event_index_ptr){
 //TODO: make elements in array invisible?
 //array of IO function pointers for intermediate functions to use callbacks
 void(*io_interm_func_arr[])(event_node*) = {
-    open_cb_interm,
+    //open_cb_interm,
     read_cb_interm,
     write_cb_interm,
     read_file_cb_interm,
@@ -113,11 +125,17 @@ void(*readstream_func_arr[])(event_node*) = {
     readstream_data_interm,
 };
 
+//TODO: uncomment this later
+void(*fs_func_arr[])(event_node*) = {
+    fs_open_interm,
+};
+
 //array of array of function pointers
 void(**exec_cb_array[])(event_node*) = {
     io_interm_func_arr,
     child_interm_func_arr,
     readstream_func_arr,
+    fs_func_arr, //TODO: uncomment this later
     //TODO: need custom emission fcn ptr array here?
 };
 
@@ -125,6 +143,7 @@ void(**exec_cb_array[])(event_node*) = {
 void asynC_init(){
     linked_list_init(&event_queue); //TODO: error check singly_linked_list.c
     subscriber_hash_table = ht_create();
+    thread_pool_init();
 }
 
 //TODO: error check this?

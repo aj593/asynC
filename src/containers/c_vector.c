@@ -47,7 +47,7 @@ vec_types vec_remove_last(vector* vector){
 int add_at_index(vector* vector, vec_types new_item, size_t index){
     if(vector->size == vector->capacity){
         //TODO: check if this returns NULL? shouldn't assign vector->array based on realloc() value if it has a possibility of being NULL
-        vec_types* new_array_ptr = realloc(vector->array, vector->resize_factor * vector->capacity);
+        vec_types* new_array_ptr = realloc(vector->array, vector->resize_factor * vector->capacity * sizeof(vec_types));
         if(new_array_ptr == NULL){
             return 0;
         }

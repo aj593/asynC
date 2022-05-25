@@ -10,11 +10,11 @@
 #define IO_EVENT_INDEX 0    //index number so we know which function pointer array in two-dimensional function pointer array to look at
 
 //the following are indexes in the array of function pointers that correspond to an I/O operation type so we know how to handle and execute the callback
-#define OPEN_INDEX 0        //used for async_open()
-#define READ_INDEX 1        //used for async_read()
-#define WRITE_INDEX 2       //used for async_write()
-#define READ_FILE_INDEX 3   //used for read_file()
-#define WRITE_FILE_INDEX 4  //used for write_file()
+//#define OPEN_INDEX 0        //used for async_open()
+#define READ_INDEX 0        //used for async_read()
+#define WRITE_INDEX 1       //used for async_write()
+#define READ_FILE_INDEX 2   //used for read_file()
+#define WRITE_FILE_INDEX 3  //used for write_file()
 
 //TODO: make sure to close file descriptors if user doesn't have direct access to them when operations are being done, like in read_file and write_file
 
@@ -57,7 +57,7 @@ void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for
 }
 
 //asynchronously open file with provided file name, flags, mode, and callback information
-void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg){
+/*void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg){
     //create event node and initialize the async_io struct with the passed-in params
     event_node* new_open_event = 
         io_event_init(
@@ -75,7 +75,7 @@ void async_open(char* filename, int flags, int mode, open_callback open_cb, call
 
     //enqueue event node onto event queue
     enqueue_event(new_open_event);
-}
+}*/
 
 //TODO: throw exception or error handle if num_bytes_to_read > read_buff_ptr capacity, or make it so read is automatically minimum of of two?
 //asynchronously read the specified number of bytes into file and fill it into buffer*'s data pointer, and also assign callback information for it
@@ -133,7 +133,8 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, w
         write_fd,                                                               //file descriptor we write into
         get_internal_buffer(write_buff_ptr),                                    //void* data buffer we copy bytes from into file
         num_bytes_to_write,                                                     //number of bytes to write to file
-        io_write_block->file_offset,                                            //file offset we start writing from
+        lseek(write_fd, num_bytes_to_write, SEEK_CUR) - num_bytes_to_write,
+        //io_write_block->file_offset,                                            //file offset we start writing from
         aio_write                                                               //aio_op function pointer we call in make_aio_request()
     );
 

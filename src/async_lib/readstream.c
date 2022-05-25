@@ -25,6 +25,7 @@ readstream* create_readstream(char* filename, int num_read_bytes, callback_arg* 
     new_readstream->file_size = file_stats.st_size;
     new_readstream->file_offset = 0;
     new_readstream->num_bytes_per_read = num_read_bytes;
+    new_readstream->is_paused = 0;
     new_readstream->emitter_ptr = create_emitter(new_readstream); //TODO: this should make emitter point back at readstream right or make it point to custom item?
     new_readstream->read_buffer = create_buffer(num_read_bytes * sizeof(char));
 
@@ -59,4 +60,17 @@ void destroy_readstream(readstream* readstream){
 
     destroy_vector(&readstream->data_cbs);
     destroy_vector(&readstream->end_cbs);
+}
+
+//TODO: check if NULL?
+void pause_readstream(readstream* rs){
+    rs->is_paused = 1;
+}
+
+void resume_readstream(readstream* rs){
+    rs->is_paused = 0;
+}
+
+int is_readstream_paused(readstream* rs){
+    return rs->is_paused;
 }

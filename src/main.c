@@ -32,15 +32,46 @@ typedef struct {
 
 void after_test_read(int, buffer*, int, callback_arg*);
 
-void readstream_callback(buffer* buffer, int num_bytes_read, callback_arg* cb_arg){
-    printf("curr data: %s\n\n", (char*)get_internal_buffer(buffer));
+int open_fd;
+
+void after_write_from_rs(int fd, buffer* written_buffer, int num_bytes, callback_arg* cb_arg){
+    destroy_buffer(written_buffer);
+}
+
+void readstream_callback(readstream* rs, buffer* buffer, int num_bytes_read, callback_arg* cb_arg){
+    //printf("curr data: %s\n\n", (char*)get_internal_buffer(buffer));
+
+    /*int* num_bytes_ptr = (int*)get_arg_data(cb_arg);
+    *num_bytes_ptr += num_bytes_read;
+    printf("number of bytes read = %d\n", *num_bytes_ptr);*/
+
+    //pause_readstream(rs);
+    async_write(open_fd, buffer, num_bytes_read, after_write_from_rs, NULL);
+}
+
+void after_real_open(int fd, callback_arg* cb_arg){
+    printf("my fd is %d\n", fd);
 }
 
 int main(int argc, char* argv[]){
     asynC_init();
 
-    readstream* read_stream_test = create_readstream(argv[1], 50, NULL);
-    add_data_handler(read_stream_test, readstream_callback);
+    clock_t before = clock();
+
+    //open(argv[1], O_RDONLY);
+    REAL_async_open(argv[1], O_RDONLY, 0644, after_real_open, NULL);
+
+    clock_t after = clock();
+
+    printf("time difference is %ld\n", after - before);
+
+    /*open_fd = open(argv[2], O_WRONLY, 0644);
+
+    int total_num_bytes_read = 0;
+    callback_arg* rs_cb_arg = create_cb_arg(&total_num_bytes_read, sizeof(int));
+
+    readstream* read_stream_test = create_readstream(argv[1], 50, rs_cb_arg);
+    add_data_handler(read_stream_test, readstream_callback);*/
 
     /*read_file(argv[2], read_file_cb, NULL);
 

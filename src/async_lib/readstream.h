@@ -20,6 +20,7 @@ typedef struct readablestream {
     ssize_t file_size; //TODO: need this?
     ssize_t file_offset;
     ssize_t num_bytes_per_read;
+    int is_paused;
     event_emitter* emitter_ptr;
     buffer* read_buffer;
     struct aiocb aio_block;
@@ -32,5 +33,9 @@ void add_data_handler(readstream* readstream, readstream_data_cb data_callback);
 
 readstream* create_readstream(char* filename, int num_read_bytes, callback_arg* cb_arg);
 void destroy_readstream(readstream* readstream);
+
+void pause_readstream(readstream* rs);
+void resume_readstream(readstream* rs);
+int is_readstream_paused(readstream* rs);
 
 #endif

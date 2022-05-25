@@ -10,28 +10,24 @@ void readstream_data_interm(event_node* readstream_data_node){
     if(num_bytes_read > 0){
         callback_arg* cb_arg = old_readstream_data->cb_arg; //TODO: make copies of cb_arg instead of using same cb_arg for each one?
 
-        for(int i = 0; i < vector_size(&old_readstream_data->data_cbs); i++){
-            readstream_data_cb curr_cb = old_readstream_data->data_cbs.array->rs_data_cb;
-            curr_cb(data_buffer, num_bytes_read, cb_arg);
-        }
-
         event_node* new_readstream_node = create_event_node(READSTREAM_INDEX, sizeof(readstream));
         readstream* new_readstream_data = (readstream*)new_readstream_node->event_data;
         *new_readstream_data = *old_readstream_data;
 
-        /* TODO: need to copy data for readstream node like this?
-        new_readstream_data->cb_arg = old_readstream_data->cb_arg;
-        new_readstream_data->data_cbs = old_readstream_data->data_cbs;
-        new_readstream_data->end_cbs = old_readstream_data->end_cbs;
-        new_readstream_data->emitter_ptr = old_readstream_data->emitter_ptr;
-        new_readstream_data->event_index = old_readstream_data;
-        new_readstream_data.
-        */
+        //creating buffer here in case use makes async call to use old buffer, so we dont reuse same buffer between different readstream data calls
+        new_readstream_data->read_buffer = create_buffer(get_buffer_capacity(old_readstream_data->read_buffer));
+
+        //TODO: copy data_buffer between separate calls to each data handler?
+
+        for(int i = 0; i < vector_size(&old_readstream_data->data_cbs); i++){
+            readstream_data_cb curr_cb = old_readstream_data->data_cbs.array->rs_data_cb;
+            curr_cb(old_readstream_data, data_buffer, num_bytes_read, cb_arg);
+        }
 
         make_aio_request(
             &new_readstream_data->aio_block,
             new_readstream_data->read_file_descriptor,
-            get_internal_buffer(data_buffer),
+            get_internal_buffer(new_readstream_data->read_buffer),
             new_readstream_data->num_bytes_per_read,
             new_readstream_data->file_offset,
             aio_read

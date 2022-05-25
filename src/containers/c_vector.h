@@ -9,7 +9,9 @@
 #include "../async_types/callback_arg.h"
 //#include "../async_lib/readstream.h" //TODO: need this here?
 
-typedef void(*readstream_data_cb)(buffer*, int, callback_arg*);
+typedef struct readablestream readstream;
+
+typedef void(*readstream_data_cb)(readstream*, buffer*, int, callback_arg*);
 typedef void(*readstream_end_cb)(callback_arg*);
 
 typedef union vector_types {
