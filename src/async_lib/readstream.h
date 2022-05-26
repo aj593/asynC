@@ -1,7 +1,7 @@
 #ifndef READSTREAM
 #define READSTREAM
 
-#define READSTREAM_INDEX 2
+#define READSTREAM_INDEX 1
 
 #define READSTREAM_DATA_INDEX 0
 
@@ -13,6 +13,9 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <aio.h>
+
+#ifndef READSTREAM_TYPE
+#define READSTREAM_TYPE
 
 typedef struct readablestream {
     int event_index;
@@ -29,6 +32,8 @@ typedef struct readablestream {
     vector data_cbs;
     vector end_cbs;
 } readstream;
+
+#endif
 
 void add_data_handler(readstream* readstream, readstream_data_cb data_callback);
 

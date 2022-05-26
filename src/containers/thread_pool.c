@@ -31,7 +31,7 @@ void thread_pool_init(){
 //TODO: is this best way to destroy threads?
 void thread_pool_destroy(){
     for(int i = 0; i < NUM_THREADS; i++){
-        enqueue_task(create_event_node(TERM_FLAG, 1));
+        enqueue_task(create_event_node(TERM_FLAG));
     }
 
     for(int i = 0; i < NUM_THREADS; i++){
@@ -57,7 +57,8 @@ void* task_waiter(void* arg){
         }
 
         //TODO: execute task here
-        task_block* exec_task_block = (task_block*)curr_task->event_data;
+        task_block* exec_task_block = &curr_task->data_used.thread_block_info; //(task_block*)curr_task->event_data;
+        //TODO: make it take pointer to task block instead of actual struct?
         exec_task_block->task_handler(exec_task_block->async_task);
 
         destroy_event_node(curr_task);

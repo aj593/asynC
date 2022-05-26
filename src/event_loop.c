@@ -47,14 +47,14 @@ int is_event_queue_empty(){
  */
 
 //function put into event_check_array so it gets called by is_event_completed() so we can check whether an I/O event is completed
-int is_io_done(event_node* io_node){
+/*int is_io_done(event_node* io_node){
     //get I/O data from event_node's data pointer
     async_io* io_info = (async_io*)io_node->event_data;
 
     //TODO: is this valid logic? != or ==?
     //return true if I/O is completed, false otherwise
     return aio_error(&io_info->aio_block) != EINPROGRESS;
-}
+}*/
 
 /**
  * @brief function put into event_check_array so it gets called by is_event_completed() so we can check whether a child process event is completed
@@ -65,7 +65,7 @@ int is_io_done(event_node* io_node){
  */
 
 int is_child_done(event_node* child_node){
-    async_child* child_info = (async_child*)child_node->event_data;
+    async_child* child_info = &child_node->data_used.child_info; //(async_child*)child_node->event_data;
 
     //TODO: can specify other flags in 3rd param?
     int child_pid = waitpid(child_info->child_pid, &child_info->status, WNOHANG);
@@ -77,13 +77,13 @@ int is_child_done(event_node* child_node){
 }
 
 int is_readstream_data_done(event_node* readstream_node){
-    readstream* readstream_info = (readstream*)readstream_node->event_data;
+    readstream* readstream_info = &readstream_node->data_used.readstream_info; //(readstream*)readstream_node->event_data;
 
     return aio_error(&readstream_info->aio_block) != EINPROGRESS && !is_readstream_paused(readstream_info);
 }
 
 int is_fs_done(event_node* fs_node){
-    task_info* thread_task = (task_info*)fs_node->event_data;
+    task_info* thread_task = &fs_node->data_used.thread_task_info; //(task_info*)fs_node->event_data;
     //*event_index_ptr = thread_task->fs_index;
 
     return thread_task->is_done;
@@ -91,7 +91,7 @@ int is_fs_done(event_node* fs_node){
 
 //array of function pointers
 int(*event_check_array[])(event_node*) = {
-    is_io_done,
+    //is_io_done,
     is_child_done,
     is_readstream_data_done,
     is_fs_done,

@@ -10,6 +10,8 @@ hash_table* subscriber_hash_table; //TODO: put this in a different file?
 void asynC_init();
 void asynC_wait();
 
+typedef struct event_node event_node;
+
 void enqueue_event(event_node* event_node);
 
 #endif

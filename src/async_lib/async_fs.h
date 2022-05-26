@@ -9,11 +9,14 @@
 typedef void(*open_callback)(int, callback_arg*);
 typedef void(*read_callback)(int, buffer*, int, callback_arg*);
 typedef void(*chmod_callback)(int, callback_arg*);
+typedef void(*chown_callback)(int, callback_arg*);
+
 
 typedef union fs_cbs {
     open_callback open_cb;
     read_callback read_cb;
     chmod_callback chmod_cb;
+    chown_callback chown_cb;
 } grouped_fs_cbs;
 
 //TODO: make another union to go into this struct for different kind of return/result values from different tasks?
@@ -53,11 +56,20 @@ typedef struct chmod_task {
     int* success_ptr;
 } async_chmod_info;
 
+typedef struct chown_task {
+    char* filename;
+    int uid;
+    int gid;
+    int* is_done_ptr;
+    int* success_ptr;
+} async_chown_info;
+
 typedef union thread_tasks {
     void* custom_thread_data; //make this into separate struct? for worker thread args?
     async_open_info open_info;
     async_read_info read_info;
     async_chmod_info chmod_info;
+    async_chown_info chown_info;
 } thread_async_ops;
 
 typedef struct task_handler_block {
@@ -67,5 +79,6 @@ typedef struct task_handler_block {
 
 void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
 void async_chmod(char* filename, mode_t mode, chmod_callback chmod_cb, callback_arg* cb_arg);
+void async_chown(char* filename, int uid, int gid, chown_callback chown_cb, callback_arg* cb_arg);
 
 #endif

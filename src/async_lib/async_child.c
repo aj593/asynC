@@ -5,7 +5,7 @@
 #include "async_child.h"
 #include "../async_types/callback_arg.h"
 
-#define CHILD_EVENT_INDEX 1 //index in array of array of function pointers that we are working with a child process event
+#define CHILD_EVENT_INDEX 0 //index in array of array of function pointers that we are working with a child process event
 
 #define CHILD_FUNC_EVENT 0 //index in function pointer array so we know we are working with child process that takes in function as param to execute
 
@@ -24,13 +24,13 @@ void spawn_child_func(void(*child_fcn)(void* arg), void* child_arg, child_func_c
     //If pid is anything else (-1 or proper positive child pid), we are executing in scope of parent process
     else{
         //create new event queue node for child process event
-        event_node* new_child_func_event = create_event_node(CHILD_EVENT_INDEX, sizeof(async_child));
+        event_node* new_child_func_event = create_event_node(CHILD_EVENT_INDEX);
 
         new_child_func_event->callback_handler = child_func_interm;
 
 
         //get event data's pointer that was created with event node
-        async_child* child_stats = (async_child*)new_child_func_event->event_data;
+        async_child* child_stats = &new_child_func_event->data_used.child_info; //(async_child*)new_child_func_event->event_data;
 
         //TODO: if pid == -1, check error here or allow user programmer to check for error pid?
         //assign fields for event data's pointer for child process

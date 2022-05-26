@@ -24,7 +24,7 @@
     read_cb(read_fd, read_buff, num_bytes_read, cb_arg);
 }*/
 
-void write_cb_interm(event_node* exec_node){
+/*void write_cb_interm(event_node* exec_node){
     async_io* io_data = (async_io*)exec_node->event_data;
     
     write_callback write_cb = io_data->io_callback.write_cb;
@@ -61,4 +61,4 @@ void write_file_cb_interm(event_node* exec_node){
     callback_arg* cb_arg = io_data->callback_arg;
 
     wf_callback(write_file_buffer, num_bytes_written, cb_arg);
-}
+}*/

@@ -7,9 +7,11 @@
 #include "../containers/singly_linked_list.h"
 #include "../async_lib/async_io.h"
 
-void read_cb_interm(event_node*);
-void write_cb_interm(event_node*);
-void read_file_cb_interm(event_node*);
-void write_file_cb_interm(event_node*);
+typedef struct event_node event_node;
+
+//void read_cb_interm(event_node*);
+//void write_cb_interm(event_node*);
+//void read_file_cb_interm(event_node*);
+//void write_file_cb_interm(event_node*);
 
 #endif

@@ -1,7 +1,7 @@
 #include "readstream_callbacks.h"
 
 void readstream_data_interm(event_node* readstream_data_node){
-    readstream* old_readstream_data = (readstream*)readstream_data_node->event_data;
+    readstream* old_readstream_data = &readstream_data_node->data_used.readstream_info; //(readstream*)readstream_data_node->event_data;
 
     buffer* data_buffer = old_readstream_data->read_buffer;
     ssize_t num_bytes_read = aio_return(&old_readstream_data->aio_block);
@@ -10,9 +10,9 @@ void readstream_data_interm(event_node* readstream_data_node){
     if(num_bytes_read > 0){
         callback_arg* cb_arg = old_readstream_data->cb_arg; //TODO: make copies of cb_arg instead of using same cb_arg for each one?
 
-        event_node* new_readstream_node = create_event_node(READSTREAM_INDEX, sizeof(readstream));
+        event_node* new_readstream_node = create_event_node(READSTREAM_INDEX);
         new_readstream_node->callback_handler = readstream_data_node->callback_handler;
-        readstream* new_readstream_data = (readstream*)new_readstream_node->event_data;
+        readstream* new_readstream_data = &new_readstream_node->data_used.readstream_info; //(readstream*)new_readstream_node->event_data;
         *new_readstream_data = *old_readstream_data;
 
         //creating buffer here in case use makes async call to use old buffer, so we dont reuse same buffer between different readstream data calls

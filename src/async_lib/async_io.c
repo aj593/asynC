@@ -23,14 +23,14 @@
 
 //initialize the I/O event we're going to perform by creating an event node for it, which will later be enqueued into the event queue
 //this will be used repeatedly in our different asynchronous I/O operations
-event_node* io_event_init(int io_index, buffer* io_buffer, void(*io_callback_handler)(event_node*), callback_arg* cb_arg){
+/*event_node* io_event_init(int io_index, buffer* io_buffer, void(*io_callback_handler)(event_node*), callback_arg* cb_arg){
     //create the event node, and also allocate a block of data for its respective piece of data, the size of an async_io struct
     event_node* new_io_event = create_event_node(IO_EVENT_INDEX, sizeof(async_io));
     
     new_io_event->callback_handler = io_callback_handler;
 
     //obtain our pointer to our async_io struct so we can assign values to it in the next few lines
-    async_io* io_block = (async_io*)new_io_event->event_data;
+    async_io* io_block = &new_io_event->data_used.io_info; //(async_io*)new_io_event->event_data;
 
     //assign index for I/O operation, buffer that will have contents filled, and the callback argument passed into the callback
     io_block->io_index = io_index;
@@ -39,7 +39,7 @@ event_node* io_event_init(int io_index, buffer* io_buffer, void(*io_callback_han
     io_block->callback_arg = cb_arg;
 
     return new_io_event; //return created event node, will be enqueued into event queue by caller
-}
+}*/
 
 //where we will make our asynchronous I/O request with our aiocb block, aio operation, and other needed parameters
 void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for_aio, int num_bytes, int offset, aio_op async_op){
@@ -78,11 +78,11 @@ void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for
 
     //enqueue event node onto event queue
     enqueue_event(new_open_event);
-}*/
+}
 
 //TODO: throw exception or error handle if num_bytes_to_read > read_buff_ptr capacity, or make it so read is automatically minimum of of two?
 //asynchronously read the specified number of bytes into file and fill it into buffer*'s data pointer, and also assign callback information for it
-/*void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
+void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
     //create event node and assign it proper fields in its async_io struct pointer
     event_node* new_read_event = 
         io_event_init(
@@ -111,7 +111,7 @@ void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for
 
     //enqueue event node onto event queue
     enqueue_event(new_read_event);
-}*/
+}
 
 //TODO: check if this works
 //TODO: throw exception or error handle if num_bytes_to_write > read_buff_ptr capacity?
@@ -156,7 +156,7 @@ void read_file(char* file_name, readfile_callback rf_callback, callback_arg* cb_
     int read_fd = open(file_name, O_RDONLY | O_NONBLOCK); //TODO: need NONBLOCK flag here?
     //declare and assign stats from file so we can get the file size
     struct stat file_stats;
-    /*int return_code = */fstat(read_fd, &file_stats); //TODO: make this stat call async somehow?
+    int return_code = fstat(read_fd, &file_stats); //TODO: make this stat call async somehow?
     int file_size = file_stats.st_size;
 
     //create new event node and assign it proper index, a new buffer of the file's size, and callback argument
@@ -169,7 +169,7 @@ void read_file(char* file_name, readfile_callback rf_callback, callback_arg* cb_
         );
 
     //get async_io struct from new event node and assign it proper callback
-    async_io* readfile_data = (async_io*)new_readfile_event->event_data;
+    async_io* readfile_data = &new_readfile_event->data_used.io_info; //(async_io*)new_readfile_event->event_data;
     readfile_data->io_callback.rf_cb = rf_callback;
 
     //make aio request to read file with new file descriptor and new buffer
@@ -215,4 +215,4 @@ void write_file(char* file_name, buffer* write_buff, int num_bytes_to_write, int
 
     //enqueue event node onto event queue
     enqueue_event(new_writefile_event);
-}
+}*/

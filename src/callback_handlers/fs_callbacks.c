@@ -3,7 +3,7 @@
 #include "../async_lib/async_fs.h"
 
 void fs_open_interm(event_node* exec_node){
-    task_info* fs_data = (task_info*)exec_node->event_data;
+    task_info* fs_data = &exec_node->data_used.thread_task_info; //(task_info*)exec_node->event_data;
 
     open_callback open_cb = fs_data->fs_cb.open_cb;
 
@@ -14,7 +14,7 @@ void fs_open_interm(event_node* exec_node){
 }
 
 void read_cb_interm(event_node* exec_node){
-    task_info* fs_data = (task_info*)exec_node->event_data;
+    task_info* fs_data = &exec_node->data_used.thread_task_info; //(task_info*)exec_node->event_data;
 
     read_callback read_cb = fs_data->fs_cb.read_cb;
 
@@ -27,7 +27,7 @@ void read_cb_interm(event_node* exec_node){
 }
 
 void fs_chmod_interm(event_node* exec_node){
-    task_info* fs_data = (task_info*)exec_node->event_data;
+    task_info* fs_data = &exec_node->data_used.thread_task_info; //(task_info*)exec_node->event_data;
 
     chmod_callback chmod_cb = fs_data->fs_cb.chmod_cb;
 
@@ -35,4 +35,15 @@ void fs_chmod_interm(event_node* exec_node){
     callback_arg* cb_arg = fs_data->cb_arg;
 
     chmod_cb(success, cb_arg);
+}
+
+void fs_chown_interm(event_node* exec_node){
+    task_info* fs_data = &exec_node->data_used.thread_task_info;
+
+    chown_callback chown_cb = fs_data->fs_cb.chown_cb;
+
+    int success = fs_data->success;
+    callback_arg* cb_arg = fs_data->cb_arg;
+
+    chown_cb(success, cb_arg);
 }

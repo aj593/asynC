@@ -15,11 +15,11 @@ readstream* create_readstream(char* filename, int num_read_bytes, callback_arg* 
         return NULL;
     }
 
-    event_node* readstream_event_node = create_event_node(READSTREAM_INDEX, sizeof(readstream));
+    event_node* readstream_event_node = create_event_node(READSTREAM_INDEX);
 
     readstream_event_node->callback_handler = readstream_data_interm;
 
-    readstream* new_readstream = (readstream*)readstream_event_node->event_data;
+    readstream* new_readstream = &readstream_event_node->data_used.readstream_info; //(readstream*)readstream_event_node->event_data;
 
     new_readstream->event_index = READSTREAM_DATA_INDEX;
     new_readstream->read_file_descriptor = read_fd;
