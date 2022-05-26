@@ -12,3 +12,27 @@ void fs_open_interm(event_node* exec_node){
 
     open_cb(open_fd, cb_arg);
 }
+
+void read_cb_interm(event_node* exec_node){
+    task_info* fs_data = (task_info*)exec_node->event_data;
+
+    read_callback read_cb = fs_data->fs_cb.read_cb;
+
+    int read_fd = fs_data->fd;
+    buffer* read_buff = fs_data->buffer;
+    ssize_t num_bytes_read = fs_data->num_bytes;
+    callback_arg* cb_arg = fs_data->cb_arg;
+
+    read_cb(read_fd, read_buff, num_bytes_read, cb_arg);
+}
+
+void fs_chmod_interm(event_node* exec_node){
+    task_info* fs_data = (task_info*)exec_node->event_data;
+
+    chmod_callback chmod_cb = fs_data->fs_cb.chmod_cb;
+
+    int success = fs_data->success;
+    callback_arg* cb_arg = fs_data->cb_arg;
+
+    chmod_cb(success, cb_arg);
+}

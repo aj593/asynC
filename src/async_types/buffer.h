@@ -3,7 +3,7 @@
 
 typedef struct event_buffer buffer;
 
-buffer* create_buffer(size_t capacity);
+buffer* create_buffer(size_t capacity, size_t size_of_each_element);
 void destroy_buffer(buffer* buff_ptr);
 
 void* get_internal_buffer(buffer* buff_ptr);

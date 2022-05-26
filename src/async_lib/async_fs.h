@@ -1,31 +1,63 @@
 #ifndef ASYNC_FS
 #define ASYNC_FS
 
+#include <fcntl.h>
+
 #include "../async_types/callback_arg.h"
+#include "../async_types/buffer.h"
+
 typedef void(*open_callback)(int, callback_arg*);
+typedef void(*read_callback)(int, buffer*, int, callback_arg*);
+typedef void(*chmod_callback)(int, callback_arg*);
 
 typedef union fs_cbs {
     open_callback open_cb;
+    read_callback read_cb;
+    chmod_callback chmod_cb;
 } grouped_fs_cbs;
 
+//TODO: make another union to go into this struct for different kind of return/result values from different tasks?
 typedef struct thread_task_info {
-    int fs_index;
+    //int fs_index; //TODO: need this?
     grouped_fs_cbs fs_cb;
     callback_arg* cb_arg;
-    int is_done; //TODO: make this atomic
-    int fd;
+    int is_done; //TODO: make this atomic?
+
+    //following fields may be placed in union
+    buffer* buffer;
+    int fd; 
+    int num_bytes;
+    int success;
 } task_info;
 
 typedef struct open_task {
     char* filename;
     int flags;
-    int mode;
+    mode_t mode;
     int* is_done_ptr;
     int* fd_ptr;
 } async_open_info;
 
+typedef struct read_task {
+    int read_fd;
+    buffer* buffer; //use void* instead?
+    int max_num_bytes_to_read;
+    int* num_bytes_read_ptr;
+    int* is_done_ptr;
+} async_read_info;
+
+typedef struct chmod_task {
+    char* filename;
+    mode_t mode;
+    int* is_done_ptr;
+    int* success_ptr;
+} async_chmod_info;
+
 typedef union thread_tasks {
+    void* custom_thread_data; //make this into separate struct? for worker thread args?
     async_open_info open_info;
+    async_read_info read_info;
+    async_chmod_info chmod_info;
 } thread_async_ops;
 
 typedef struct task_handler_block {
@@ -34,5 +66,6 @@ typedef struct task_handler_block {
 } task_block;
 
 void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
+void async_chmod(char* filename, mode_t mode, chmod_callback chmod_cb, callback_arg* cb_arg);
 
 #endif
