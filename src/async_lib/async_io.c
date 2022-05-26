@@ -82,7 +82,7 @@ void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for
 
 //TODO: throw exception or error handle if num_bytes_to_read > read_buff_ptr capacity, or make it so read is automatically minimum of of two?
 //asynchronously read the specified number of bytes into file and fill it into buffer*'s data pointer, and also assign callback information for it
-void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
+/*void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
     //create event node and assign it proper fields in its async_io struct pointer
     event_node* new_read_event = 
         io_event_init(
@@ -111,7 +111,7 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_
 
     //enqueue event node onto event queue
     enqueue_event(new_read_event);
-}
+}*/
 
 //TODO: check if this works
 //TODO: throw exception or error handle if num_bytes_to_write > read_buff_ptr capacity?
@@ -163,7 +163,7 @@ void read_file(char* file_name, readfile_callback rf_callback, callback_arg* cb_
     event_node* new_readfile_event = 
         io_event_init(
             READ_FILE_INDEX,            //we use the index corresponding to the intermediate callback handler's function in the function pointer array
-            create_buffer(file_size),   //buffer of size "file_size"
+            create_buffer(file_size, sizeof(char)),   //buffer of size "file_size"
             read_file_cb_interm, 
             cb_arg                      //callback argument that will be passed into callback
         );

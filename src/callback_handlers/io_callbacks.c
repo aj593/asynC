@@ -11,7 +11,7 @@
     open_cb(open_fd, cb_arg);
 }*/
 
-void read_cb_interm(event_node* exec_node){
+/*void read_cb_interm(event_node* exec_node){
     async_io* io_data = (async_io*)exec_node->event_data;
 
     read_callback read_cb = io_data->io_callback.read_cb;
@@ -22,7 +22,7 @@ void read_cb_interm(event_node* exec_node){
     callback_arg* cb_arg = io_data->callback_arg;
 
     read_cb(read_fd, read_buff, num_bytes_read, cb_arg);
-}
+}*/
 
 void write_cb_interm(event_node* exec_node){
     async_io* io_data = (async_io*)exec_node->event_data;

@@ -30,7 +30,7 @@ readstream* create_readstream(char* filename, int num_read_bytes, callback_arg* 
     new_readstream->num_bytes_per_read = num_read_bytes;
     new_readstream->is_paused = 0;
     new_readstream->emitter_ptr = create_emitter(new_readstream); //TODO: this should make emitter point back at readstream right or make it point to custom item?
-    new_readstream->read_buffer = create_buffer(num_read_bytes * sizeof(char));
+    new_readstream->read_buffer = create_buffer(num_read_bytes, sizeof(char));
 
     new_readstream->cb_arg = cb_arg;
     vector_init(&new_readstream->data_cbs, INITIAL_VEC_CAPACITY, VEC_MULT_FACTOR);

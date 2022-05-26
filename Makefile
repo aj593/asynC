@@ -1,8 +1,8 @@
 CFLAGS = -g -lrt -Wall -Werror -pedantic -pthread
 #TODO: add # -Wextra flag later
 
-output: async_child.o async_io.o buffer.o c_vector.o main.o event_loop.o callback_arg.o event_emitter.o hash_table.o singly_linked_list.o child_callbacks.o io_callbacks.o readstream.o readstream_callbacks.o thread_pool.o async_fs.o fs_callbacks.o
-	gcc obj/async_child.o obj/async_io.o obj/buffer.o obj/c_vector.o obj/main.o obj/event_loop.o obj/callback_arg.o obj/event_emitter.o obj/hash_table.o obj/singly_linked_list.o obj/child_callbacks.o obj/io_callbacks.o obj/readstream.o obj/readstream_callbacks.o obj/thread_pool.o obj/async_fs.o obj/fs_callbacks.o -o exec/main $(CFLAGS)
+output: async_child.o async_io.o buffer.o c_vector.o main.o event_loop.o callback_arg.o event_emitter.o hash_table.o singly_linked_list.o child_callbacks.o io_callbacks.o readstream.o readstream_callbacks.o thread_pool.o async_fs.o fs_callbacks.o worker_thread.o
+	gcc obj/async_child.o obj/async_io.o obj/buffer.o obj/c_vector.o obj/main.o obj/event_loop.o obj/callback_arg.o obj/event_emitter.o obj/hash_table.o obj/singly_linked_list.o obj/child_callbacks.o obj/io_callbacks.o obj/readstream.o obj/readstream_callbacks.o obj/thread_pool.o obj/async_fs.o obj/fs_callbacks.o obj/worker_thread.o -o exec/main $(CFLAGS)
 
 #src/async_lib
 async_io.o: src/async_lib/async_io.c src/async_lib/async_io.h
@@ -16,6 +16,9 @@ async_child.o: src/async_lib/async_child.c src/async_lib/async_child.h
 
 readstream.o: src/async_lib/readstream.c src/async_lib/readstream.h
 	gcc -c src/async_lib/readstream.c -o obj/readstream.o $(CFLAGS)
+
+worker_thread.o: src/async_lib/worker_thread.c src/async_lib/worker_thread.h
+	gcc -c src/async_lib/worker_thread.c -o obj/worker_thread.o $(CFLAGS)
 
 
 #src/async_types

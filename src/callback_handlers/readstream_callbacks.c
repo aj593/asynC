@@ -16,7 +16,7 @@ void readstream_data_interm(event_node* readstream_data_node){
         *new_readstream_data = *old_readstream_data;
 
         //creating buffer here in case use makes async call to use old buffer, so we dont reuse same buffer between different readstream data calls
-        new_readstream_data->read_buffer = create_buffer(get_buffer_capacity(old_readstream_data->read_buffer));
+        new_readstream_data->read_buffer = create_buffer(get_buffer_capacity(old_readstream_data->read_buffer), sizeof(char));
 
         //TODO: copy data_buffer between separate calls to each data handler?
 

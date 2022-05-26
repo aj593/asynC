@@ -5,15 +5,18 @@
 //TODO: need both size and capacity?
 typedef struct event_buffer {
     void* internal_buffer;  //TODO: make volatile?
-    //size_t size;            //TODO: set size properly somewhere
+    size_t size_of_each_element;            //TODO: set size properly somewhere
     size_t capacity; 
 } buffer;
 
 //TODO: check if calloc calls return null?
-buffer* create_buffer(size_t capacity){
-    buffer* storage_buff  = (buffer*)calloc(1, sizeof(buffer));
-    storage_buff->internal_buffer = calloc(capacity, 1);
+//TODO: change so it takes in 2 params, 1 for size of each block, and number of blocks
+buffer* create_buffer(size_t capacity, size_t size_of_each_element){
+    buffer* storage_buff = (buffer*)malloc(sizeof(buffer));
+    //allocating extra unit for internal buffer so we know buffer is null terminated?
+    storage_buff->internal_buffer = calloc(capacity + 1, size_of_each_element);
     storage_buff->capacity = capacity;
+    storage_buff->size_of_each_element = size_of_each_element;
     //storage_buff->size = 0;
 
     return storage_buff;

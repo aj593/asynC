@@ -4,16 +4,15 @@
 #include "../async_lib/async_fs.h"
 
 #include <pthread.h>
-#include <signal.h>
 
 //TODO: allow user to decide number of threads in thread pool?
 #define NUM_THREADS 10
 
+#define TERM_FLAG -1
+
 pthread_t thread_id_array[NUM_THREADS];
 
 linked_list task_queue;
-int task_in_index = 0;
-int task_out_index = 0;
 
 pthread_mutex_t task_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t task_queue_cond_var = PTHREAD_COND_INITIALIZER;
@@ -31,13 +30,13 @@ void thread_pool_init(){
 
 //TODO: is this best way to destroy threads?
 void thread_pool_destroy(){
-    /*for(int i = 0; i < NUM_THREADS; i++){
-        pthread_kill(thread_id_array[i], SIGKILL);
+    for(int i = 0; i < NUM_THREADS; i++){
+        enqueue_task(create_event_node(TERM_FLAG, 1));
     }
 
     for(int i = 0; i < NUM_THREADS; i++){
         pthread_join(thread_id_array[i], NULL);
-    }*/
+    }
 }
 
 void* task_waiter(void* arg){
@@ -51,6 +50,11 @@ void* task_waiter(void* arg){
         event_node* curr_task = remove_first(&task_queue);
 
         pthread_mutex_unlock(&task_queue_mutex);
+
+        if(curr_task->event_index == TERM_FLAG){
+            destroy_event_node(curr_task);
+            break;
+        }
 
         //TODO: execute task here
         task_block* exec_task_block = (task_block*)curr_task->event_data;
@@ -70,5 +74,4 @@ void enqueue_task(event_node* task){
     pthread_mutex_unlock(&task_queue_mutex);
 
     pthread_cond_signal(&task_queue_cond_var);
-
 }
