@@ -6,9 +6,12 @@
 #include <time.h>
 #include <string.h>
 
+#include <ares.h>
+
 #include <pthread.h> //TODO: delete later
 
 #include "asynC.h"
+#include "containers/singly_linked_list.h"
 
 //TODO: error check for NULL with malloc and calloc
 //TODO: put newline at end of each file?
@@ -70,12 +73,12 @@ void after_write_test(int fd, buffer* buffer, int num_written_bytes, callback_ar
     
     int* fds = (int*)get_arg_data(cb_arg);
     
-    async_read(fds[0], buffer, num_read_bytes, after_read_test, cb_arg);
+    thread_read(fds[0], buffer, num_read_bytes, after_read_test, cb_arg);
 }
 
 void after_read_test(int read_fd, buffer* buffer, int num_read_bytes, callback_arg* cb_arg){
-    after_read = clock();
-    printf("time difference is %ld\n", after_read - before_read);
+    //after_read = clock();
+    //printf("time difference is %ld\n", after_read - before_read);
 
     num_diffs++;
     total_diff += (after_read - before_read);
@@ -84,10 +87,10 @@ void after_read_test(int read_fd, buffer* buffer, int num_read_bytes, callback_a
     
     if(num_read_bytes > 0){
         before_read = clock();
-        async_read(fds[0], buffer, num_read_bytes, after_read_test, cb_arg);
+        thread_read(fds[0], buffer, num_read_bytes, after_read_test, cb_arg);
     }
     else{
-        printf("the average difference time is %f\n", (float)total_diff/(float)num_diffs);
+        //printf("the average difference time is %f\n", (float)total_diff/(float)num_diffs);
         destroy_cb_arg(cb_arg);
         close(fds[0]);
         close(fds[1]);
@@ -101,7 +104,7 @@ void after_open_test(int new_fd, callback_arg* cb_arg){
     buffer* read_buff = create_buffer(num_read_bytes, sizeof(char));
 
     before_read = clock();
-    async_read(fds[0], read_buff, num_read_bytes, after_read_test, cb_arg);
+    thread_read(fds[0], read_buff, num_read_bytes, after_read_test, cb_arg);
 }
 
 void after_real_open(int fd, callback_arg* cb_arg){
@@ -141,22 +144,35 @@ int main(int argc, char* argv[]){
     input_filename = argv[1];
     output_filename = argv[2];
 
-    clock_t before = clock();
+    //int fd = open(argv[1], O_RDONLY);
 
-    chown(argv[1], 1, 1);
+    int num_child_tasks = 100;
+
+    for(int i = 1; i <= num_child_tasks; i++){
+        event_node* new_node = create_event_node(1);
+        new_node->data_used.proc_task.data = i;
+        enqueue_child_task(new_node);
+    }
+    
+
+    //close(fd);
+    //chown(argv[1], 1, 1);
     //async_chown(argv[1], 1, 1, after_chown, NULL);
+    //void after_real_open(int, callback_arg*);
 
-    clock_t after = clock();
+    //clock_t before = clock();
 
-    printf("time difference is %ld\n", after - before);
+    //async_open(input_filename, O_RDONLY, 0644, after_real_open, NULL);
+
+    //clock_t after = clock();
+
+    //printf("time difference is %ld\n", after - before);
 
     //async_chmod(argv[1], 0777, chmod_cb, NULL);
     //chmod(argv[1], 0777);
 
-    //open(argv[1], O_RDONLY);
     //lseek(fd, 0, SEEK_CUR);
 
-    //async_open(input_filename, O_RDONLY, 0644, after_real_open, NULL);
 
     /*int total_num_bytes_read = 0;
     callback_arg* rs_cb_arg = create_cb_arg(&total_num_bytes_read, sizeof(int));
@@ -195,7 +211,7 @@ int main(int argc, char* argv[]){
 
     /*int fd = open(argv[1], O_RDONLY);
     int max_bytes = 3000;
-    async_read(fd, create_buffer(max_bytes), NULL, NULL);*/
+    thread_read(fd, create_buffer(max_bytes), NULL, NULL);*/
     
     /*char greetings[] = "greetings";
     void* greetings_ptr = &greetings;
@@ -287,7 +303,7 @@ void child_fcn_callback(pid_t pid, int status, callback_arg* cb_arg){
     int num_bytes = 1000;
     buffer* read_buff = create_buffer(num_bytes, sizeof(char));
 
-    async_read(fd_array[0], read_buff, num_bytes, after_read, arg);
+    thread_read(fd_array[0], read_buff, num_bytes, after_read, arg);
 }
 
 //TODO: need read_fd param?
@@ -311,5 +327,5 @@ void after_read(int read_fd, buffer* read_buff, int num_bytes_read, callback_arg
 
 void after_write(int write_fd, buffer* write_buff, int num_bytes_written, callback_arg* arg){
     int* fd_array = (int*)get_arg_data(arg);
-    async_read(fd_array[0], write_buff, get_buffer_capacity(write_buff), after_read, arg);
+    thread_read(fd_array[0], write_buff, get_buffer_capacity(write_buff), after_read, arg);
 }*/

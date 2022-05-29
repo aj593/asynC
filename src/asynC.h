@@ -8,4 +8,6 @@
 #include "async_lib/async_fs.h"
 #include "async_types/event_emitter.h"
 
+#include "containers/process_pool.h"
+
 #endif

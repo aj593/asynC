@@ -43,6 +43,7 @@ void destroy_event_node(event_node* node_to_destroy){
     free(node_to_destroy);
 }
 
+//TODO: require that added event_node be not NULL?
 void add_next(linked_list* list, event_node* curr, event_node* new_node){
     event_node* after_curr = curr->next;
     curr->next = new_node;

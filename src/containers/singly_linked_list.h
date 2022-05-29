@@ -8,6 +8,8 @@
 #include "../async_lib/async_child.h"
 //#include "../async_lib/async_io.h"
 
+#include "process_pool.h"
+
 //TODO: put other node_data types here too?
 
 #ifndef READSTREAM_TYPE
@@ -31,11 +33,21 @@ typedef struct readablestream {
 
 #endif
 
+#ifndef CHILD_TASK_INFO_TYPE
+#define CHILD_TASK_INFO_TYPE
+
+typedef struct child_task_info {
+    int data;
+} child_task;
+
+#endif
+
 typedef union node_data_types {
     task_info thread_task_info;
     task_block thread_block_info;
     async_child child_info;
     readstream readstream_info;
+    child_task proc_task;
     //async_io io_info; //TODO: may not need this
 } node_data;
 

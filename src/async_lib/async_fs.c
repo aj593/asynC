@@ -45,6 +45,8 @@ void async_open(char* filename, int flags, int mode, open_callback open_cb, call
     enqueue_task(task_node);
 }
 
+//void async_close
+
 void read_task_handler(thread_async_ops read_task){
     async_read_info read_info = read_task.read_info;
 
@@ -57,7 +59,8 @@ void read_task_handler(thread_async_ops read_task){
     *read_info.is_done_ptr = 1;
 }
 
-void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
+//TODO: reimplement this with system calls?
+void thread_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
     event_node* read_node = create_event_node(FS_EVENT_INDEX);
     read_node->callback_handler = read_cb_interm;
     enqueue_event(read_node);
@@ -83,7 +86,7 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_
 }
 
 //TODO: finish implementing this
-void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg){
+void thread_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg){
     //event_node* write_node = create_event_node(FS_EVENT_INDEX);
 }
 

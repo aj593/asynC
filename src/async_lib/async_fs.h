@@ -8,6 +8,7 @@
 
 typedef void(*open_callback)(int, callback_arg*);
 typedef void(*read_callback)(int, buffer*, int, callback_arg*);
+typedef void(*write_callback)(int, buffer*, int, callback_arg*);
 typedef void(*chmod_callback)(int, callback_arg*);
 typedef void(*chown_callback)(int, callback_arg*);
 
@@ -78,6 +79,10 @@ typedef struct task_handler_block {
 } task_block;
 
 void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
+
+void thread_read (int read_fd,  buffer* buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg);
+void thread_write(int write_fd, buffer* buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg);
+
 void async_chmod(char* filename, mode_t mode, chmod_callback chmod_cb, callback_arg* cb_arg);
 void async_chown(char* filename, int uid, int gid, chown_callback chown_cb, callback_arg* cb_arg);
 

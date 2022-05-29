@@ -11,6 +11,7 @@
 #include "containers/hash_table.h"
 #include "containers/c_vector.h"
 #include "containers/thread_pool.h"
+#include "containers/process_pool.h"
 
 #include "async_lib/async_io.h"
 #include "async_lib/async_fs.h"
@@ -144,6 +145,7 @@ void asynC_init(){
     linked_list_init(&event_queue); //TODO: error check singly_linked_list.c
     subscriber_hash_table = ht_create();
     thread_pool_init();
+    process_pool_init(); //TODO: initialize process pool before or after thread pool?
 }
 
 //TODO: error check this?
@@ -170,6 +172,7 @@ void asynC_wait(){
     linked_list_destroy(&event_queue);
     ht_destroy(subscriber_hash_table);
     thread_pool_destroy();
+    process_pool_destroy();
 }
 
 //TODO: add a mutex lock and make mutex calls to this when appending and removing items?

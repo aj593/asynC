@@ -9,11 +9,13 @@
 #include "../callback_handlers/callback_handler.h"
 //#include "callbacks.h"
 
+
 typedef void(*open_callback)(int, callback_arg*);
 typedef void(*read_callback)(int, buffer*, int, callback_arg*);
 typedef void(*write_callback)(int, buffer*, int, callback_arg*);
 typedef void(*readfile_callback)(buffer*, int, callback_arg*);
 typedef void(*writefile_callback)(buffer*, int, callback_arg*);
+
 
 //define our own type of function pointer that match the function signature of aio_read() and aio_write()
 typedef int(*aio_op)(struct aiocb*);
@@ -40,8 +42,7 @@ typedef struct io_block {
 //TODO: make it so async I/O calls need desired buffer size passed in, and also a parameter for it in callback?
 
 //void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
-void async_read (int read_fd,  buffer* buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg);
-void async_write(int write_fd, buffer* buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg);
+
 
 void read_file(char* file_name, readfile_callback rf_cb, callback_arg* cb_arg);
 void write_file(char* file_name, buffer* write_buff, int num_bytes_to_write, int mode, int flags, writefile_callback wf_cb, callback_arg* cb_arg);
