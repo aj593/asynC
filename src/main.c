@@ -228,7 +228,7 @@ int main(int argc, char* argv[]){
 
     destroy_emitter(new_emitter);*/
 
-    asynC_wait();
+    asynC_cleanup();
 
     return 0;
 }

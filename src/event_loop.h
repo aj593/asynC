@@ -8,7 +8,9 @@
 hash_table* subscriber_hash_table; //TODO: put this in a different file?
 
 void asynC_init();
-void asynC_wait();
+void asynC_cleanup();
+
+void asynC_wait(); //TODO: make this available only among library files, not in driver/main.c code?
 
 typedef struct event_node event_node;
 

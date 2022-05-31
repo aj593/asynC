@@ -1,8 +1,8 @@
 CFLAGS = -g -lrt -Wall -Werror -pthread -pedantic
 #TODO: add # -Wextra flag later
 
-output: async_child.o async_io.o buffer.o c_vector.o main.o event_loop.o callback_arg.o event_emitter.o hash_table.o singly_linked_list.o child_callbacks.o io_callbacks.o readstream.o readstream_callbacks.o thread_pool.o async_fs.o fs_callbacks.o worker_thread.o process_pool.o
-	gcc obj/async_child.o obj/async_io.o obj/buffer.o obj/c_vector.o obj/main.o obj/event_loop.o obj/callback_arg.o obj/event_emitter.o obj/hash_table.o obj/singly_linked_list.o obj/child_callbacks.o obj/io_callbacks.o obj/readstream.o obj/readstream_callbacks.o obj/thread_pool.o obj/async_fs.o obj/fs_callbacks.o obj/worker_thread.o obj/process_pool.o -o exec/main $(CFLAGS)
+output: async_child.o async_io.o buffer.o c_vector.o main.o event_loop.o callback_arg.o event_emitter.o hash_table.o singly_linked_list.o child_callbacks.o io_callbacks.o readstream.o readstream_callbacks.o thread_pool.o async_fs.o fs_callbacks.o worker_thread.o process_pool.o ipc_channel.o child_spawner.o
+	gcc obj/async_child.o obj/async_io.o obj/buffer.o obj/c_vector.o obj/main.o obj/event_loop.o obj/callback_arg.o obj/event_emitter.o obj/hash_table.o obj/singly_linked_list.o obj/child_callbacks.o obj/io_callbacks.o obj/readstream.o obj/readstream_callbacks.o obj/thread_pool.o obj/async_fs.o obj/fs_callbacks.o obj/worker_thread.o obj/process_pool.o obj/ipc_channel.o obj/child_spawner -o exec/main $(CFLAGS)
 
 #src/async_lib
 async_io.o: src/async_lib/async_io.c src/async_lib/async_io.h
@@ -61,6 +61,12 @@ thread_pool.o: src/containers/thread_pool.c src/containers/thread_pool.h
 
 process_pool.o: src/containers/process_pool.c src/containers/process_pool.h
 	gcc -c src/containers/process_pool.c -o obj/process_pool.o $(CFLAGS)
+
+ipc_channel.o: src/containers/ipc_channel.c src/containers/ipc_channel.h
+	gcc -c src/containers/ipc_channel.c -o obj/ipc_channel.o $(CFLAGS)
+
+child_spawner.o: src/containers/child_spawner.c src/containers/child_spawner.h
+	gcc -c src/containers/child_spawner.c -o obj/child_spawner.o $(CFLAGS)
 
 #src/event_loop.c
 event_loop.o: src/event_loop.c src/event_loop.h

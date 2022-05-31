@@ -7,6 +7,7 @@
 #include "../async_lib/async_fs.h"
 #include "../async_lib/async_child.h"
 //#include "../async_lib/async_io.h"
+#include "ipc_channel.h"
 
 #include "process_pool.h"
 
@@ -48,6 +49,8 @@ typedef union node_data_types {
     async_child child_info;
     readstream readstream_info;
     child_task proc_task;
+    channel_message msg;
+    ipc_channel* channel_ptr;
     //async_io io_info; //TODO: may not need this
 } node_data;
 

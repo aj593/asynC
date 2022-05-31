@@ -1,5 +1,7 @@
 #include "process_pool.h"
 
+#include "thread_pool.h"
+
 #include <fcntl.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -75,6 +77,8 @@ void* child_task_queue_middleman(void* arg){
 }
 
 void child_task_wait(){
+    thread_pool_init(); //TODO: do i want thread pool in child processes?
+
     while(1){
         //TODO: make consuming from shared memory a separate function?
         sem_wait(num_occupied_entries);
@@ -88,6 +92,7 @@ void child_task_wait(){
 
         //mechanism to break out of loop when process pool getting destroyed
         if(curr_task.data == -1){
+            thread_pool_destroy();
             break;
         }
 

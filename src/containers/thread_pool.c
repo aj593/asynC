@@ -5,11 +5,6 @@
 
 #include <pthread.h>
 
-//TODO: allow user to decide number of threads in thread pool?
-#define NUM_THREADS 10
-
-#define TERM_FLAG -1
-
 pthread_t thread_id_array[NUM_THREADS];
 
 linked_list task_queue;
@@ -22,6 +17,7 @@ void* task_waiter(void* arg);
 //TODO: also make thread_pool_destroy() function to terminate all threads
 void thread_pool_init(){
     linked_list_init(&task_queue);
+
     for(int i = 0; i < NUM_THREADS; i++){
         //TODO: use pthread_create() return value later?
         /*int ret = */pthread_create(&thread_id_array[i], NULL, task_waiter, NULL);
@@ -39,6 +35,12 @@ void thread_pool_destroy(){
     }
 }
 
+/*
+TODO: using this to test if all threads in thread pools of all processes are destroyed
+#include <stdatomic.h>
+_Atomic int counter = 0;
+*/
+
 void* task_waiter(void* arg){
     while(1){
         pthread_mutex_lock(&task_queue_mutex);
@@ -52,6 +54,7 @@ void* task_waiter(void* arg){
         pthread_mutex_unlock(&task_queue_mutex);
 
         if(curr_task->event_index == TERM_FLAG){
+            //printf("thread #%d getting destroyed\n", ++counter);
             destroy_event_node(curr_task);
             break;
         }
