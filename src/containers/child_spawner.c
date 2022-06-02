@@ -22,6 +22,7 @@
 
 int is_main_process = 1; //TODO: need this?
 
+//TODO: fix this so it's accurate
 const int SHM_SIZE = 
     (5 * sizeof(pthread_mutex_t)) + 
     (2 * sizeof(pthread_cond_t)) +
@@ -47,6 +48,54 @@ void child_spawner_init(){
         //while(1);
         run_spawner_loop();
     }
+}
+
+void channel_child_ptrs_init(ipc_channel* channel){
+    pthread_mutex_t* parent_to_child_arr_mutex = (pthread_mutex_t*)channel->base_ptr;
+    pthread_mutex_t* child_to_parent_arr_mutex =  parent_to_child_arr_mutex + 1;
+    pthread_mutex_t* globally_open_mutex = child_to_parent_arr_mutex + 1;
+    pthread_mutex_t* num_procs_ref_mutex = globally_open_mutex + 1;
+
+    sem_t* parent_to_child_num_empty_sem = (sem_t*)(num_procs_ref_mutex + 1);
+    sem_t* parent_to_child_num_occupied_sem = parent_to_child_num_empty_sem + 1;
+    sem_t* child_to_parent_num_empty_sem = parent_to_child_num_occupied_sem + 1;
+    sem_t* child_to_parent_num_occupied_sem = child_to_parent_num_empty_sem + 1;
+
+    int* parent_to_child_in_index = (int*)(child_to_parent_num_occupied_sem + 1);
+    int* parent_to_child_out_index = parent_to_child_in_index + 1;
+    int* child_to_parent_in_index = parent_to_child_out_index + 1;
+    int* child_to_parent_out_index = child_to_parent_in_index + 1;
+    int* num_procs_ref = child_to_parent_out_index + 1;
+    int* is_open_globally = num_procs_ref + 1;
+
+    pid_t* parent_pid = (pid_t*)(is_open_globally + 1);
+    pid_t* child_pid = parent_pid + 1;
+
+    channel_message* parent_to_child_msg_array = (channel_message*)(child_pid + 1);
+    channel_message* child_to_parent_msg_array = parent_to_child_msg_array + MAX_QUEUED_TASKS;
+
+    channel->producer_msg_array = child_to_parent_msg_array;
+    channel->producer_in_index = child_to_parent_in_index;
+    channel->producer_out_index = child_to_parent_out_index;
+    channel->producer_msg_arr_mutex = child_to_parent_arr_mutex;
+    channel->producer_num_empty_sem = child_to_parent_num_empty_sem;
+    channel->producer_num_occupied_sem = child_to_parent_num_occupied_sem;
+
+    channel->consumer_msg_array = parent_to_child_msg_array;
+    channel->consumer_in_index = parent_to_child_in_index;
+    channel->consumer_out_index = parent_to_child_out_index;
+    channel->consumer_msg_arr_mutex = parent_to_child_arr_mutex;
+    channel->consumer_num_empty_sem = parent_to_child_num_empty_sem;
+    channel->consumer_num_occupied_sem = parent_to_child_num_occupied_sem;
+
+    channel->is_open_globally = is_open_globally;
+    channel->globally_open_mutex = globally_open_mutex;
+    
+    channel->num_procs_ref = num_procs_ref;
+    channel->num_procs_ref_mutex = num_procs_ref_mutex;
+
+    channel->parent_pid = parent_pid;
+    channel->child_pid  = child_pid;
 }
 
 /* TODO: message types
@@ -109,21 +158,19 @@ void run_spawner_loop(){
                 exit(1);
             }
 
-            channel_ptrs_init(&new_channel);
-
-            linked_list_init(new_channel.child_to_parent_local_list);
+            channel_child_ptrs_init(&new_channel);
             
             pid_t new_spawned_child_pid = fork();
 
             if(new_spawned_child_pid < 0){
                 //TODO: handle error, decrement integer in shared mem
-                *new_channel.num_procs_ptr = *new_channel.num_procs_ptr - 1; //TODO: can i decrement with -- also?
+                *new_channel.num_procs_ref = *new_channel.num_procs_ref - 1; //TODO: can i decrement with -- also?
 
                 continue;
             }
             else if(new_spawned_child_pid == 0){
                 //TODO: increment integer in shared mem
-                *new_channel.num_procs_ptr = *new_channel.num_procs_ptr + 1; //TODO: can i decrement with ++ also?
+                *new_channel.num_procs_ref = *new_channel.num_procs_ref + 1; //TODO: can i decrement with ++ also?
 
                 printf("forking new child, my pid is %d\n", getpid());
 
@@ -151,22 +198,16 @@ void forked_child_handler(ipc_channel* new_channel){
     //TODO: initialize thread pool here?
     //thread_pool_init(); //TODO: uncomment later
 
-    *new_channel->child_pid_ptr = getpid();
-    new_channel->curr_pid = *new_channel->child_pid_ptr;
-
-    new_channel->msg_arr_curr_mutex = new_channel->c_to_p_msg_arr_mutex;
-    new_channel->num_occupied_curr_sem = new_channel->child_to_parent_num_occupied_sem;
-    new_channel->num_empty_curr_sem = new_channel->child_to_parent_num_empty_sem;
-    new_channel->curr_msg_array_ptr = new_channel->child_to_parent_msg_array;
-
-    new_channel->curr_out_ptr = new_channel->child_to_parent_out_ptr;
-    new_channel->curr_in_ptr = new_channel->child_to_parent_in_ptr;
-
-    new_channel->curr_list_mutex = new_channel->c_to_p_list_mutex;
-    new_channel->curr_enqueue_list = new_channel->child_to_parent_local_list;
-    new_channel->curr_cond_var = new_channel->c_to_p_list_cond;
+    linked_list_init(&new_channel->producer_enqueue_list);
+    pthread_mutex_init(&new_channel->producer_list_mutex, NULL);
+    pthread_cond_init(&new_channel->producer_list_condvar, NULL);
 
     new_channel->is_open_locally = 1;
+    pthread_mutex_init(&new_channel->locally_open_mutex, NULL);
+
+    *new_channel->child_pid = getpid();
+    new_channel->curr_pid = *new_channel->child_pid;
+
 
     list_middleman_init(new_channel);
 
@@ -216,7 +257,7 @@ void child_process_spawn(void(*child_func)(void*), void* child_arg, char* shm_na
     spawned_node* spawn_info_ptr = &new_child_spawn_node->data_used.spawn_info;
 
     new_child_spawn_node->callback_handler = spawn_cb_interm_handler;
-    spawn_info_ptr->shared_mem_ptr = new_channel->num_procs_ptr;
+    spawn_info_ptr->shared_mem_ptr = new_channel->num_procs_ref;
     spawn_info_ptr->channel = new_channel;
     spawn_info_ptr->spawned_callback = spawn_cb;
     spawn_info_ptr->cb_arg = cb_arg;

@@ -23,110 +23,94 @@
 
 pthread_t list_middleman_id; //TODO: keep this global so another function can join() it?
 
-void channel_ptrs_init(ipc_channel* channel){
-    channel->c_to_p_msg_arr_mutex = (pthread_mutex_t*)channel->base_ptr;
-    channel->p_to_c_msg_arr_mutex = channel->c_to_p_msg_arr_mutex + 1;
+void channel_parent_ptrs_init(ipc_channel* channel){
+    pthread_mutex_t* parent_to_child_arr_mutex = (pthread_mutex_t*)channel->base_ptr;
+    pthread_mutex_t* child_to_parent_arr_mutex =  parent_to_child_arr_mutex + 1;
+    pthread_mutex_t* globally_open_mutex = child_to_parent_arr_mutex + 1;
+    pthread_mutex_t* num_procs_ref_mutex = globally_open_mutex + 1;
 
-    channel->c_to_p_list_mutex = channel->p_to_c_msg_arr_mutex + 1;
-    channel->p_to_c_list_mutex = channel->c_to_p_list_mutex + 1;
+    sem_t* parent_to_child_num_empty_sem = (sem_t*)(num_procs_ref_mutex + 1);
+    sem_t* parent_to_child_num_occupied_sem = parent_to_child_num_empty_sem + 1;
+    sem_t* child_to_parent_num_empty_sem = parent_to_child_num_occupied_sem + 1;
+    sem_t* child_to_parent_num_occupied_sem = child_to_parent_num_empty_sem + 1;
 
-    channel->globally_open_mutex = channel->p_to_c_list_mutex + 1;
+    int* parent_to_child_in_index = (int*)(child_to_parent_num_occupied_sem + 1);
+    int* parent_to_child_out_index = parent_to_child_in_index + 1;
+    int* child_to_parent_in_index = parent_to_child_out_index + 1;
+    int* child_to_parent_out_index = child_to_parent_in_index + 1;
+    int* num_procs_ref = child_to_parent_out_index + 1;
+    int* is_open_globally = num_procs_ref + 1;
 
-    channel->p_to_c_list_cond = (pthread_cond_t*)(channel->globally_open_mutex + 1);
-    channel->c_to_p_list_cond = channel->p_to_c_list_cond + 1;
+    pid_t* parent_pid = (pid_t*)(is_open_globally + 1);
+    pid_t* child_pid = parent_pid + 1;
 
+    channel_message* parent_to_child_msg_array = (channel_message*)(child_pid + 1);
+    channel_message* child_to_parent_msg_array = parent_to_child_msg_array + MAX_QUEUED_TASKS;
 
-    channel->child_to_parent_num_empty_sem = (sem_t*)(channel->c_to_p_list_cond + 1);
-    channel->child_to_parent_num_occupied_sem = channel->child_to_parent_num_empty_sem + 1;
+    channel->producer_msg_array = parent_to_child_msg_array;
+    channel->producer_in_index = parent_to_child_in_index;
+    channel->producer_out_index = parent_to_child_out_index;
+    channel->producer_msg_arr_mutex = parent_to_child_arr_mutex;
+    channel->producer_num_empty_sem = parent_to_child_num_empty_sem;
+    channel->producer_num_occupied_sem = parent_to_child_num_occupied_sem;
 
-    channel->parent_to_child_num_empty_sem = channel->child_to_parent_num_occupied_sem + 1;
-    channel->parent_to_child_num_occupied_sem = channel->parent_to_child_num_empty_sem + 1;
+    channel->consumer_msg_array = child_to_parent_msg_array;
+    channel->consumer_in_index = child_to_parent_in_index;
+    channel->consumer_out_index = child_to_parent_out_index;
+    channel->consumer_msg_arr_mutex = child_to_parent_arr_mutex;
+    channel->consumer_num_empty_sem = child_to_parent_num_empty_sem;
+    channel->consumer_num_occupied_sem = child_to_parent_num_occupied_sem;
 
+    channel->is_open_globally = is_open_globally;
+    channel->globally_open_mutex = globally_open_mutex;
+    
+    channel->num_procs_ref = num_procs_ref;
+    channel->num_procs_ref_mutex = num_procs_ref_mutex;
 
-    channel->child_to_parent_in_ptr = (int*)(channel->parent_to_child_num_occupied_sem + 1);
-    channel->child_to_parent_out_ptr = channel->child_to_parent_in_ptr + 1;
-
-    channel->parent_to_child_in_ptr = channel->child_to_parent_out_ptr + 1;
-    channel->parent_to_child_out_ptr = channel->parent_to_child_in_ptr + 1;
-
-    channel->is_open_globally = channel->parent_to_child_out_ptr + 1;
-
-    channel->parent_to_child_local_list = (linked_list*)(channel->is_open_globally + 1);
-
-    //child will initiate linked list in its own scope after it gets access to shared memory segment, dont initialize it here
-    channel->child_to_parent_local_list = channel->parent_to_child_local_list + 1;
-
-    channel->parent_pid_ptr = (pid_t*)(channel->child_to_parent_local_list + 1);
-    channel->child_pid_ptr = channel->parent_pid_ptr + 1;
-
-    channel->num_procs_ptr = (int*)(channel->child_pid_ptr + 1);
-
-    channel->parent_to_child_msg_array = (channel_message*)(channel->num_procs_ptr + 1);
-
-    //initialize channel_message array pointers
-    channel->child_to_parent_msg_array = channel->parent_to_child_msg_array + MAX_QUEUED_TASKS;
+    channel->parent_pid = parent_pid;
+    channel->child_pid  = child_pid;
 }   
 
 void channel_data_init(ipc_channel* channel){
+    //initialize channel's local linked_list
+    linked_list_init(&channel->producer_enqueue_list);
+    pthread_mutex_init(&channel->producer_list_mutex, NULL);
+    pthread_cond_init(&channel->producer_list_condvar, NULL);
+
     //initializing mutex pointers
     pthread_mutexattr_t shm_mutex_attr;
     pthread_mutexattr_init(&shm_mutex_attr);
     pthread_mutexattr_setpshared(&shm_mutex_attr, PTHREAD_PROCESS_SHARED);
+
+    //initialize parent to child message array's data
+    *channel->producer_in_index = 0;
+    *channel->producer_out_index = 0;
+    pthread_mutex_init(channel->producer_msg_arr_mutex, &shm_mutex_attr);
+    sem_init(channel->producer_num_empty_sem, SEM_PSHARED, MAX_QUEUED_TASKS);
+    sem_init(channel->producer_num_occupied_sem, SEM_PSHARED, 0);
+
+    //initialize child to parent message array's data
+    *channel->consumer_in_index = 0;
+    *channel->consumer_out_index = 0;
+    pthread_mutex_init(channel->consumer_msg_arr_mutex, &shm_mutex_attr);
+    sem_init(channel->consumer_num_empty_sem, SEM_PSHARED, MAX_QUEUED_TASKS);   
+    sem_init(channel->consumer_num_occupied_sem, SEM_PSHARED, 0);
     
-    
-    pthread_mutex_init(channel->c_to_p_msg_arr_mutex, &shm_mutex_attr);
-
-    pthread_mutex_init(channel->p_to_c_msg_arr_mutex, &shm_mutex_attr);
-
-    //TODO: do list mutexes need to be pshared?
-    pthread_mutex_init(channel->c_to_p_list_mutex, &shm_mutex_attr);
-
-    pthread_mutex_init(channel->p_to_c_list_mutex, &shm_mutex_attr);
-
+    *channel->is_open_globally = 1;
     pthread_mutex_init(channel->globally_open_mutex, &shm_mutex_attr);
+    
+    *channel->num_procs_ref = 1;
+    pthread_mutex_init(channel->num_procs_ref_mutex, &shm_mutex_attr);
 
     pthread_mutexattr_destroy(&shm_mutex_attr);
 
-    pthread_condattr_t shm_cond_attr;
-    pthread_condattr_init(&shm_cond_attr);
-    pthread_condattr_setpshared(&shm_cond_attr, PTHREAD_PROCESS_SHARED);
-
-    pthread_cond_init(channel->p_to_c_list_cond, &shm_cond_attr);
-
-    pthread_cond_init(channel->c_to_p_list_cond, &shm_cond_attr);
-
-    pthread_condattr_destroy(&shm_cond_attr);
-
-
-    //initializing semaphore pointers
-    sem_init(channel->child_to_parent_num_empty_sem, SEM_PSHARED, MAX_QUEUED_TASKS);
-    
-    sem_init(channel->child_to_parent_num_occupied_sem, SEM_PSHARED, 0);
-
-    sem_init(channel->parent_to_child_num_empty_sem, SEM_PSHARED, MAX_QUEUED_TASKS);
-    
-    sem_init(channel->parent_to_child_num_occupied_sem, SEM_PSHARED, 0);
-
-
-    //initializing integer pointers
-    *channel->child_to_parent_in_ptr = 0;
-    *channel->child_to_parent_out_ptr = 0;
-
-    *channel->parent_to_child_in_ptr = 0;
-    *channel->parent_to_child_out_ptr = 0;
-
-    *channel->num_procs_ptr = 1;
-
     channel->is_open_locally = 1;
-    *channel->is_open_globally = 1;
-
-    //initialize linked_list pointers
-    linked_list_init(channel->parent_to_child_local_list);
+    pthread_mutex_init(&channel->locally_open_mutex, NULL);
 
     //child process will initialize child to parent linked list in its own scope
 
-    *channel->parent_pid_ptr = getpid();
-    channel->curr_pid = *channel->parent_pid_ptr;
+    *channel->parent_pid = getpid();
+    channel->curr_pid = *channel->parent_pid;
 }
 
 //TODO: make separate calls to shared mem syscalls in separate event loop iterations?
@@ -139,8 +123,9 @@ ipc_channel* create_ipc_channel(char* custom_name_suffix){
 
     int new_shm_fd = shm_open(curr_shm_name, O_CREAT | O_RDWR, 0666);
 
+    //TODO: fix this so it's accurate
     const int SHM_SIZE = 
-        (5 * sizeof(pthread_mutex_t)) + 
+        (4 * sizeof(pthread_mutex_t)) + 
         (2 * sizeof(pthread_cond_t)) +
         (4 * sizeof(sem_t)) + 
         (4 * sizeof(int)) +  
@@ -152,21 +137,9 @@ ipc_channel* create_ipc_channel(char* custom_name_suffix){
     channel->base_ptr = mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, new_shm_fd, 0);
 
     //TODO: put pointer initialization in separate function?, also separate pointer place initialization from data type initialization (for semaphores, mutexes, etc)
-    channel_ptrs_init(channel);
+    channel_parent_ptrs_init(channel);
 
     channel_data_init(channel);
-
-    channel->msg_arr_curr_mutex = channel->p_to_c_msg_arr_mutex;
-    channel->num_occupied_curr_sem = channel->parent_to_child_num_occupied_sem;
-    channel->num_empty_curr_sem = channel->parent_to_child_num_empty_sem;
-    channel->curr_msg_array_ptr = channel->parent_to_child_msg_array;
-
-    channel->curr_out_ptr = channel->parent_to_child_out_ptr;
-    channel->curr_in_ptr = channel->parent_to_child_in_ptr;
-
-    channel->curr_list_mutex = channel->p_to_c_list_mutex;
-    channel->curr_enqueue_list = channel->parent_to_child_local_list;
-    channel->curr_cond_var = channel->p_to_c_list_cond;
 
     list_middleman_init(channel);
 
@@ -208,19 +181,19 @@ int send_message(ipc_channel* channel, channel_message* msg){
 
     printf("sending message from curr pid %d, parent pid = %d, child pid = %d msg contents are of type, %d\n", 
         channel->curr_pid, 
-        *channel->parent_pid_ptr, 
-        *channel->child_pid_ptr,
+        *channel->parent_pid, 
+        *channel->child_pid,
         new_msg_node->data_used.msg.msg_type
     );
 
     //enqueue item into either parent to child or child to parent list depending on which process we're on
-    pthread_mutex_lock(channel->curr_list_mutex);
+    pthread_mutex_lock(&channel->producer_list_mutex);
 
-    append(channel->curr_enqueue_list, new_msg_node);
+    append(&channel->producer_enqueue_list, new_msg_node);
 
-    pthread_mutex_unlock(channel->curr_list_mutex);
+    pthread_mutex_unlock(&channel->producer_list_mutex);
 
-    pthread_cond_signal(channel->curr_cond_var);
+    pthread_cond_signal(&channel->producer_list_condvar);
 
     return 0;
 }
@@ -251,14 +224,14 @@ channel_message blocking_receive_message(ipc_channel* channel){
         return received_message;
     }*/
 
-    sem_wait(channel->num_occupied_curr_sem);
-    pthread_mutex_lock(channel->msg_arr_curr_mutex);
+    sem_wait(channel->consumer_num_occupied_sem);
+    pthread_mutex_lock(channel->consumer_msg_arr_mutex);
 
-    received_message = channel->curr_msg_array_ptr[*channel->curr_out_ptr];
-    *channel->curr_out_ptr = (*channel->curr_out_ptr + 1) % MAX_QUEUED_TASKS;
+    received_message = channel->consumer_msg_array[*channel->consumer_out_index];
+    *channel->consumer_out_index = (*channel->consumer_out_index + 1) % MAX_QUEUED_TASKS;
 
-    pthread_mutex_unlock(channel->msg_arr_curr_mutex);
-    sem_post(channel->num_empty_curr_sem);
+    pthread_mutex_unlock(channel->consumer_msg_arr_mutex);
+    sem_post(channel->consumer_num_empty_sem);
 
     return received_message;
 }
@@ -292,29 +265,29 @@ channel_message nonblocking_receive_message(ipc_channel* channel){
     }*/
 
     //TODO: make sure, sem_trywait returns 0 if locking was successful?
-    if(sem_trywait(channel->num_occupied_curr_sem) == 0){
-        pthread_mutex_lock(channel->msg_arr_curr_mutex);
+    if(sem_trywait(channel->consumer_num_occupied_sem) == 0){
+        pthread_mutex_lock(channel->consumer_msg_arr_mutex);
 
-        received_message = channel->curr_msg_array_ptr[*channel->curr_out_ptr];
-        *channel->curr_out_ptr = (*channel->curr_out_ptr + 1) % MAX_QUEUED_TASKS;
+        received_message = channel->consumer_msg_array[*channel->consumer_out_index];
+        *channel->consumer_out_index = (*channel->consumer_out_index + 1) % MAX_QUEUED_TASKS;
 
-        pthread_mutex_unlock(channel->msg_arr_curr_mutex);
-        sem_post(channel->num_empty_curr_sem);
+        pthread_mutex_unlock(channel->consumer_msg_arr_mutex);
+        sem_post(channel->consumer_num_empty_sem);
     }
 
     return received_message;
 }
 
 channel_message consume_middleman_list(ipc_channel* channel){
-    pthread_mutex_lock(channel->curr_list_mutex);
+    pthread_mutex_lock(&channel->producer_list_mutex);
 
-    while(channel->curr_enqueue_list->size == 0){
-        pthread_cond_wait(channel->curr_cond_var, channel->curr_list_mutex);
+    while(channel->producer_enqueue_list.size == 0){
+        pthread_cond_wait(&channel->producer_list_condvar, &channel->producer_list_mutex);
     }
 
-    event_node* removed_msg_node = remove_first(channel->curr_enqueue_list);
+    event_node* removed_msg_node = remove_first(&channel->producer_enqueue_list);
 
-    pthread_mutex_unlock(channel->curr_list_mutex);
+    pthread_mutex_unlock(&channel->producer_list_mutex);
 
     channel_message new_msg = removed_msg_node->data_used.msg;
     destroy_event_node(removed_msg_node);
@@ -323,14 +296,14 @@ channel_message consume_middleman_list(ipc_channel* channel){
 }
 
 void produce_to_shared_mem(ipc_channel* channel, channel_message* new_input_msg){
-    sem_wait(channel->num_empty_curr_sem);
-    pthread_mutex_lock(channel->msg_arr_curr_mutex);
+    sem_wait(channel->producer_num_empty_sem);
+    pthread_mutex_lock(channel->producer_msg_arr_mutex);
 
-    channel->curr_msg_array_ptr[*channel->curr_in_ptr] = *new_input_msg;
-    *channel->curr_in_ptr = (*channel->curr_in_ptr + 1) % MAX_QUEUED_TASKS;
+    channel->producer_msg_array[*channel->producer_in_index] = *new_input_msg;
+    *channel->producer_in_index = (*channel->producer_in_index + 1) % MAX_QUEUED_TASKS;
 
-    pthread_mutex_unlock(channel->msg_arr_curr_mutex);
-    sem_post(channel->num_occupied_curr_sem);
+    pthread_mutex_unlock(channel->producer_msg_arr_mutex);
+    sem_post(channel->producer_num_occupied_sem);
 }
 
 #define TERM_FLAG -2
