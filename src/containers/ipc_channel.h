@@ -1,12 +1,27 @@
 #ifndef IPC_CHANNEL
 #define IPC_CHANNEL
 
+#include "singly_linked_list.h"
+
+#include <pthread.h>
+#include <semaphore.h>
+
 #define MAX_SHM_NAME_LEN 50 //TODO: adjust this size so it's not too big or small?
 
+#ifndef IPC_MESSAGE_TYPE
+#define IPC_MESSAGE_TYPE
+
 typedef struct ipc_message {
-    char shm_name[MAX_SHM_NAME_LEN];
+    char shm_name[MAX_SHM_NAME_LEN + 1];
     int msg_type;
 } channel_message;
+
+#endif
+
+typedef struct linked_list linked_list;
+
+#ifndef IPC_CHANNEL_TYPE
+#define IPC_CHANNEL_TYPE
 
 typedef struct channel {
     void* base_ptr;
@@ -39,22 +54,43 @@ typedef struct channel {
     pid_t* child_pid_ptr;
     pid_t curr_pid;
 
+    int* num_procs_ptr;
+
     channel_message* parent_to_child_msg_array;
     channel_message* child_to_parent_msg_array;
 
-    pthread_mutex_t** msg_arr_curr_mutex;
-    sem_t** num_occupied_curr_sem;
-    sem_t** num_empty_curr_sem;
-    channel_message** curr_msg_array_ptr;
+    pthread_mutex_t* msg_arr_curr_mutex;
+
+    sem_t* num_occupied_curr_sem;
+    sem_t* num_empty_curr_sem;
+
+    channel_message* curr_msg_array_ptr;
+
+    int* curr_out_ptr;
+    int* curr_in_ptr;
+
+    pthread_mutex_t* curr_list_mutex;
+    linked_list* curr_enqueue_list;
+    pthread_cond_t* curr_cond_var;
+
+    int is_open_locally;
+    int* is_open_globally;
+    pthread_mutex_t* globally_open_mutex;
 } ipc_channel;
 
-int is_main_process = 1;
+#endif
 
 ipc_channel* create_ipc_channel(char* custom_name_suffix);
 
 void channel_ptrs_init(ipc_channel* channel);
 
-void send_message(ipc_channel* channel, channel_message* msg);
+int send_message(ipc_channel* channel, channel_message* msg);
+
 channel_message blocking_receive_message(ipc_channel* channel);
+channel_message nonblocking_receive_message(ipc_channel* channel);
+
+void list_middleman_init(ipc_channel* channel);
+
+int close_channel(ipc_channel* channel_to_close);
 
 #endif

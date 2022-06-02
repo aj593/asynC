@@ -9,5 +9,6 @@
 #include "async_types/event_emitter.h"
 
 #include "containers/process_pool.h"
+#include "containers/child_spawner.h"
 
 #endif

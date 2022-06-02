@@ -12,6 +12,7 @@
 #include "containers/c_vector.h"
 #include "containers/thread_pool.h"
 #include "containers/process_pool.h"
+#include "containers/child_spawner.h"
 
 #include "async_lib/async_io.h"
 #include "async_lib/async_fs.h"
@@ -99,11 +100,24 @@ int check_ipc_channel(event_node* ipc_node){
 
     //TODO: get incoming messages from here?
     channel_message received_message;
-    while((received_message = receive_message(channel)).msg_type != -1){
-        
+    while((received_message = nonblocking_receive_message(channel)).msg_type >= 0){
+        printf("received message!\n");
+    }
+
+    if(received_message.msg_type == -2){
+        printf("got exiting message!\n");
+        channel->is_open_locally = 0;
+        //TODO: close shared memory here?
+        return 1;
     }
 
     return 0;
+}
+
+int check_spawn_event(event_node* spawn_node){
+    spawned_node spawn_info = spawn_node->data_used.spawn_info;
+
+    return *spawn_info.shared_mem_ptr != 1;
 }
 
 //array of function pointers
@@ -112,7 +126,8 @@ int(*event_check_array[])(event_node*) = {
     is_child_done,
     is_readstream_data_done,
     is_fs_done,
-    check_ipc_channel
+    check_ipc_channel,
+    check_spawn_event
 };
 
 int is_event_completed(event_node* node_check){
@@ -163,14 +178,24 @@ void asynC_init(){
     linked_list_init(&execute_queue);
 
     subscriber_hash_table = ht_create();
+
+    child_spawner_init();
     //process_pool_init(); //TODO: initialize process pool before or after thread pool?
-    thread_pool_init();
+    //thread_pool_init(); //TODO: uncomment later
 }
+
+#define MAIN_TERM_FLAG 1
 
 void asynC_cleanup(){
     asynC_wait();
 
+    channel_message main_term_msg;
+    main_term_msg.msg_type = MAIN_TERM_FLAG;
+
+    send_message(main_to_spawner_channel, &main_term_msg);
+
     //TODO: destroy all ipc_channels in table and the hashtables in them?
+    //TODO: destroy child_spawner process
 
     //TODO: destroy all vectors in hash_table too and clean up other stuff
     linked_list_destroy(&event_queue);
@@ -178,7 +203,7 @@ void asynC_cleanup(){
 
     ht_destroy(subscriber_hash_table);
     //process_pool_destroy();
-    thread_pool_destroy();
+    //thread_pool_destroy(); //TODO: uncomment later
 }
 
 //TODO: error check this?

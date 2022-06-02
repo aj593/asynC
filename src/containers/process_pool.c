@@ -39,7 +39,7 @@ void enqueue_child_task(event_node* new_task_node){
     pthread_cond_signal(&child_task_queue_cond);
 }
 
-void produce_to_shared_mem(child_task task){
+/*void produce_to_shared_mem(child_task task){
     //produce item into shared memory buffer
         sem_wait(num_empty_entries);
         pthread_mutex_lock(shm_mutex_ptr);
@@ -49,9 +49,9 @@ void produce_to_shared_mem(child_task task){
 
         pthread_mutex_unlock(shm_mutex_ptr);
         sem_post(num_occupied_entries);
-}
+}*/
 
-void* child_task_queue_middleman(void* arg){
+/*void* child_task_queue_middleman(void* arg){
     while(1){
         pthread_mutex_lock(&child_task_queue_mutex);
 
@@ -74,7 +74,7 @@ void* child_task_queue_middleman(void* arg){
     }
 
     pthread_exit(NULL);
-}
+}*/
 
 void child_task_wait(){
     thread_pool_init(); //TODO: do i want thread pool in child processes?
@@ -107,7 +107,7 @@ void child_task_wait(){
 pthread_t proc_queue_middleman_id;
 char* shm_name = "ASYNC_PROCESS_POOL_SHM";
 
-void process_pool_init(){
+/*void process_pool_init(){
     linked_list_init(&process_task_queue);
     
     pthread_create(&proc_queue_middleman_id, NULL, child_task_queue_middleman, NULL);
@@ -152,9 +152,9 @@ void process_pool_init(){
             child_task_wait();
         }
     }
-}
+}*/
 
-void process_pool_destroy(){
+/*void process_pool_destroy(){
     //TODO: child process must destroy their thread pools too? did child process inherit thread pool?
     event_node* terminating_node = create_event_node(-1);
     terminating_node->data_used.proc_task.data = -1;
@@ -181,4 +181,4 @@ void process_pool_destroy(){
 
     shm_unlink(shm_name);
     //TODO: call munmap or something like it to destroy mmap'd pointer?
-}
+}*/
