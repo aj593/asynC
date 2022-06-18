@@ -2,6 +2,7 @@
 #define ASYNC_FS
 
 #include <fcntl.h>
+#include <liburing.h>
 
 #include "../async_types/callback_arg.h"
 #include "../async_types/buffer.h"
@@ -71,6 +72,7 @@ typedef union thread_tasks {
     async_read_info read_info;
     async_chmod_info chmod_info;
     async_chown_info chown_info;
+    struct io_uring* async_ring;
 } thread_async_ops;
 
 typedef struct task_handler_block {
@@ -80,7 +82,7 @@ typedef struct task_handler_block {
 
 void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
 
-void thread_read (int read_fd,  buffer* buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg);
+void async_read(int read_fd,  buffer* buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg);
 void thread_write(int write_fd, buffer* buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg);
 
 void async_chmod(char* filename, mode_t mode, chmod_callback chmod_cb, callback_arg* cb_arg);

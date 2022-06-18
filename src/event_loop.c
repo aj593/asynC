@@ -13,6 +13,7 @@
 #include "containers/thread_pool.h"
 #include "containers/process_pool.h"
 #include "containers/child_spawner.h"
+#include "containers/message_channel.h"
 
 #include "async_lib/async_io.h"
 #include "async_lib/async_fs.h"
@@ -28,6 +29,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <pthread.h>
+#include <string.h>
 
 //TODO: should this go in .c or .h file for visibility?
 linked_list event_queue; //singly linked list that keeps track of items and events that have yet to be fulfilled
@@ -37,6 +39,31 @@ linked_list execute_queue;
 
 //TODO: put this in a different file?
 hash_table* subscriber_hash_table; //hash table that maps null-terminated strings to vectors of emitter items so we keep track of which emitters subscribed what events
+
+struct io_uring async_uring;
+#define IO_URING_NUM_ENTRIES 10 //TODO: change this later?
+int uring_has_sqe = 0;
+int num_entries_to_submit = 0;
+pthread_mutex_t uring_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void uring_lock(){
+    pthread_mutex_lock(&uring_mutex);
+}
+
+void uring_unlock(){
+    pthread_mutex_unlock(&uring_mutex);
+}
+
+//TODO: ok to make inline?
+void increment_sqe_counter(){
+    uring_has_sqe = 1;
+    num_entries_to_submit++;
+}
+
+typedef struct uring_user_data {
+    int* return_val_ptr;
+    int* is_done_ptr;
+} uring_user_data;
 
 //TODO: use is_linked_list_empty() instead? (but uses extra function call)
 int is_event_queue_empty(){
@@ -95,13 +122,61 @@ int is_fs_done(event_node* fs_node){
     return thread_task->is_done;
 }
 
-int check_ipc_channel(event_node* ipc_node){
-    ipc_channel* channel = ipc_node->data_used.channel_ptr;
+int is_uring_done(event_node* uring_node){
+    uring_stats* uring_task = &uring_node->data_used.uring_task_info;
+
+    return uring_task->is_done;
+}
+
+#define CUSTOM_MSG_FLAG 0
+#define MAIN_TERM_FLAG 1
+#define CHILD_TERM_FLAG 2
+#define FORK_ERROR_FLAG 3
+#define FORK_REQUEST_FLAG 4
+
+size_t min(size_t num1, size_t num2){
+    if(num1 < num2){
+        return num1;
+    }
+    else{
+        return num2;
+    }
+}
+
+/*int check_ipc_channel(event_node* ipc_node){
+    message_channel* channel = ipc_node->data_used.channel_ptr;
+
+    pthread_mutex_lock(&channel->receive_lock);
 
     //TODO: get incoming messages from here?
-    channel_message received_message;
-    while((received_message = nonblocking_receive_message(channel)).msg_type >= 0){
-        printf("received message!\n");
+    msg_header received_message = nonblocking_receive_flag_message(channel);
+    
+    if(received_message.msg_type == CUSTOM_MSG_FLAG){
+        const int total_bytes = received_message.msg_size;
+        int num_bytes_left = total_bytes;
+        int running_num_received_bytes = 0;
+
+        char* received_payload = (char*)malloc(total_bytes);
+        char* offset_payload = received_payload;
+
+        while(running_num_received_bytes != total_bytes){
+            int num_bytes_to_receive_this_iteration = min(num_bytes_left, channel->max_msg_size);
+            ssize_t curr_num_bytes_received = blocking_receive_payload_msg(channel, offset_payload, num_bytes_to_receive_this_iteration);
+            running_num_received_bytes += curr_num_bytes_received;
+            offset_payload += curr_num_bytes_received;
+            num_bytes_left -= curr_num_bytes_received;
+        }
+
+        vector* msg_listener_vector = (vector*)ht_get(channel->message_listeners, received_message.msg_name);
+
+        for(int i = 0; i < vector_size(msg_listener_vector); i++){
+            //TODO: make it user programmer's job to destroy each copy of payload
+            void* payload_copy = malloc(total_bytes);
+            memcpy(payload_copy, received_payload, total_bytes);
+            //TODO: execute function here from listener in vector
+        }
+
+        free(received_payload);
     }
 
     if(received_message.msg_type == -2){
@@ -111,23 +186,28 @@ int check_ipc_channel(event_node* ipc_node){
         return 1;
     }
 
+    pthread_mutex_lock(&channel->receive_lock);
+
     return 0;
 }
 
 int check_spawn_event(event_node* spawn_node){
     spawned_node spawn_info = spawn_node->data_used.spawn_info;
 
-    return *spawn_info.shared_mem_ptr != 1;
-}
+    msg_header received_checker = nonblocking_receive_flag_message(spawn_info.channel);
+
+    return received_checker.msg_type != -3;
+}*/
 
 //array of function pointers
 int(*event_check_array[])(event_node*) = {
     //is_io_done,
     is_child_done,
     is_readstream_data_done,
-    is_fs_done,
-    check_ipc_channel,
-    check_spawn_event
+    is_fs_done, //TODO: change to is_thread_task_done?
+    is_uring_done,
+    //check_ipc_channel,
+    //check_spawn_event
 };
 
 int is_event_completed(event_node* node_check){
@@ -179,9 +259,10 @@ void asynC_init(){
 
     subscriber_hash_table = ht_create();
 
-    child_spawner_init();
+    //child_spawner_init();
     //process_pool_init(); //TODO: initialize process pool before or after thread pool?
-    //thread_pool_init(); //TODO: uncomment later
+    thread_pool_init(); //TODO: uncomment later
+    io_uring_queue_init(IO_URING_NUM_ENTRIES, &async_uring, 0); //TODO: error check this
 }
 
 #define MAIN_TERM_FLAG 1
@@ -189,10 +270,11 @@ void asynC_init(){
 void asynC_cleanup(){
     asynC_wait();
 
+    /*
     channel_message main_term_msg;
     main_term_msg.msg_type = MAIN_TERM_FLAG;
-
     send_message(main_to_spawner_channel, &main_term_msg);
+    */
 
     //TODO: destroy all ipc_channels in table and the hashtables in them?
     //TODO: destroy child_spawner process
@@ -203,7 +285,34 @@ void asynC_cleanup(){
 
     ht_destroy(subscriber_hash_table);
     //process_pool_destroy();
-    //thread_pool_destroy(); //TODO: uncomment later
+    thread_pool_destroy(); //TODO: uncomment later
+    io_uring_queue_exit(&async_uring);
+}
+
+struct __kernel_timespec uring_wait_cqe_timeout = {
+    .tv_sec = 0,
+    .tv_nsec = 0,
+};
+
+struct io_uring_sqe* get_sqe(){
+    return io_uring_get_sqe(&async_uring);
+}
+
+void set_sqe_data(struct io_uring_sqe* incoming_sqe, event_node* uring_node){
+    uring_user_data* new_uring_check_data = (uring_user_data*)malloc(sizeof(uring_user_data));
+    new_uring_check_data->is_done_ptr = &uring_node->data_used.uring_task_info.is_done;
+    new_uring_check_data->return_val_ptr = &uring_node->data_used.uring_task_info.return_val;
+    io_uring_sqe_set_data(incoming_sqe, new_uring_check_data);
+}
+
+void uring_submit_task_handler(thread_async_ops uring_submit_task){
+    uring_lock();
+    int num_submitted = io_uring_submit(uring_submit_task.async_ring);
+    num_entries_to_submit -= num_submitted;
+    uring_unlock();
+    if(num_submitted == 0){
+        printf("didn't submit anything??\n");
+    }
 }
 
 //TODO: error check this?
@@ -211,15 +320,43 @@ void asynC_wait(){
     pthread_mutex_lock(&event_queue_mutex);
 
     while(!is_event_queue_empty()){
-        event_node* curr = event_queue.head;
-        while(curr != event_queue.tail){
+        struct io_uring_cqe* uring_completed_entry;
+        while(io_uring_peek_cqe(&async_uring, &uring_completed_entry) == 0){
+            //TODO: check if return value from this is NULL?
+            uring_user_data* curr_user_data = (uring_user_data*)io_uring_cqe_get_data(uring_completed_entry);
+            //uring_user_data* curr_user_data = (uring_user_data*)uring_completed_entry->user_data;
+            *curr_user_data->is_done_ptr = 1;
+            *curr_user_data->return_val_ptr = uring_completed_entry->res;
+
+            free(curr_user_data);
+
+            io_uring_cqe_seen(&async_uring, uring_completed_entry);
+
+            /*if(uring_completed_entry != NULL){
+                uring_user_data* curr_user_data = (uring_user_data*)io_uring_cqe_get_data(uring_completed_entry);
+                *curr_user_data->is_done_ptr = 1;
+                *curr_user_data->return_val_ptr = uring_completed_entry->res;
+
+                io_uring_cqe_seen(&async_uring, uring_completed_entry);
+            }*/
+        }
+
+        event_node* curr_node = event_queue.head->next;
+        while(curr_node != event_queue.tail){
+            event_node* check_node = curr_node;
+            curr_node = curr_node->next;
+
+            if(is_event_completed(check_node)){
+                append(&execute_queue, remove_curr(&event_queue, check_node));
+            }
+
             //TODO: is this if-else statement correct? curr = curr->next?
-            if(is_event_completed(curr->next)){
-                append(&execute_queue, remove_next(&event_queue, curr));
+            /*if(is_event_completed(curr)){
+                append(&execute_queue, remove_curr(&event_queue, curr));
             }
             else{
                 curr = curr->next;
-            }
+            }*/
         }
 
         pthread_mutex_unlock(&event_queue_mutex);
@@ -231,6 +368,25 @@ void asynC_wait(){
             exec_cb(exec_node);
 
             destroy_event_node(exec_node); //TODO: destroy event_node here or in each cb_interm function?
+        }
+
+        //TODO: put this in separate task thread for thread pool?
+        uring_lock();
+
+        if(uring_has_sqe && num_entries_to_submit > 0){
+            uring_has_sqe = 0;
+            uring_unlock();
+            //io_uring_submit(&async_uring);
+            
+            //TODO: make separate event node in event queue to get callback for result of uring_submit?
+            event_node* submit_thread_task_node = create_event_node(0);
+            task_block* curr_task_block = &submit_thread_task_node->data_used.thread_block_info;
+            curr_task_block->task_handler = uring_submit_task_handler;
+            curr_task_block->async_task.async_ring = &async_uring;
+            enqueue_task(submit_thread_task_node);
+        }
+        else{
+            uring_unlock();
         }
 
         pthread_mutex_lock(&event_queue_mutex);

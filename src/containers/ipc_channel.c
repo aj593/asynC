@@ -1,4 +1,4 @@
-#include "ipc_channel.h"
+/*#include "ipc_channel.h"
 
 #include "singly_linked_list.h"
 
@@ -146,9 +146,9 @@ ipc_channel* create_ipc_channel(char* custom_name_suffix){
     return channel;
 }
 
-/*void enqueue_message(channel_message* msg){
+void enqueue_message(channel_message* msg){
 
-}*/
+}
 
 //TODO: make it so parent and child dont need separate if-else statements to know where to send to depending if it's main process or not?
 int send_message(ipc_channel* channel, channel_message* msg){
@@ -170,16 +170,16 @@ int send_message(ipc_channel* channel, channel_message* msg){
 
     pthread_mutex_unlock(channel->globally_open_mutex);
 
-    /*if(!channel->is_open_locally && !(*channel->is_open_globally)){
-        return -1;
-    }*/
+    //if(!channel->is_open_locally && !(*channel->is_open_globally)){
+    //    return -1;
+    //}
 
 
     //TODO: change message type/number in create_event_node later?
     event_node* new_msg_node = create_event_node(0);
     new_msg_node->data_used.msg = *msg; //TODO: is this right way to copy one msg/struct into another?
 
-    printf("sending message from curr pid %d, parent pid = %d, child pid = %d msg contents are of type, %d\n", 
+    printf("sending message from curr pid %d, parent pid = %d, child pid = %d msg contents are of type %d\n", 
         channel->curr_pid, 
         *channel->parent_pid, 
         *channel->child_pid,
@@ -187,13 +187,23 @@ int send_message(ipc_channel* channel, channel_message* msg){
     );
 
     //enqueue item into either parent to child or child to parent list depending on which process we're on
+    printf("attempting to lock local list mutex at %p\n", (void*)&channel->producer_list_mutex);
+    
     pthread_mutex_lock(&channel->producer_list_mutex);
+    
+    printf("locked local list mutex at %p\n", (void*)&channel->producer_list_mutex);
 
+    printf("appending new node to local list at %p\n", (void*)&channel->producer_enqueue_list);
+    
     append(&channel->producer_enqueue_list, new_msg_node);
 
+    printf("unlocking mutex at %p\n", (void*)&channel->producer_list_mutex);
+    
     pthread_mutex_unlock(&channel->producer_list_mutex);
 
     pthread_cond_signal(&channel->producer_list_condvar);
+    
+    printf("signaling that this list at items with cond var at %p\n", (void*)&channel->producer_list_condvar);
 
     return 0;
 }
@@ -219,19 +229,29 @@ channel_message blocking_receive_message(ipc_channel* channel){
 
     pthread_mutex_unlock(channel->globally_open_mutex);
 
-    /*if(!channel->is_open_locally && !(*channel->is_open_globally)){
-        received_message.msg_type = -2;
-        return received_message;
-    }*/
+    //if(!channel->is_open_locally && !(*channel->is_open_globally)){
+    //    received_message.msg_type = -2;
+    //    return received_message;
+    //}
 
+    printf("attempting to decrement on num_occupied semaphore at %p\n", (void*)channel->consumer_num_occupied_sem);
     sem_wait(channel->consumer_num_occupied_sem);
+    printf("decremented num_occupied semaphore at %p\n", (void*)channel->consumer_num_occupied_sem);
+
+    printf("attempting to lock mutex at %p\n", (void*)channel->consumer_msg_arr_mutex);
     pthread_mutex_lock(channel->consumer_msg_arr_mutex);
+    printf("locked mutex at %p\n", (void*)channel->consumer_msg_arr_mutex);
 
     received_message = channel->consumer_msg_array[*channel->consumer_out_index];
     *channel->consumer_out_index = (*channel->consumer_out_index + 1) % MAX_QUEUED_TASKS;
 
+    printf("unlocking mutex at %p\n", (void*)channel->consumer_msg_arr_mutex);
     pthread_mutex_unlock(channel->consumer_msg_arr_mutex);
+
+    printf("consumed item, posting num_empty semaphore at %p", (void*)channel->consumer_num_empty_sem);
     sem_post(channel->consumer_num_empty_sem);
+
+    printf("received message %s of type %d\n", received_message.shm_name, received_message.msg_type);
 
     return received_message;
 }
@@ -259,13 +279,16 @@ channel_message nonblocking_receive_message(ipc_channel* channel){
     pthread_mutex_unlock(channel->globally_open_mutex);
 
 
-    /*if(!channel->is_open_locally && !(*channel->is_open_globally)){
-        received_message.msg_type = -2;
-        return received_message;
-    }*/
+    //if(!channel->is_open_locally && !(*channel->is_open_globally)){
+    //    received_message.msg_type = -2;
+    //    return received_message;
+    //}
 
     //TODO: make sure, sem_trywait returns 0 if locking was successful?
+    printf("attempting to sem_trywait() on num_occupied semaphore at %p\n", (void*)channel->consumer_num_occupied_sem);
     if(sem_trywait(channel->consumer_num_occupied_sem) == 0){
+        printf("successfully decremented semaphore at %p\n", (void*)channel->consumer_num_occupied_sem);
+
         pthread_mutex_lock(channel->consumer_msg_arr_mutex);
 
         received_message = channel->consumer_msg_array[*channel->consumer_out_index];
@@ -281,9 +304,15 @@ channel_message nonblocking_receive_message(ipc_channel* channel){
 channel_message consume_middleman_list(ipc_channel* channel){
     pthread_mutex_lock(&channel->producer_list_mutex);
 
+    printf("about to check if middleman list has item\n");
+
     while(channel->producer_enqueue_list.size == 0){
+        printf("gotta wait for condition var for middleman list\n");
         pthread_cond_wait(&channel->producer_list_condvar, &channel->producer_list_mutex);
+        printf("list condition received!\n");
     }
+
+    printf("list has item\n");
 
     event_node* removed_msg_node = remove_first(&channel->producer_enqueue_list);
 
@@ -296,6 +325,7 @@ channel_message consume_middleman_list(ipc_channel* channel){
 }
 
 void produce_to_shared_mem(ipc_channel* channel, channel_message* new_input_msg){
+    printf("waiting to produce item to shared memory\n");
     sem_wait(channel->producer_num_empty_sem);
     pthread_mutex_lock(channel->producer_msg_arr_mutex);
 
@@ -304,6 +334,8 @@ void produce_to_shared_mem(ipc_channel* channel, channel_message* new_input_msg)
 
     pthread_mutex_unlock(channel->producer_msg_arr_mutex);
     sem_post(channel->producer_num_occupied_sem);
+
+    printf("produced item to shared memory with message: %s and type %d\n", new_input_msg->shm_name, new_input_msg->msg_type);
 }
 
 #define TERM_FLAG -2
@@ -359,4 +391,4 @@ int close_channel(ipc_channel* channel_to_close){
     pthread_mutex_unlock(channel_to_close->globally_open_mutex);
 
     return 0;
-}
+}*/

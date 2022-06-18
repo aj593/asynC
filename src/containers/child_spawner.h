@@ -9,10 +9,10 @@ ipc_channel* main_to_spawner_channel;
 #define SPAWNED_NODE_TYPE
 
 typedef struct spawn_node_check {
-    ipc_channel* channel;
-    int* shared_mem_ptr;
+    message_channel* channel;
+    //int* shared_mem_ptr;
     void(*spawned_callback)(ipc_channel* channel_ptr, callback_arg* cb_arg); //TODO: also put in pid in params?
-    callback_arg cb_arg;
+    callback_arg* cb_arg;
 } spawned_node;
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef SINGLY_LINKED_LIST
-#define SINGLY_LINKED_LIST
+#ifndef LINKED_LIST
+#define LINKED_LIST
 
 #include <aio.h>
 #include <semaphore.h>
@@ -11,6 +11,7 @@
 #include "../async_types/callback_arg.h"
 //#include "../async_lib/async_io.h"
 #include "ipc_channel.h"
+#include "message_channel.h"
 
 #include "process_pool.h"
 
@@ -22,8 +23,8 @@ typedef struct channel ipc_channel;
 #define SPAWNED_NODE_TYPE
 
 typedef struct spawn_node_check {
-    ipc_channel* channel;
-    int* shared_mem_ptr;
+    message_channel* channel;
+    //int* shared_mem_ptr;
     void(*spawned_callback)(ipc_channel* channel_ptr, callback_arg* cb_arg); //TODO: also put in pid in params?
     callback_arg* cb_arg;
 } spawned_node;
@@ -41,7 +42,7 @@ typedef struct child_task_info {
 
 #define MAX_SHM_NAME_LEN 50 //TODO: adjust this size so it's not too big or small?
 
-#ifndef IPC_MESSAGE_TYPE
+/*#ifndef IPC_MESSAGE_TYPE
 #define IPC_MESSAGE_TYPE
 
 typedef struct ipc_message {
@@ -49,7 +50,7 @@ typedef struct ipc_message {
     int msg_type;
 } channel_message;
 
-#endif
+#endif*/
 
 #ifndef READSTREAM_TYPE
 #define READSTREAM_TYPE
@@ -72,14 +73,24 @@ typedef struct readablestream {
 
 #endif
 
+typedef struct liburing_stats {
+    int fd;
+    buffer* buffer;
+    int return_val;
+    int is_done;
+    grouped_fs_cbs fs_cb;
+    callback_arg* cb_arg;
+} uring_stats;
+
 typedef union node_data_types {
+    uring_stats uring_task_info;
     task_info thread_task_info;
     task_block thread_block_info;
     async_child child_info;
     readstream readstream_info;
     child_task proc_task;
-    channel_message msg;
-    ipc_channel* channel_ptr;
+    msg_header msg;
+    message_channel* channel_ptr;
     spawned_node spawn_info;
     //async_io io_info; //TODO: may not need this
 } node_data;
@@ -88,7 +99,8 @@ typedef struct event_node{
     int event_index;            //integer value so we know which index in function array within array to look at
     node_data data_used;           //pointer to data block/struct holding data pertaining to event
     void(*callback_handler)(struct event_node*);
-    struct event_node *next;    //next pointer in linked list
+    struct event_node* next;    //next pointer in linked list
+    struct event_node* prev;
 } event_node;
 
 #ifndef LINKED_LIST_TYPE
@@ -102,7 +114,7 @@ typedef struct linked_list {
 
 #endif
 
-#ifndef IPC_CHANNEL_TYPE
+/*#ifndef IPC_CHANNEL_TYPE
 #define IPC_CHANNEL_TYPE
 
 typedef struct channel {
@@ -140,7 +152,7 @@ typedef struct channel {
     pid_t curr_pid;
 } ipc_channel;
 
-#endif
+#endif*/
 
 void linked_list_init(linked_list* list);
 void linked_list_destroy(linked_list* list);
@@ -153,7 +165,7 @@ void add_next(linked_list* list, event_node* curr, event_node* new_node);
 void prepend(linked_list* list, event_node* new_first);
 void append(linked_list* list, event_node* new_tail);
 
-event_node* remove_next(linked_list* list, event_node* current);
+event_node* remove_curr(linked_list* list, event_node* curr_removed_node);
 event_node* remove_first(linked_list* list);
 event_node* remove_last(linked_list* list);
 

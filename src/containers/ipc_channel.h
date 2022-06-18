@@ -1,4 +1,4 @@
-#ifndef IPC_CHANNEL
+/*#ifndef IPC_CHANNEL
 #define IPC_CHANNEL
 
 #include "singly_linked_list.h"
@@ -80,4 +80,4 @@ void list_middleman_init(ipc_channel* channel);
 
 int close_channel(ipc_channel* channel_to_close);
 
-#endif
+#endif*/

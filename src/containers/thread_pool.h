@@ -1,7 +1,7 @@
 #ifndef THREAD_POOL
 #define THREAD_POOL
 
-#include "singly_linked_list.h"
+#include "linked_list.h"
 
 #define TERM_FLAG -1
 //TODO: allow user to decide number of threads in thread pool?

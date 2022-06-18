@@ -1,7 +1,7 @@
 #ifndef PROCESS_POOL
 #define PROCESS_POOL
 
-#include "singly_linked_list.h"
+#include "linked_list.h"
 
 #ifndef CHILD_TASK_INFO_TYPE
 #define CHILD_TASK_INFO_TYPE

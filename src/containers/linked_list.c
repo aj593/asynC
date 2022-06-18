@@ -1,11 +1,17 @@
-#include "singly_linked_list.h"
+#include "linked_list.h"
 #include <stdlib.h>
 #include <stddef.h>
 
 void linked_list_init(linked_list* list){
     list->head = (event_node*)calloc(1, sizeof(event_node));
-    list->tail = list->head;
+    list->tail = (event_node*)calloc(1, sizeof(event_node));
+    
+    list->head->next = list->tail;
+    list->tail->prev = list->head;
+    
+    list->head->prev = NULL;
     list->tail->next = NULL;
+    
     list->size = 0;
 }
 
@@ -44,14 +50,15 @@ void destroy_event_node(event_node* node_to_destroy){
 }
 
 //TODO: require that added event_node be not NULL?
+//TODO: make it so ppl can't add next node to dummy tail node?
 void add_next(linked_list* list, event_node* curr, event_node* new_node){
     event_node* after_curr = curr->next;
+
     curr->next = new_node;
     new_node->next = after_curr;
 
-    if(curr == list->tail){
-        list->tail = new_node;
-    }
+    after_curr->prev = new_node;
+    new_node->prev = curr;
 
     list->size++;
 }
@@ -60,39 +67,48 @@ void prepend(linked_list* list, event_node* new_first){
     add_next(list, list->head, new_first);
 }
 
-void append(linked_list* list, event_node* new_tail){
-    add_next(list, list->tail, new_tail);
+//TODO: make it so ppl can't add previous node to dummy head node?
+void add_prev(linked_list* list, event_node* curr, event_node* new_node){
+    event_node* before_curr = curr->prev;
+
+    curr->prev = new_node;
+    new_node->prev = before_curr;
+
+    before_curr->next = new_node;
+    new_node->next = curr;
+    
+    list->size++;
+}
+
+void append(linked_list* list, event_node* new_last){
+    add_prev(list, list->tail, new_last);
 }
 
 //TODO: change names of following functions to include "list_" in their names
-event_node* remove_next(linked_list* list, event_node* current){
+//TODO: make it so ppl can't remove head and tail node?
+event_node* remove_curr(linked_list* list, event_node* curr_removed_node){
     if(list->size == 0){
         return NULL;
     }
 
-    event_node* removed_node = current->next;
-    current->next = current->next->next;
+    event_node* before_curr = curr_removed_node->prev;
+    event_node* after_curr = curr_removed_node->next;
 
-    if(removed_node == list->tail){
-        list->tail = current;
-    }
+    before_curr->next = after_curr;
+    after_curr->prev = before_curr;
+
+    curr_removed_node->prev = NULL;
+    curr_removed_node->next = NULL;
 
     list->size--;
 
-    return removed_node;
+    return curr_removed_node;
 }
 
 event_node* remove_first(linked_list* list){
-    return remove_next(list, list->head);
+    return remove_curr(list, list->head->next);
 }
 
 event_node* remove_last(linked_list* list){
-    event_node* curr = list->head;
-
-    //TODO: double check this condition
-    while(curr != list->tail && curr->next != list->tail){
-        curr = curr->next;
-    }
-
-    return remove_next(list, curr);
+    return remove_curr(list, list->tail->prev);
 }
