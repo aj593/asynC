@@ -27,12 +27,21 @@ void thread_pool_init(){
 //TODO: is this best way to destroy threads?
 void thread_pool_destroy(){
     for(int i = 0; i < NUM_THREADS; i++){
-        enqueue_task(create_event_node(TERM_FLAG));
+        event_node* thread_term_node = create_event_node();
+        thread_term_node->data_used.thread_block_info.task_type = TERM_FLAG;
+        enqueue_task(thread_term_node);
     }
 
     for(int i = 0; i < NUM_THREADS; i++){
         pthread_join(thread_id_array[i], NULL);
     }
+}
+
+int is_thread_task_done(event_node* fs_node){
+    fs_task_info* thread_task = &fs_node->data_used.thread_task_info; //(task_info*)fs_node->event_data;
+    //*event_index_ptr = thread_task->fs_index;
+
+    return thread_task->is_done;
 }
 
 /*
@@ -53,14 +62,15 @@ void* task_waiter(void* arg){
 
         pthread_mutex_unlock(&task_queue_mutex);
 
-        if(curr_task->event_index == TERM_FLAG){
+        //TODO: execute task here
+        task_block* exec_task_block = &curr_task->data_used.thread_block_info; //(task_block*)curr_task->event_data;
+
+        if(exec_task_block->task_type == TERM_FLAG){
             //printf("thread #%d getting destroyed\n", ++counter);
             destroy_event_node(curr_task);
             break;
         }
 
-        //TODO: execute task here
-        task_block* exec_task_block = &curr_task->data_used.thread_block_info; //(task_block*)curr_task->event_data;
         //TODO: make it take pointer to task block instead of actual struct?
         exec_task_block->task_handler(exec_task_block->async_task);
 

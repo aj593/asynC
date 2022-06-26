@@ -24,7 +24,7 @@ void spawn_child_func(void(*child_fcn)(void* arg), void* child_arg, child_func_c
     //If pid is anything else (-1 or proper positive child pid), we are executing in scope of parent process
     else{
         //create new event queue node for child process event
-        event_node* new_child_func_event = create_event_node(CHILD_EVENT_INDEX);
+        event_node* new_child_func_event = create_event_node();
 
         new_child_func_event->callback_handler = child_func_interm;
 

@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <pthread.h>
 #include <string.h>
+#include <sys/epoll.h>
 
 //TODO: should this go in .c or .h file for visibility?
 linked_list event_queue; //singly linked list that keeps track of items and events that have yet to be fulfilled
@@ -39,6 +40,32 @@ linked_list execute_queue;
 
 //TODO: put this in a different file?
 hash_table* subscriber_hash_table; //hash table that maps null-terminated strings to vectors of emitter items so we keep track of which emitters subscribed what events
+hash_table* epoll_hash_table;
+int epoll_fd;
+
+void epoll_add(int op_fd, int* able_to_read_ptr, int* peer_closed_ptr){
+    struct epoll_event new_event;
+    new_event.data.fd = op_fd;
+    new_event.events = EPOLLIN | EPOLLRDHUP;
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, op_fd, &new_event);
+
+    int op_fd_size = sizeof(op_fd);
+    char fd_str[op_fd_size + 2];
+    fd_str[op_fd_size + 1] = '\0';
+    memcpy(fd_str, &op_fd, op_fd_size);
+
+    fd_str[op_fd_size] = 'R';
+    ht_set(epoll_hash_table, fd_str, able_to_read_ptr);
+
+    fd_str[op_fd_size] = 'P';
+    ht_set(epoll_hash_table, fd_str, peer_closed_ptr);
+}
+
+void epoll_remove(int op_fd){
+    struct epoll_event filler_event;
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, op_fd, &filler_event);
+    ht_set(epoll_hash_table, op_fd, NULL);
+}
 
 struct io_uring async_uring;
 #define IO_URING_NUM_ENTRIES 10 //TODO: change this later?
@@ -52,6 +79,12 @@ void uring_lock(){
 
 void uring_unlock(){
     pthread_mutex_unlock(&uring_mutex);
+}
+
+int is_uring_done(event_node* uring_node){
+    uring_stats* uring_task = &uring_node->data_used.uring_task_info;
+
+    return uring_task->is_done;
 }
 
 //TODO: ok to make inline?
@@ -113,19 +146,6 @@ int is_readstream_data_done(event_node* readstream_node){
     readstream* readstream_info = &readstream_node->data_used.readstream_info; //(readstream*)readstream_node->event_data;
 
     return aio_error(&readstream_info->aio_block) != EINPROGRESS && !is_readstream_paused(readstream_info);
-}
-
-int is_fs_done(event_node* fs_node){
-    task_info* thread_task = &fs_node->data_used.thread_task_info; //(task_info*)fs_node->event_data;
-    //*event_index_ptr = thread_task->fs_index;
-
-    return thread_task->is_done;
-}
-
-int is_uring_done(event_node* uring_node){
-    uring_stats* uring_task = &uring_node->data_used.uring_task_info;
-
-    return uring_task->is_done;
 }
 
 #define CUSTOM_MSG_FLAG 0
@@ -200,7 +220,7 @@ int check_spawn_event(event_node* spawn_node){
 }*/
 
 //array of function pointers
-int(*event_check_array[])(event_node*) = {
+/*int(*event_check_array[])(event_node*) = {
     //is_io_done,
     is_child_done,
     is_readstream_data_done,
@@ -208,13 +228,13 @@ int(*event_check_array[])(event_node*) = {
     is_uring_done,
     //check_ipc_channel,
     //check_spawn_event
-};
+};*/
 
-int is_event_completed(event_node* node_check){
+/*int is_event_completed(event_node* node_check){
     int(*event_checker)(event_node*) = event_check_array[node_check->event_index];
 
     return event_checker(node_check);
-}
+}*/
 
 /*
 
@@ -258,6 +278,9 @@ void asynC_init(){
     linked_list_init(&execute_queue);
 
     subscriber_hash_table = ht_create();
+
+    epoll_fd = epoll_create1(0);
+    epoll_hash_table = ht_create();
 
     //child_spawner_init();
     //process_pool_init(); //TODO: initialize process pool before or after thread pool?
@@ -307,13 +330,18 @@ void set_sqe_data(struct io_uring_sqe* incoming_sqe, event_node* uring_node){
 
 void uring_submit_task_handler(thread_async_ops uring_submit_task){
     uring_lock();
+    //clock_t before = clock();
     int num_submitted = io_uring_submit(uring_submit_task.async_ring);
+    //clock_t after = clock();
     num_entries_to_submit -= num_submitted;
     uring_unlock();
+    //printf("time before and after is %ld\n", after - before);
     if(num_submitted == 0){
         printf("didn't submit anything??\n");
     }
 }
+
+#define MAX_NUM_EPOLL_EVENTS 10
 
 //TODO: error check this?
 void asynC_wait(){
@@ -341,12 +369,36 @@ void asynC_wait(){
             }*/
         }
 
+        //TODO: make if-statement only if there's at least one fd being monitored?
+        struct epoll_event events[MAX_NUM_EPOLL_EVENTS];
+        int num_fds = epoll_wait(epoll_fd, events, MAX_NUM_EPOLL_EVENTS, 0);
+
+        int fd_type_size = sizeof(int);
+        char fd_and_op[fd_type_size + 2];
+        fd_and_op[fd_type_size + 1] = '\0';
+
+        for(int i = 0; i < num_fds; i++){
+            memcpy(fd_and_op, events[i].data.fd, fd_type_size);
+
+            if(events[i].events & EPOLLIN){
+                fd_and_op[fd_type_size] = 'R';
+                int* is_ready_ptr = ht_get(epoll_hash_table, fd_and_op);
+                *is_ready_ptr = 1;
+            }
+            if(events[i].events & EPOLLRDHUP){
+                fd_and_op[fd_type_size] = 'P';
+                int* peer_closed_ptr = ht_get(epoll_hash_table, fd_and_op);
+                *peer_closed_ptr = 1;
+            }
+        }
+
         event_node* curr_node = event_queue.head->next;
         while(curr_node != event_queue.tail){
             event_node* check_node = curr_node;
+            int(*curr_event_checker)(event_node*) = check_node->event_checker;
             curr_node = curr_node->next;
 
-            if(is_event_completed(check_node)){
+            if(curr_event_checker(check_node)){
                 append(&execute_queue, remove_curr(&event_queue, check_node));
             }
 
@@ -379,7 +431,7 @@ void asynC_wait(){
             //io_uring_submit(&async_uring);
             
             //TODO: make separate event node in event queue to get callback for result of uring_submit?
-            event_node* submit_thread_task_node = create_event_node(0);
+            event_node* submit_thread_task_node = create_event_node();
             task_block* curr_task_block = &submit_thread_task_node->data_used.thread_block_info;
             curr_task_block->task_handler = uring_submit_task_handler;
             curr_task_block->async_task.async_ring = &async_uring;

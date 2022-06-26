@@ -11,5 +11,6 @@ void thread_pool_init();
 void thread_pool_destroy();
 
 void enqueue_task(event_node* task);
+int is_thread_task_done(event_node* fs_node);
 
 #endif

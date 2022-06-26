@@ -13,7 +13,10 @@ typedef struct event_node event_node;
 
 struct io_uring_sqe* get_sqe();
 void increment_sqe_counter();
+int is_uring_done(event_node* uring_node);
 void set_sqe_data(struct io_uring_sqe* incoming_sqe, event_node* uring_node);
+
+void epoll_add(int op_fd, int* able_to_read_ptr, int* peer_closed_ptr);
 
 void uring_lock();
 void uring_unlock();

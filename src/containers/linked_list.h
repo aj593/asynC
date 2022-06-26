@@ -9,6 +9,8 @@
 #include "../async_lib/async_fs.h"
 #include "../async_lib/async_child.h"
 #include "../async_types/callback_arg.h"
+#include "../async_lib/server.h"
+#include "../async_lib/async_socket.h"
 //#include "../async_lib/async_io.h"
 #include "ipc_channel.h"
 #include "message_channel.h"
@@ -80,11 +82,38 @@ typedef struct liburing_stats {
     int is_done;
     grouped_fs_cbs fs_cb;
     callback_arg* cb_arg;
+    struct sockaddr client_addr;
+    async_server* listening_server;
+    async_socket* rw_socket;
 } uring_stats;
+
+#ifndef LISTEN_NODE_INFO
+#define LISTEN_NODE_INFO
+
+typedef struct listen_node {
+    async_server* listening_server;
+    int is_done;
+} listen_info;
+
+#endif
+
+typedef struct server_info {
+    async_server* listening_server;
+} server_info;
+
+//TODO: use this instead?
+/*typedef struct socket_info {
+    async_socket* socket;
+} socket_info;*/
+
+typedef struct socket_send_buffer {
+    buffer* buffer_data;
+    send_callback socket_write_cb;
+} socket_buffer_info;
 
 typedef union node_data_types {
     uring_stats uring_task_info;
-    task_info thread_task_info;
+    fs_task_info thread_task_info;
     task_block thread_block_info;
     async_child child_info;
     readstream readstream_info;
@@ -92,13 +121,18 @@ typedef union node_data_types {
     msg_header msg;
     message_channel* channel_ptr;
     spawned_node spawn_info;
+    listen_info listen_info;
+    server_info server_info;
+    async_socket socket_info;
+    socket_buffer_info socket_buffer;
     //async_io io_info; //TODO: may not need this
 } node_data;
 
-typedef struct event_node{
-    int event_index;            //integer value so we know which index in function array within array to look at
+typedef struct event_node {
+    //int event_index;            //integer value so we know which index in function array within array to look at
     node_data data_used;           //pointer to data block/struct holding data pertaining to event
     void(*callback_handler)(struct event_node*);
+    int(*event_checker)(struct event_node*);
     struct event_node* next;    //next pointer in linked list
     struct event_node* prev;
 } event_node;
@@ -158,7 +192,7 @@ void linked_list_init(linked_list* list);
 void linked_list_destroy(linked_list* list);
 int is_linked_list_empty(linked_list* list);
 
-event_node* create_event_node(int event_index);
+event_node* create_event_node(void);
 void destroy_event_node(event_node* node_to_destroy);
 
 void add_next(linked_list* list, event_node* curr, event_node* new_node);

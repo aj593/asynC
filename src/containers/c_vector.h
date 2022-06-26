@@ -17,6 +17,9 @@ typedef void(*readstream_end_cb)(callback_arg*);
 typedef union vector_types {
     emitter_item emitter_item;
     readstream_data_cb rs_data_cb;
+    void(*server_listen_cb)();
+    void(*connection_handler_cb)(async_socket* new_socket);
+    void(*data_handler_cb)(buffer* data_buffer);
 } vec_types;
 
 //TODO: rename this to emitter_vector so its always array of emitter_item structs, or keep name as c_vector

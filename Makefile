@@ -1,8 +1,8 @@
 CFLAGS = -g -lrt -luring -Wall -Werror -pthread -pedantic
 #TODO: add # -Wextra flag later
 
-output: async_child.o async_io.o buffer.o c_vector.o main.o event_loop.o callback_arg.o event_emitter.o hash_table.o linked_list.o child_callbacks.o io_callbacks.o readstream.o readstream_callbacks.o thread_pool.o async_fs.o fs_callbacks.o worker_thread.o process_pool.o
-	gcc obj/async_child.o obj/async_io.o obj/buffer.o obj/c_vector.o obj/main.o obj/event_loop.o obj/callback_arg.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/child_callbacks.o obj/io_callbacks.o obj/readstream.o obj/readstream_callbacks.o obj/thread_pool.o obj/async_fs.o obj/fs_callbacks.o obj/worker_thread.o obj/process_pool.o -o exec/main $(CFLAGS)
+output: async_child.o async_io.o buffer.o c_vector.o main.o event_loop.o callback_arg.o event_emitter.o hash_table.o linked_list.o child_callbacks.o io_callbacks.o readstream.o readstream_callbacks.o thread_pool.o async_fs.o fs_callbacks.o worker_thread.o process_pool.o server.o async_socket.o
+	gcc obj/async_child.o obj/async_io.o obj/buffer.o obj/c_vector.o obj/main.o obj/event_loop.o obj/callback_arg.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/child_callbacks.o obj/io_callbacks.o obj/readstream.o obj/readstream_callbacks.o obj/thread_pool.o obj/async_fs.o obj/fs_callbacks.o obj/worker_thread.o obj/process_pool.o obj/server.o obj/async_socket.o -o exec/main $(CFLAGS)
 
 #src/async_lib
 async_io.o: src/async_lib/async_io.c src/async_lib/async_io.h
@@ -20,6 +20,11 @@ readstream.o: src/async_lib/readstream.c src/async_lib/readstream.h
 worker_thread.o: src/async_lib/worker_thread.c src/async_lib/worker_thread.h
 	gcc -c src/async_lib/worker_thread.c -o obj/worker_thread.o $(CFLAGS)
 
+server.o: src/async_lib/server.c src/async_lib/server.h
+	gcc -c src/async_lib/server.c -o obj/server.o $(CFLAGS)
+
+async_socket.o src/async_lib/async_socket.c src/async_lib/async_socket.h
+	gcc -c src/async_lib/async_socket.c -o obj/async_socket.o $(CFLAGS)
 
 #src/async_types
 buffer.o: src/async_types/buffer.c src/async_types/buffer.h
