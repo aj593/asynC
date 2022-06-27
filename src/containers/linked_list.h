@@ -4,7 +4,7 @@
 #include <aio.h>
 #include <semaphore.h>
 
-#include "../async_lib/readstream.h"
+//#include "../async_lib/readstream.h"
 #include "../async_types/buffer.h"
 #include "../async_lib/async_fs.h"
 #include "../async_lib/async_child.h"
@@ -30,121 +30,6 @@ typedef struct spawn_node_check {
     void(*spawned_callback)(ipc_channel* channel_ptr, callback_arg* cb_arg); //TODO: also put in pid in params?
     callback_arg* cb_arg;
 } spawned_node;
-
-#endif
-
-#ifndef CHILD_TASK_INFO_TYPE
-#define CHILD_TASK_INFO_TYPE
-
-typedef struct child_task_info {
-    int data;
-} child_task;
-
-#endif
-
-#define MAX_SHM_NAME_LEN 50 //TODO: adjust this size so it's not too big or small?
-
-/*#ifndef IPC_MESSAGE_TYPE
-#define IPC_MESSAGE_TYPE
-
-typedef struct ipc_message {
-    char shm_name[MAX_SHM_NAME_LEN + 1];
-    int msg_type;
-} channel_message;
-
-#endif*/
-
-#ifndef READSTREAM_TYPE
-#define READSTREAM_TYPE
-
-typedef struct readablestream {
-    int event_index;
-    int read_file_descriptor;
-    ssize_t file_size; //TODO: need this?
-    ssize_t file_offset;
-    ssize_t num_bytes_per_read;
-    int is_paused;
-    event_emitter* emitter_ptr;
-    buffer* read_buffer;
-    struct aiocb aio_block;
-    callback_arg* cb_arg;
-    //void(*readstream_data_interm)(event_node*);
-    vector data_cbs;
-    vector end_cbs;
-} readstream;
-
-#endif
-
-typedef struct liburing_stats {
-    int fd;
-    buffer* buffer;
-    int return_val;
-    int is_done;
-    grouped_fs_cbs fs_cb;
-    callback_arg* cb_arg;
-    struct sockaddr client_addr;
-    async_server* listening_server;
-    async_socket* rw_socket;
-} uring_stats;
-
-#ifndef LISTEN_NODE_INFO
-#define LISTEN_NODE_INFO
-
-typedef struct listen_node {
-    async_server* listening_server;
-    int is_done;
-} listen_info;
-
-#endif
-
-typedef struct server_info {
-    async_server* listening_server;
-} server_info;
-
-//TODO: use this instead?
-/*typedef struct socket_info {
-    async_socket* socket;
-} socket_info;*/
-
-typedef struct socket_send_buffer {
-    buffer* buffer_data;
-    send_callback socket_write_cb;
-} socket_buffer_info;
-
-typedef union node_data_types {
-    uring_stats uring_task_info;
-    fs_task_info thread_task_info;
-    task_block thread_block_info;
-    async_child child_info;
-    readstream readstream_info;
-    child_task proc_task;
-    msg_header msg;
-    message_channel* channel_ptr;
-    spawned_node spawn_info;
-    listen_info listen_info;
-    server_info server_info;
-    async_socket socket_info;
-    socket_buffer_info socket_buffer;
-    //async_io io_info; //TODO: may not need this
-} node_data;
-
-typedef struct event_node {
-    //int event_index;            //integer value so we know which index in function array within array to look at
-    node_data data_used;           //pointer to data block/struct holding data pertaining to event
-    void(*callback_handler)(struct event_node*);
-    int(*event_checker)(struct event_node*);
-    struct event_node* next;    //next pointer in linked list
-    struct event_node* prev;
-} event_node;
-
-#ifndef LINKED_LIST_TYPE
-#define LINKED_LIST_TYPE
-
-typedef struct linked_list {
-    event_node *head;
-    event_node *tail;
-    unsigned int size;
-} linked_list;
 
 #endif
 
@@ -187,6 +72,149 @@ typedef struct channel {
 } ipc_channel;
 
 #endif*/
+
+/*#ifndef IPC_MESSAGE_TYPE
+#define IPC_MESSAGE_TYPE
+
+typedef struct ipc_message {
+    char shm_name[MAX_SHM_NAME_LEN + 1];
+    int msg_type;
+} channel_message;
+
+#endif*/
+
+/*#ifndef READSTREAM_TYPE
+#define READSTREAM_TYPE
+
+typedef struct readablestream {
+    int event_index;
+    int read_file_descriptor;
+    ssize_t file_size; //TODO: need this?
+    ssize_t file_offset;
+    ssize_t num_bytes_per_read;
+    int is_paused;
+    event_emitter* emitter_ptr;
+    buffer* read_buffer;
+    struct aiocb aio_block;
+    callback_arg* cb_arg;
+    //void(*readstream_data_interm)(event_node*);
+    vector data_cbs;
+    vector end_cbs;
+} readstream;
+
+#endif*/
+
+#ifndef CHILD_TASK_INFO_TYPE
+#define CHILD_TASK_INFO_TYPE
+
+typedef struct child_task_info {
+    int data;
+} child_task;
+
+#endif
+
+#ifndef LIBURING_STATS_INFO
+#define LIBURING_STATS_INFO
+
+typedef struct liburing_stats {
+    int fd;
+    buffer* buffer;
+    int return_val;
+    int is_done;
+    grouped_fs_cbs fs_cb;
+    callback_arg* cb_arg;
+    struct sockaddr client_addr;
+    async_server* listening_server;
+    async_socket* rw_socket;
+} uring_stats;
+
+#endif
+
+#ifndef LISTEN_NODE_INFO
+#define LISTEN_NODE_INFO
+
+typedef struct listen_node {
+    async_server* listening_server;
+    int is_done;
+} listen_info;
+
+#endif
+
+#ifndef SERVER_INFO
+#define SERVER_INFO
+
+typedef struct server_info {
+    async_server* listening_server;
+} server_info;
+
+#endif
+
+#ifndef SOCKET_INFO
+#define SOCKET_INFO
+
+//TODO: use this instead?
+typedef struct socket_info {
+    async_socket* socket;
+} socket_info;
+
+#endif
+
+#ifndef SOCKET_BUFFER_INFO
+#define SOCKET_BUFFER_INFO
+
+typedef struct socket_send_buffer {
+    buffer* buffer_data;
+    void(*send_callback)(async_socket*, void*);
+} socket_buffer_info;
+
+#endif
+
+#ifndef LINKED_LIST_TYPE
+#define LINKED_LIST_TYPE
+
+typedef struct linked_list {
+    event_node *head;
+    event_node *tail;
+    unsigned int size;
+} linked_list;
+
+#endif
+
+#ifndef NODE_DATA_TYPE
+#define NODE_DATA_TYPE
+
+typedef union node_data_types {
+    uring_stats uring_task_info;
+    fs_task_info thread_task_info;
+    task_block thread_block_info;
+    async_child child_info;
+    //readstream readstream_info;
+    child_task proc_task;
+    msg_header msg;
+    message_channel* channel_ptr;
+    spawned_node spawn_info;
+    listen_info listen_info;
+    server_info server_info;
+    socket_info socket_info;
+    socket_buffer_info socket_buffer;
+    //async_io io_info; //TODO: may not need this
+} node_data;
+
+#endif
+
+#ifndef EVENT_NODE_TYPE
+#define EVENT_NODE_TYPE
+
+typedef struct event_node {
+    //int event_index;            //integer value so we know which index in function array within array to look at
+    node_data data_used;           //pointer to data block/struct holding data pertaining to event
+    void(*callback_handler)(struct event_node*);
+    int(*event_checker)(struct event_node*);
+    struct event_node* next;    //next pointer in linked list
+    struct event_node* prev;
+} event_node;
+
+#endif
 
 void linked_list_init(linked_list* list);
 void linked_list_destroy(linked_list* list);

@@ -5,16 +5,16 @@
 
 #include "../event_loop.h"
 #include "../async_types/buffer.h"
-#include "../async_types/callback_arg.h"
-#include "../callback_handlers/callback_handler.h"
+//#include "../async_types/callback_arg.h"
+//#include "../callback_handlers/callback_handler.h"
 //#include "callbacks.h"
 
 
-typedef void(*open_callback)(int, callback_arg*);
-typedef void(*read_callback)(int, buffer*, int, callback_arg*);
-typedef void(*write_callback)(int, buffer*, int, callback_arg*);
-typedef void(*readfile_callback)(buffer*, int, callback_arg*);
-typedef void(*writefile_callback)(buffer*, int, callback_arg*);
+typedef void(*open_callback)(int, void*);
+typedef void(*read_callback)(int, buffer*, int, void*);
+typedef void(*write_callback)(int, buffer*, int, void*);
+typedef void(*readfile_callback)(buffer*, int, void*);
+typedef void(*writefile_callback)(buffer*, int, void*);
 
 
 //define our own type of function pointer that match the function signature of aio_read() and aio_write()

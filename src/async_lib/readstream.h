@@ -7,7 +7,7 @@
 
 #include "../async_types/event_emitter.h"
 #include "../containers/c_vector.h"
-#include "async_io.h"
+//#include "async_io.h"
 
 #include <unistd.h>
 #include <fcntl.h>

@@ -4,7 +4,7 @@
 
 #include "callback_handlers/io_callbacks.h"
 #include "callback_handlers/child_callbacks.h"
-#include "callback_handlers/readstream_callbacks.h"
+//#include "callback_handlers/readstream_callbacks.h"
 #include "callback_handlers/fs_callbacks.h"
 
 
@@ -18,7 +18,7 @@
 #include "async_lib/async_io.h"
 #include "async_lib/async_fs.h"
 #include "async_lib/async_child.h"
-#include "async_lib/readstream.h"
+//#include "async_lib/readstream.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -142,11 +142,11 @@ int is_child_done(event_node* child_node){
     //return !has_returned;
 }
 
-int is_readstream_data_done(event_node* readstream_node){
+/*int is_readstream_data_done(event_node* readstream_node){
     readstream* readstream_info = &readstream_node->data_used.readstream_info; //(readstream*)readstream_node->event_data;
 
     return aio_error(&readstream_info->aio_block) != EINPROGRESS && !is_readstream_paused(readstream_info);
-}
+}*/
 
 #define CUSTOM_MSG_FLAG 0
 #define MAIN_TERM_FLAG 1

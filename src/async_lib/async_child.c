@@ -2,8 +2,8 @@
 #include <stdlib.h>
 
 #include "../event_loop.h"
-#include "async_child.h"
-#include "../async_types/callback_arg.h"
+//#include "async_child.h"
+//#include "../async_types/callback_arg.h"
 
 #define CHILD_EVENT_INDEX 0 //index in array of array of function pointers that we are working with a child process event
 

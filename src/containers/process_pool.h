@@ -15,6 +15,6 @@ typedef struct child_task_info {
 void process_pool_init();
 void process_pool_destroy();
 
-void enqueue_child_task(event_node* new_task_node);
+//void enqueue_child_task(event_node* new_task_node);
 
 #endif

@@ -2,10 +2,16 @@
 
 #include <pthread.h>
 #include <string.h>
-#include "../containers/linked_list.h"
 #include "../event_loop.h"
 
-void socket_init(async_socket* new_socket, int new_socket_fd){
+event_node* create_socket_node(int new_socket_fd){
+    event_node* socket_event_node = create_event_node();
+    socket_event_node->event_checker = socket_event_checker;
+    socket_event_node->callback_handler = destroy_socket;
+
+    socket_event_node->data_used.socket_info.socket = (async_socket*)malloc(sizeof(async_socket));
+    async_socket* new_socket = socket_event_node->data_used.socket_info.socket;
+
     new_socket->socket_fd = new_socket_fd;
     new_socket->is_open = 1;
     new_socket->receive_buffer = create_buffer(64 * 1024, sizeof(char));
@@ -17,6 +23,8 @@ void socket_init(async_socket* new_socket, int new_socket_fd){
     vector_init(&new_socket->data_handler_vector, 5, 2);
     pthread_mutex_init(&new_socket->send_stream_lock, NULL);
     //pthread_mutex_init(&new_socket->receive_lock, NULL);
+
+    return socket_event_node;
 }
 
 void socket_read_cb(int socket_fd, buffer* read_buffer, int num_bytes_read, void* socket_arg){
@@ -87,6 +95,10 @@ async_send(async_socket* sending_socket, socket_buffer_info* send_buffer_info, v
     }
 }
 
+void destroy_socket(event_node* socket_node){
+
+}
+
 int socket_event_checker(event_node* socket_event_node){
     async_socket* checked_socket = &socket_event_node->data_used.socket_info;
 
@@ -137,7 +149,7 @@ size_t min(size_t num1, size_t num2){
     }
 }
 
-void socket_write(async_socket* writing_socket, buffer* buffer_to_write, int num_bytes_to_write, send_callback send_cb){
+void async_socket_write(async_socket* writing_socket, buffer* buffer_to_write, int num_bytes_to_write, send_callback send_cb){
     int num_bytes_able_to_write = min(num_bytes_to_write, get_buffer_capacity(buffer_to_write));
 
     int buff_highwatermark_size = 64 * 1024;
@@ -162,6 +174,4 @@ void socket_write(async_socket* writing_socket, buffer* buffer_to_write, int num
     }
 
     curr_buffer_node->data_used.socket_buffer.socket_write_cb = send_cb;
-
-    destroy_buffer(buffer_to_write);
 }

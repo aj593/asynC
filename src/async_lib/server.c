@@ -91,12 +91,9 @@ void uring_accept_interm(event_node* accept_node){
     int new_socket_fd = accept_info->return_val;
 
     //TODO: create socket to put in here for event loop here
-    event_node* socket_event_node = create_event_node();
+    event_node* socket_event_node = create_socket_node(new_socket_fd);
     async_socket* new_socket_ptr = &socket_event_node->data_used.socket_info;
-    socket_init(
-        new_socket_ptr,
-        new_socket_fd
-    );
+    
     epoll_add(
         new_socket_fd, 
         &new_socket_ptr->data_available_to_read,
