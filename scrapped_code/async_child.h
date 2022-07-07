@@ -5,7 +5,7 @@
 //#include "../callback_handlers/callback_handler.h"
 
 //function pointer type for child process that takes in function to execute
-typedef void(*child_func_callback)(pid_t, int, callback_arg*);
+typedef void(*child_func_callback)(pid_t, int, void*);
 
 //union type where only one function pointer can be assigned at a time
 typedef union child_callbacks_group {
@@ -20,7 +20,7 @@ typedef struct child_data {
     int status;                         //status of child process
     buffer* child_stdout;               //buffer obtained for child's stdout stream (TODO: need this?)
     grouped_child_cbs curr_callback;    //union type for callback executed after child process is done running
-    callback_arg* callback_arg;         //callback argument provided for callback
+    void* callback_arg;         //callback argument provided for callback
 } async_child;
 
 /**

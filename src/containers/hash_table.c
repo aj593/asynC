@@ -154,7 +154,7 @@ static bool ht_expand(hash_table* table) {
 }
 
 const char* ht_set(hash_table* table, const char* key, void* value) {
-    assert(value != NULL);
+    //assert(value != NULL);
     if (value == NULL) {
         return NULL;
     }

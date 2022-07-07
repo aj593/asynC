@@ -1,3 +1,5 @@
+#include "async_child.h"
+
 #include <unistd.h>
 #include <stdlib.h>
 

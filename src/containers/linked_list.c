@@ -36,16 +36,17 @@ int is_linked_list_empty(linked_list* list){
     return list->size == 0;
 }
 
-event_node* create_event_node(void){
+event_node* create_event_node(unsigned int event_data_size, void(*callback_interm_handler)(event_node*), int(*event_completion_checker)(event_node*)){
     event_node* new_node = (event_node*)calloc(1, sizeof(event_node));
-    //new_node->event_index = event_index;
-    //new_node->event_data = calloc(1, event_data_size);
+    new_node->callback_handler = callback_interm_handler;
+    new_node->event_checker = event_completion_checker;    
+    new_node->data_ptr = calloc(1, event_data_size);
 
     return new_node;
 }
 
 void destroy_event_node(event_node* node_to_destroy){
-    //free(node_to_destroy->event_data); //TODO: is this best place to free() node's event_data?
+    free(node_to_destroy->data_ptr); //TODO: is this best place to free() node's event_data?
     free(node_to_destroy);
 }
 

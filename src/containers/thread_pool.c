@@ -27,8 +27,9 @@ void thread_pool_init(){
 //TODO: is this best way to destroy threads?
 void thread_pool_destroy(){
     for(int i = 0; i < NUM_THREADS; i++){
-        event_node* thread_term_node = create_event_node();
-        thread_term_node->data_used.thread_block_info.task_type = TERM_FLAG;
+        event_node* thread_term_node = create_event_node(sizeof(task_block), NULL, NULL); //TODO: use create_task_node instead eventually?
+        task_block* destroy_task = (task_block*)thread_term_node->data_ptr;
+        destroy_task->task_type = TERM_FLAG;
         enqueue_task(thread_term_node);
     }
 
@@ -37,8 +38,34 @@ void thread_pool_destroy(){
     }
 }
 
+//TODO: take in params for task type and handler?
+event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(void*)){
+    event_node* new_task_node = create_event_node(sizeof(task_block), NULL, NULL);
+    task_block* task_block_ptr = (task_block*)new_task_node->data_ptr;
+    task_block_ptr->async_task_info = malloc(task_struct_size);
+    task_block_ptr->task_handler = task_handler;
+
+    return new_task_node;
+}
+
+void destroy_task_node(event_node* destroy_node){
+    task_block* task_block_ptr = (task_block*)destroy_node->data_ptr;
+    free(task_block_ptr->async_task_info);
+    destroy_event_node(destroy_node);
+}
+
+void enqueue_task(event_node* task){
+    pthread_mutex_lock(&task_queue_mutex);
+
+    append(&task_queue, task);
+
+    pthread_mutex_unlock(&task_queue_mutex);
+
+    pthread_cond_signal(&task_queue_cond_var);
+}
+
 int is_thread_task_done(event_node* fs_node){
-    fs_task_info* thread_task = &fs_node->data_used.thread_task_info; //(task_info*)fs_node->event_data;
+    thread_task_info* thread_task = (thread_task_info*)fs_node->data_ptr;
     //*event_index_ptr = thread_task->fs_index;
 
     return thread_task->is_done;
@@ -63,7 +90,7 @@ void* task_waiter(void* arg){
         pthread_mutex_unlock(&task_queue_mutex);
 
         //TODO: execute task here
-        task_block* exec_task_block = &curr_task->data_used.thread_block_info; //(task_block*)curr_task->event_data;
+        task_block* exec_task_block = (task_block*)curr_task->data_ptr; //(task_block*)curr_task->event_data;
 
         if(exec_task_block->task_type == TERM_FLAG){
             //printf("thread #%d getting destroyed\n", ++counter);
@@ -72,20 +99,10 @@ void* task_waiter(void* arg){
         }
 
         //TODO: make it take pointer to task block instead of actual struct?
-        exec_task_block->task_handler(exec_task_block->async_task);
+        exec_task_block->task_handler(exec_task_block->async_task_info);
 
-        destroy_event_node(curr_task);
+        destroy_task_node(curr_task);
     }
 
     pthread_exit(NULL);
-}
-
-void enqueue_task(event_node* task){
-    pthread_mutex_lock(&task_queue_mutex);
-
-    append(&task_queue, task);
-
-    pthread_mutex_unlock(&task_queue_mutex);
-
-    pthread_cond_signal(&task_queue_cond_var);
 }

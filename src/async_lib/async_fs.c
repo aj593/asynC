@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #include <liburing.h>
-
+#include <unistd.h>
 #include <fcntl.h>
 //#define AT_FDCWD -100
 
@@ -19,49 +19,55 @@
 #define OPEN_INDEX 0
 
 void open_cb_interm(event_node* open_event_node){
-    uring_stats* uring_info = &open_event_node->data_used.uring_task_info;
+    uring_stats* uring_info = (uring_stats*)open_event_node->data_ptr;
 
-    open_callback open_cb = uring_info->fs_cb.open_cb;
+    void(*open_callback)(int, void*) = uring_info->fs_cb.open_callback;
     int open_fd = uring_info->return_val;
     void* cb_arg = uring_info->cb_arg;
 
-    open_cb(open_fd, cb_arg);
+    open_callback(open_fd, cb_arg);
 }
 
 void fs_open_interm(event_node* exec_node){
-    fs_task_info* fs_data = &exec_node->data_used.thread_task_info; //(task_info*)exec_node->event_data;
+    thread_task_info* fs_data = (thread_task_info*)exec_node->data_ptr; //(task_info*)exec_node->event_data;
 
-    open_callback open_cb = fs_data->fs_cb.open_cb;
+    void(*open_callback)(int, void*) = fs_data->fs_cb.open_callback;
 
     int open_fd = fs_data->fd;
     void* cb_arg = fs_data->cb_arg;
 
-    open_cb(open_fd, cb_arg);
+    open_callback(open_fd, cb_arg);
 }
 
-void open_task_handler(thread_async_ops open_task){
-    async_open_info open_info = open_task.open_info;
-    *open_info.fd_ptr = open(
-        open_info.filename,
-        open_info.flags
+typedef struct open_task {
+    char* filename;
+    int flags;
+    mode_t mode;
+    int* is_done_ptr;
+    int* fd_ptr;
+} async_open_info;
+
+void open_task_handler(void* open_task){
+    async_open_info* open_info = (async_open_info*)open_task;
+    *open_info->fd_ptr = open(
+        open_info->filename,
+        open_info->flags
         //open_info.mode //TODO: need mode here? or make different version with it?
     );
 
-    *open_info.is_done_ptr = 1;
+    *open_info->is_done_ptr = 1;
 }
 
-void async_open(char* filename, int flags, int mode, open_callback open_cb, void* cb_arg){
+void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg){
     uring_lock();
     struct io_uring_sqe* open_sqe = get_sqe();
     if(open_sqe != NULL){
-        event_node* open_uring_node = create_event_node();
-        open_uring_node->event_checker = is_uring_done;
-        open_uring_node->callback_handler = open_cb_interm;
+        event_node* open_uring_node = create_event_node(sizeof(uring_stats), open_cb_interm, is_uring_done);
 
         //TODO: move this below uring_unlock()?
-        uring_stats* open_uring_data = &open_uring_node->data_used.uring_task_info;
+        uring_stats* open_uring_data = (uring_stats*)open_uring_node->data_ptr;
         open_uring_data->is_done = 0;
-        open_uring_data->fs_cb.open_cb = open_cb;
+        open_uring_data->fs_cb.open_callback = open_callback;
         open_uring_data->cb_arg = cb_arg;
         enqueue_event(open_uring_node);
 
@@ -74,27 +80,25 @@ void async_open(char* filename, int flags, int mode, open_callback open_cb, void
     else{
         uring_unlock();
 
-        event_node* open_node = create_event_node();
-        open_node->event_checker = is_thread_task_done;
-        open_node->callback_handler = fs_open_interm;
+        event_node* open_node = create_event_node(sizeof(thread_task_info), fs_open_interm, is_thread_task_done);
         enqueue_event(open_node);
 
-        fs_task_info* new_task = &open_node->data_used.thread_task_info; //(task_info*)open_node->event_data;
-        new_task->fs_cb.open_cb = open_cb;
+        thread_task_info* new_task = (thread_task_info*)open_node->data_ptr; //(task_info*)open_node->event_data;
+        new_task->fs_cb.open_callback = open_callback;
         new_task->cb_arg = cb_arg;
         //new_task->fs_index = OPEN_INDEX;
         
         //TODO: use create_event_node for this?
-        event_node* task_node = create_event_node();
-        task_block* curr_task_block = &task_node->data_used.thread_block_info; //(task_block*)task_node->event_data;
-        curr_task_block->task_handler = open_task_handler;
+        event_node* task_node = create_task_node(sizeof(async_open_info), open_task_handler);
+        task_block* curr_task_block = (task_block*)task_node->data_ptr; //(task_block*)task_node->event_data;
 
         //TODO: condense this statement into single line/statement?
-        curr_task_block->async_task.open_info.filename = filename; //TODO: make better way to reference filename?
-        curr_task_block->async_task.open_info.fd_ptr = &new_task->fd;
-        curr_task_block->async_task.open_info.is_done_ptr = &new_task->is_done;
-        curr_task_block->async_task.open_info.flags = flags;
-        curr_task_block->async_task.open_info.mode = mode;
+        async_open_info* open_task_params = (async_open_info*)curr_task_block->async_task_info;
+        open_task_params->filename = filename; //TODO: make better way to reference filename?
+        open_task_params->fd_ptr = &new_task->fd;
+        open_task_params->is_done_ptr = &new_task->is_done;
+        open_task_params->flags = flags;
+        open_task_params->mode = mode;
 
         enqueue_task(task_node);
     }
@@ -142,58 +146,64 @@ void async_open(char* filename, int flags, int mode, open_callback open_cb, void
 //void async_close
 
 void uring_read_interm(event_node* read_event_node){
-    uring_stats* uring_info = &read_event_node->data_used.uring_task_info;
+    uring_stats* uring_info = (uring_stats*)read_event_node->data_ptr;
 
-    read_callback read_cb = uring_info->fs_cb.read_cb;
+    void(*read_callback)(int, buffer*, int, void*) = uring_info->fs_cb.read_callback;
     int read_fd = uring_info->fd;
     buffer* read_buffer = uring_info->buffer;
     int num_bytes_read = uring_info->return_val;
     void* cb_arg = uring_info->cb_arg;
 
-    read_cb(read_fd, read_buffer, num_bytes_read, cb_arg);
+    read_callback(read_fd, read_buffer, num_bytes_read, cb_arg);
 }
 
-void read_cb_interm(event_node* exec_node){
-    fs_task_info* fs_data = &exec_node->data_used.thread_task_info; //(task_info*)exec_node->event_data;
+typedef struct read_task {
+    int read_fd;
+    buffer* buffer; //use void* instead?
+    int max_num_bytes_to_read;
+    int* num_bytes_read_ptr;
+    int* is_done_ptr;
+} async_read_info;
 
-    read_callback read_cb = fs_data->fs_cb.read_cb;
+void read_cb_interm(event_node* exec_node){
+    thread_task_info* fs_data = (thread_task_info*)exec_node->data_ptr; //(task_info*)exec_node->event_data;
+
+    void(*read_callback)(int, buffer*, int, void*) = fs_data->fs_cb.read_callback;
 
     int read_fd = fs_data->fd;
     buffer* read_buff = fs_data->buffer;
     ssize_t num_bytes_read = fs_data->num_bytes;
     void* cb_arg = fs_data->cb_arg;
 
-    read_cb(read_fd, read_buff, num_bytes_read, cb_arg);
+    read_callback(read_fd, read_buff, num_bytes_read, cb_arg);
 }
 
-void read_task_handler(thread_async_ops read_task){
-    async_read_info read_info = read_task.read_info;
+void read_task_handler(void* read_task){
+    async_read_info* read_info = (async_read_info*)read_task;
 
-    *read_info.num_bytes_read_ptr = read(
-        read_info.read_fd,
-        get_internal_buffer(read_info.buffer),
-        read_info.max_num_bytes_to_read
+    *read_info->num_bytes_read_ptr = read(
+        read_info->read_fd,
+        get_internal_buffer(read_info->buffer),
+        read_info->max_num_bytes_to_read
     );
 
-    *read_info.is_done_ptr = 1;
+    *read_info->is_done_ptr = 1;
 }
 
 //TODO: reimplement this with system calls?
-void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, void* cb_arg){
+void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, void(*read_callback)(int, buffer*, int, void*), void* cb_arg){
     uring_lock();
 
     struct io_uring_sqe* read_sqe = get_sqe();
     if(read_sqe != NULL){
-        event_node* read_uring_node = create_event_node();
-        read_uring_node->event_checker = is_uring_done;
-        read_uring_node->callback_handler = uring_read_interm;
+        event_node* read_uring_node = create_event_node(sizeof(uring_stats), uring_read_interm, is_uring_done);
 
         //TODO: move this below uring_unlock()?
-        uring_stats* read_uring_data = &read_uring_node->data_used.uring_task_info;
+        uring_stats* read_uring_data = (uring_stats*)read_uring_node->data_ptr;
         read_uring_data->is_done = 0;
         read_uring_data->fd = read_fd;
         read_uring_data->buffer = read_buff_ptr;
-        read_uring_data->fs_cb.read_cb = read_cb;
+        read_uring_data->fs_cb.read_callback = read_callback;
         read_uring_data->cb_arg = cb_arg;
         enqueue_event(read_uring_node);
 
@@ -212,89 +222,93 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_
     else{
         uring_unlock();
 
-        event_node* read_node = create_event_node();
-        read_node->event_checker = is_thread_task_done;
-        read_node->callback_handler = read_cb_interm;
+        event_node* read_node = create_event_node(sizeof(thread_task_info), read_cb_interm, is_thread_task_done);
         //TODO: other info needed to be assigned?
-        read_node->data_used.thread_task_info.fd = read_fd;
-        read_node->data_used.thread_task_info.cb_arg = cb_arg;
+        
         enqueue_event(read_node);
 
-        fs_task_info* new_task = &read_node->data_used.thread_task_info; //(task_info*)read_node->event_data;
-        new_task->fs_cb.read_cb = read_cb;
+        thread_task_info* new_task = (thread_task_info*)read_node->data_ptr; //(task_info*)read_node->event_data;
+        new_task->fd = read_fd;
+        new_task->buffer = read_buff_ptr;
+        new_task->fs_cb.read_callback = read_callback;
         new_task->cb_arg = cb_arg;
 
-        event_node* task_node = create_event_node();
-        task_block* curr_task_block = &task_node->data_used.thread_block_info; //(task_block*)task_node->event_data;
-        curr_task_block->task_handler = read_task_handler;
+        event_node* task_node = create_task_node(sizeof(async_read_info), read_task_handler);
+        task_block* curr_task_block = (task_block*)task_node->data_ptr; //(task_block*)task_node->event_data;
 
-        curr_task_block->async_task.read_info.read_fd = read_fd;
-        curr_task_block->async_task.read_info.max_num_bytes_to_read = num_bytes_to_read;
-        curr_task_block->async_task.read_info.num_bytes_read_ptr = &new_task->num_bytes;
-        curr_task_block->async_task.read_info.is_done_ptr = &new_task->is_done;
+        async_read_info* read_info_block = (async_read_info*)curr_task_block->async_task_info;
+        read_info_block->read_fd = read_fd;
+        read_info_block->max_num_bytes_to_read = num_bytes_to_read;
+        read_info_block->num_bytes_read_ptr = &new_task->num_bytes;
+        read_info_block->is_done_ptr = &new_task->is_done;
+        read_info_block->buffer = read_buff_ptr;
 
         //TODO: use only one of these??
-        new_task->buffer = read_buff_ptr;
-        curr_task_block->async_task.read_info.buffer = read_buff_ptr;
 
         enqueue_task(task_node);
     }
 }
 
-void uring_write_interm(event_node* write_event_node){
-    uring_stats* uring_info = &write_event_node->data_used.uring_task_info;
+typedef struct write_task {
+    int write_fd;
+    buffer* buffer;
+    int max_num_bytes_to_write;
+    int* num_bytes_written_ptr;
+    int* is_done_ptr;
+} async_write_info;
 
-    write_callback write_cb = uring_info->fs_cb.write_cb;
+void uring_write_interm(event_node* write_event_node){
+    uring_stats* uring_info = (uring_stats*)write_event_node->data_ptr;
+
+    void(*write_callback)(int, buffer*, int, void*) = uring_info->fs_cb.write_callback;
     int write_fd = uring_info->fd;
     buffer* write_buffer = uring_info->buffer;
     int num_bytes_written = uring_info->return_val;
     void* cb_arg = uring_info->cb_arg;
 
-    write_cb(write_fd, write_buffer, num_bytes_written, cb_arg);
+    write_callback(write_fd, write_buffer, num_bytes_written, cb_arg);
 }
 
 void write_cb_interm(event_node* exec_node){
-    fs_task_info* fs_data = &exec_node->data_used.thread_task_info;
+    thread_task_info* fs_data = (thread_task_info*)exec_node->data_ptr;
 
-    write_callback write_cb = fs_data->fs_cb.write_cb;
+    void(*write_callback)(int, buffer*, int, void*) = fs_data->fs_cb.write_callback;
 
     int write_fd = fs_data->fd;
     buffer* write_buff = fs_data->buffer;
     ssize_t num_bytes_written = fs_data->num_bytes;
     void* cb_arg = fs_data->cb_arg;
 
-    write_cb(write_fd, write_buff, num_bytes_written, cb_arg);
+    write_callback(write_fd, write_buff, num_bytes_written, cb_arg);
 }
 
-void write_task_handler(thread_async_ops write_task){
-    async_write_info write_info = write_task.write_info;
+void write_task_handler(void* write_task){
+    async_write_info* write_info = (async_write_info*)write_task;
 
-    *write_info.num_bytes_written_ptr = write(
-        write_info.write_fd,
-        get_internal_buffer(write_info.buffer),
-        write_info.max_num_bytes_to_write
+    *write_info->num_bytes_written_ptr = write(
+        write_info->write_fd,
+        get_internal_buffer(write_info->buffer),
+        write_info->max_num_bytes_to_write
     );
 
-    *write_info.is_done_ptr = 1;
+    *write_info->is_done_ptr = 1;
 }
 
 //TODO: finish implementing this
-void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, write_callback write_cb, void* cb_arg){
+void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, void(*write_callback)(int, buffer*, int, void*), void* cb_arg){
     //event_node* write_node = create_event_node(FS_EVENT_INDEX);
     uring_lock();
 
     struct io_uring_sqe* write_sqe = get_sqe();
     if(write_sqe != NULL){
-        event_node* write_uring_node = create_event_node();
-        write_uring_node->callback_handler = uring_write_interm;
-        write_uring_node->event_checker = is_uring_done;
+        event_node* write_uring_node = create_event_node(sizeof(uring_stats), uring_write_interm, is_uring_done);
 
         //TODO: move this below uring_unlock()?
-        uring_stats* write_uring_data = &write_uring_node->data_used.uring_task_info;
+        uring_stats* write_uring_data = (uring_stats*)write_uring_node->data_ptr;
         write_uring_data->is_done = 0;
         write_uring_data->fd = write_fd;
         write_uring_data->buffer = write_buff_ptr;
-        write_uring_data->fs_cb.write_cb = write_cb;
+        write_uring_data->fs_cb.write_callback = write_callback;
         write_uring_data->cb_arg = cb_arg;
         enqueue_event(write_uring_node);
 
@@ -313,169 +327,174 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, w
     else{
         uring_unlock();
 
-        event_node* write_node = create_event_node();
-        write_node->callback_handler = write_cb_interm; //TODO: fill this in later
-        write_node->event_checker = is_thread_task_done;
+        event_node* write_node = create_event_node(sizeof(thread_task_info), write_cb_interm, is_thread_task_done);
 
-        //TODO: other info needed to be assigned?
-        write_node->data_used.thread_task_info.fd = write_fd;
-        write_node->data_used.thread_task_info.cb_arg = cb_arg;
-        enqueue_event(write_node);
-
-        fs_task_info* new_write_task = &write_node->data_used.thread_task_info;
-        new_write_task->fs_cb.write_cb = write_cb;
+        thread_task_info* new_write_task = (thread_task_info*)write_node->data_ptr;
+        new_write_task->fd = write_fd;
+        new_write_task->buffer = write_buff_ptr;
+        new_write_task->fs_cb.write_callback = write_callback;
         new_write_task->cb_arg = cb_arg;
 
-        event_node* task_node = create_event_node();
-        task_block* curr_task_block = &task_node->data_used.thread_block_info;
-        curr_task_block->task_handler = write_task_handler;
+        enqueue_event(write_node);
 
-        curr_task_block->async_task.write_info.write_fd = write_fd;
-        curr_task_block->async_task.write_info.max_num_bytes_to_write = num_bytes_to_write;
-        curr_task_block->async_task.write_info.num_bytes_written_ptr = &new_write_task->num_bytes;
-        curr_task_block->async_task.write_info.is_done_ptr = &new_write_task->is_done;
+        event_node* task_node = create_task_node(sizeof(async_write_info), write_task_handler);
+        task_block* curr_task_block = (task_block*)task_node->data_ptr;
 
-        //TODO: use only one of these?
-        new_write_task->buffer = write_buff_ptr;
-        curr_task_block->async_task.write_info.buffer = write_buff_ptr;
+        async_write_info* write_info_block = (async_write_info*)curr_task_block->async_task_info;
+        write_info_block->write_fd = write_fd;
+        write_info_block->buffer = write_buff_ptr;
+        write_info_block->max_num_bytes_to_write = num_bytes_to_write;
+        write_info_block->num_bytes_written_ptr = &new_write_task->num_bytes;
+        write_info_block->is_done_ptr = &new_write_task->is_done;
 
         enqueue_task(task_node);
     }
 }
 
-void fs_chmod_interm(event_node* exec_node){
-    fs_task_info* fs_data = &exec_node->data_used.thread_task_info; //(task_info*)exec_node->event_data;
+typedef struct chmod_task {
+    char* filename;
+    mode_t mode;
+    int* is_done_ptr;
+    int* success_ptr;
+} async_chmod_info;
 
-    chmod_callback chmod_cb = fs_data->fs_cb.chmod_cb;
+void fs_chmod_interm(event_node* exec_node){
+    thread_task_info* fs_data = (thread_task_info*)exec_node->data_ptr; //(task_info*)exec_node->event_data;
+
+    void(*chmod_callback)(int, void*) = fs_data->fs_cb.chmod_callback;
 
     int success = fs_data->success;
     void* cb_arg = fs_data->cb_arg;
 
-    chmod_cb(success, cb_arg);
+    chmod_callback(success, cb_arg);
 }
 
-void chmod_task_handler(thread_async_ops chmod_task){
-    async_chmod_info chmod_info = chmod_task.chmod_info;
-    *chmod_info.success_ptr = chmod(
-        chmod_info.filename, 
-        chmod_info.mode
+void chmod_task_handler(void* chmod_task){
+    async_chmod_info* chmod_info = (async_chmod_info*)chmod_task;
+    *chmod_info->success_ptr = chmod(
+        chmod_info->filename, 
+        chmod_info->mode
     );
 
-    *chmod_info.is_done_ptr = 1;
+    *chmod_info->is_done_ptr = 1;
 }
 
-void async_chmod(char* filename, mode_t mode, chmod_callback chmod_cb, void* cb_arg){
-    event_node* chmod_node = create_event_node();
-    chmod_node->callback_handler = fs_chmod_interm; //TODO: define this function
-    chmod_node->event_checker = is_thread_task_done;
+void async_chmod(char* filename, mode_t mode, void(*chmod_callback)(int, void*), void* cb_arg){
+    event_node* chmod_node = create_event_node(sizeof(thread_task_info), fs_chmod_interm, is_thread_task_done);
     enqueue_event(chmod_node);
 
-    fs_task_info* new_task = &chmod_node->data_used.thread_task_info; //(task_info*)chmod_node->event_data;
-    new_task->fs_cb.chmod_cb = chmod_cb;
+    thread_task_info* new_task = (thread_task_info*)chmod_node->data_ptr; //(task_info*)chmod_node->event_data;
+    new_task->fs_cb.chmod_callback = chmod_callback;
     new_task->cb_arg = cb_arg;
 
-    event_node* task_node = create_event_node();
+    event_node* task_node = create_task_node(sizeof(async_chmod_info), chmod_task_handler);
+    task_block* curr_task_block = (task_block*)task_node->data_ptr; //(task_block*)task_node->event_data;
 
-    task_block* curr_task_block = &task_node->data_used.thread_block_info; //(task_block*)task_node->event_data;
-
-    curr_task_block->task_handler = chmod_task_handler;
-
-    curr_task_block->async_task.chmod_info.filename = filename;
-    curr_task_block->async_task.chmod_info.mode = mode;
-    curr_task_block->async_task.chmod_info.is_done_ptr = &new_task->is_done;
-    curr_task_block->async_task.chmod_info.success_ptr = &new_task->success;
+    async_chmod_info* chmod_info = (async_chmod_info*)curr_task_block->async_task_info;
+    chmod_info->filename = filename;
+    chmod_info->mode = mode;
+    chmod_info->is_done_ptr = &new_task->is_done;
+    chmod_info->success_ptr = &new_task->success;
 
     enqueue_task(task_node);
 }
 
-void fs_chown_interm(event_node* exec_node){
-    fs_task_info* fs_data = &exec_node->data_used.thread_task_info;
+typedef struct chown_task {
+    char* filename;
+    int uid;
+    int gid;
+    int* is_done_ptr;
+    int* success_ptr;
+} async_chown_info;
 
-    chown_callback chown_cb = fs_data->fs_cb.chown_cb;
+void fs_chown_interm(event_node* exec_node){
+    thread_task_info* fs_data = (thread_task_info*)exec_node->data_ptr;
+
+    void(*chown_callback)(int, void*) = fs_data->fs_cb.chown_callback;
 
     int success = fs_data->success;
     void* cb_arg = fs_data->cb_arg;
 
-    chown_cb(success, cb_arg);
+    chown_callback(success, cb_arg);
 }
 
-void chown_task_handler(thread_async_ops chown_task){
-    async_chown_info chown_info = chown_task.chown_info;
-    *chown_info.success_ptr = chown(
-        chown_info.filename,
-        chown_info.uid,
-        chown_info.gid
+void chown_task_handler(void* chown_task){
+    async_chown_info* chown_info = (async_chown_info*)chown_task;
+    *chown_info->success_ptr = chown(
+        chown_info->filename,
+        chown_info->uid,
+        chown_info->gid
     );
 
-    *chown_info.is_done_ptr = 1;
+    *chown_info->is_done_ptr = 1;
 }
 
-void async_chown(char* filename, int uid, int gid, chown_callback chown_cb, void* cb_arg){
-    event_node* chown_node = create_event_node();
-    chown_node->callback_handler = fs_chown_interm; //TODO: define this
-    chown_node->event_checker = is_thread_task_done;
+void async_chown(char* filename, int uid, int gid, void(*chown_callback)(int, void*), void* cb_arg){
+    event_node* chown_node = create_event_node(sizeof(thread_task_info), fs_chown_interm, is_thread_task_done);
     enqueue_event(chown_node);
 
-    fs_task_info* new_task = &chown_node->data_used.thread_task_info;
-    new_task->fs_cb.chown_cb = chown_cb;
+    thread_task_info* new_task = (thread_task_info*)chown_node->data_ptr;
+    new_task->fs_cb.chown_callback = chown_callback;
     new_task->cb_arg = cb_arg;
 
-    event_node* task_node = create_event_node();
+    event_node* task_node = create_task_node(sizeof(async_chown_info), chown_task_handler);
+    task_block* curr_task_block = (task_block*)task_node->data_ptr;
 
-    task_block* curr_task_block = &task_node->data_used.thread_block_info;
-
-    curr_task_block->task_handler = chown_task_handler;
-
-    curr_task_block->async_task.chown_info.filename = filename;
-    curr_task_block->async_task.chown_info.uid = uid;
-    curr_task_block->async_task.chown_info.gid = gid;
-    curr_task_block->async_task.chown_info.is_done_ptr = &new_task->is_done;
-    curr_task_block->async_task.chown_info.success_ptr = &new_task->success;
+    async_chown_info* chown_task_info = (async_chown_info*)curr_task_block->async_task_info;
+    chown_task_info->filename = filename;
+    chown_task_info->uid = uid;
+    chown_task_info->gid = gid;
+    chown_task_info->is_done_ptr = &new_task->is_done;
+    chown_task_info->success_ptr = &new_task->success;
 
     enqueue_task(task_node);
 }
 
 void uring_close_interm(event_node* close_event_node){
-    uring_stats* uring_close_info = &close_event_node->data_used.uring_task_info;
+    uring_stats* uring_close_info = (uring_stats*)close_event_node->data_ptr;
 
-    close_callback close_cb = uring_close_info->fs_cb.close_cb;
+    void(*close_callback)(int, void*) = uring_close_info->fs_cb.close_callback;
     int result = uring_close_info->return_val;
     void* cb_arg = uring_close_info->cb_arg;
 
-    close_cb(result, cb_arg);
+    close_callback(result, cb_arg);
 }
 
 void close_cb_interm(event_node* exec_node){
-    fs_task_info* fs_data = &exec_node->data_used.thread_task_info;
+    thread_task_info* fs_data = (thread_task_info*)exec_node->data_ptr;
 
-    close_callback close_cb = fs_data->fs_cb.close_cb;
+    void(*close_callback)(int, void*) = fs_data->fs_cb.close_callback;
     int success = fs_data->success;
     void* cb_arg = fs_data->cb_arg;
 
-    close_cb(success, cb_arg);
+    close_callback(success, cb_arg);
 }
 
-void close_task_handler(thread_async_ops close_task){
-    async_close_info close_info = close_task.close_info;
+typedef struct close_task {
+    int fd;
+    int* is_done_ptr;
+    int* success_ptr;
+} async_close_info;
 
-    *close_info.success_ptr = close(close_info.fd);
+void close_task_handler(void* close_task){
+    async_close_info* close_info = (async_close_info*)close_task;
 
-    *close_info.is_done_ptr = 1;
+    *close_info->success_ptr = close(close_info->fd);
+
+    *close_info->is_done_ptr = 1;
 }
 
-void async_close(int close_fd, close_callback close_cb, void* cb_arg){
+void async_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg){
     uring_lock();
 
     struct io_uring_sqe* close_sqe = get_sqe();
     if(close_sqe != NULL){
-        event_node* close_uring_node = create_event_node();
-        close_uring_node->callback_handler = uring_close_interm;
-        close_uring_node->event_checker = is_uring_done;
+        event_node* close_uring_node = create_event_node(sizeof(uring_stats), uring_close_interm, is_uring_done);
 
-        uring_stats* close_uring_data = &close_uring_node->data_used.uring_task_info;
+        uring_stats* close_uring_data = (uring_stats*)close_uring_node->data_ptr;
         close_uring_data->is_done = 0;
         close_uring_data->fd = close_fd;
-        close_uring_data->fs_cb.close_cb = close_cb;
+        close_uring_data->fs_cb.close_callback = close_callback;
         close_uring_data->cb_arg = cb_arg;
         enqueue_event(close_uring_node);
 
@@ -491,24 +510,21 @@ void async_close(int close_fd, close_callback close_cb, void* cb_arg){
     else{
         uring_unlock();
 
-        event_node* close_node = create_event_node();
-        close_node->callback_handler = close_cb_interm;
-        close_node->event_checker = is_thread_task_done;
+        event_node* close_node = create_event_node(sizeof(thread_task_info), close_cb_interm, is_thread_task_done);
         //TODO: assign other data needed?
-        close_node->data_used.thread_task_info.cb_arg = cb_arg;
         enqueue_event(close_node);
 
-        fs_task_info* new_task = &close_node->data_used.thread_task_info;
-        new_task->fs_cb.close_cb = close_cb;
+        thread_task_info* new_task = (thread_task_info*)close_node->data_ptr;
+        new_task->fs_cb.close_callback = close_callback;
         new_task->cb_arg = cb_arg;
 
-        event_node* task_node = create_event_node();
-        task_block* curr_task_block = &task_node->data_used.thread_block_info;
-        curr_task_block->task_handler = close_task_handler;
-
-        curr_task_block->async_task.close_info.fd = close_fd;
-        curr_task_block->async_task.close_info.success_ptr = &new_task->success;
-        curr_task_block->async_task.close_info.is_done_ptr = &new_task->is_done;
+        event_node* task_node = create_task_node(sizeof(async_close_info), close_task_handler);
+        task_block* curr_task_block = (task_block*)task_node->data_ptr;
+        
+        async_close_info* close_task_block = (async_close_info*)curr_task_block->async_task_info;
+        close_task_block->fd = close_fd;
+        close_task_block->success_ptr = &new_task->success;
+        close_task_block->is_done_ptr = &new_task->is_done;
     
         enqueue_task(task_node);
     }

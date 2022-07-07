@@ -33,7 +33,7 @@ typedef union io_callbacks_group {
 typedef struct io_block {
     int io_index;
     grouped_io_cbs io_callback;
-    callback_arg* callback_arg;
+    void* callback_arg;
     struct aiocb aio_block; //TODO: should this be actual struct or pointer to it? would have to malloc() inside async functions
     int file_offset; //TODO: make different int datatype? off_t?, do i need this?
     buffer* buff_ptr;
@@ -44,7 +44,7 @@ typedef struct io_block {
 //void async_open(char* filename, int flags, int mode, open_callback open_cb, callback_arg* cb_arg);
 
 
-void read_file(char* file_name, readfile_callback rf_cb, callback_arg* cb_arg);
-void write_file(char* file_name, buffer* write_buff, int num_bytes_to_write, int mode, int flags, writefile_callback wf_cb, callback_arg* cb_arg);
+void read_file(char* file_name, readfile_callback rf_cb, void* cb_arg);
+void write_file(char* file_name, buffer* write_buff, int num_bytes_to_write, int mode, int flags, writefile_callback wf_cb, void* cb_arg);
 
 #endif

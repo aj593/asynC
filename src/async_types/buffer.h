@@ -1,6 +1,8 @@
 #ifndef BUFFER_TYPE
 #define BUFFER_TYPE
 
+#include <stddef.h>
+
 typedef struct event_buffer buffer;
 
 buffer* create_buffer(size_t capacity, size_t size_of_each_element);
