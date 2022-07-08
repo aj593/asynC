@@ -80,6 +80,20 @@ typedef union fs_cbs {
 
 #endif
 
+#ifndef ASYNC_SERVER_TYPE
+#define ASYNC_SERVER_TYPE
+
+typedef struct server_type {
+    int listening_socket;
+    int has_connection_waiting;
+    int is_listening;
+    int is_currently_accepting;
+    vector listeners_vector;
+    vector connection_vector;
+} async_server;
+
+#endif
+
 #ifndef THREAD_TASK_INFO
 #define THREAD_TASK_INFO
 

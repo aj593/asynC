@@ -35,7 +35,9 @@
 linked_list event_queue; //singly linked list that keeps track of items and events that have yet to be fulfilled
 pthread_mutex_t event_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+//TODO: mutexes needed for these queues?
 linked_list execute_queue;
+linked_list defer_queue;
 
 //TODO: put this in a different file?
 hash_table* subscriber_hash_table; //hash table that maps null-terminated strings to vectors of emitter items so we keep track of which emitters subscribed what events
@@ -121,6 +123,7 @@ int is_event_queue_empty(){
 void asynC_init(){
     linked_list_init(&event_queue); //TODO: error check singly_linked_list.c
     linked_list_init(&execute_queue);
+    linked_list_init(&defer_queue);
 
     subscriber_hash_table = ht_create();
 
@@ -192,7 +195,7 @@ void uring_submit_task_handler(void* uring_submit_task){
     }
 }
 
-#define MAX_NUM_EPOLL_EVENTS 10
+#define MAX_NUM_EPOLL_EVENTS 100
 
 //TODO: error check this?
 void asynC_wait(){
@@ -291,6 +294,10 @@ void asynC_wait(){
             uring_unlock();
         }
 
+        while(defer_queue.size > 0){
+            enqueue_event(remove_first(&defer_queue));
+        }
+
         pthread_mutex_lock(&event_queue_mutex);
     }
 
@@ -304,6 +311,10 @@ void enqueue_event(event_node* event_node){
     append(&event_queue, event_node);
 
     pthread_mutex_unlock(&event_queue_mutex);
+}
+
+void defer_enqueue_event(event_node* event_node){
+    append(&defer_queue, event_node);
 }
 
 //TODO: implement something like process.nextTick() here?

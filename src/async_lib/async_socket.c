@@ -132,12 +132,13 @@ void async_send(async_socket* sending_socket, socket_buffer_info* send_buffer_in
         event_node* send_uring_node = create_event_node(sizeof(uring_stats), uring_send_interm, is_uring_done);
 
         uring_stats* send_uring_data = (uring_stats*)send_uring_node->data_ptr;
+        send_uring_data->rw_socket = sending_socket;
         send_uring_data->is_done = 0;
         send_uring_data->fd = sending_socket->socket_fd;
         send_uring_data->buffer = send_buffer_info->buffer_data;
         send_uring_data->fs_cb.send_callback = send_buffer_info->send_callback;
         send_uring_data->cb_arg = cb_arg;
-        enqueue_event(send_uring_node);
+        defer_enqueue_event(send_uring_node);
 
         io_uring_prep_send(
             send_sqe,

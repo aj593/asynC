@@ -71,6 +71,31 @@ void listen_callback(){
     printf("listening on port %d\n", port);
 }
 
+void send_cb(async_socket* socket_ptr, void* cb_arg){
+    printf("done writing to client socket!\n");
+
+    char end_str[] = "z\n";
+    int end_str_size = sizeof(end_str);
+    buffer* end_buffer = create_buffer(end_str_size, sizeof(char));
+    char* end_str_buff = (char*)get_internal_buffer(end_buffer);
+    memcpy(end_str_buff, end_str, end_str_size);
+
+    async_socket_write(socket_ptr, end_buffer, end_str_size, NULL);
+}
+
+void connection_handler(async_socket* new_socket){
+    printf("got a connection!\n");
+
+    char hello_str[] = "hello ";
+    int hello_str_len = sizeof(hello_str);
+
+    buffer* new_buffer = create_buffer(10, sizeof(char));
+    char* char_buffer = (char*)get_internal_buffer(new_buffer);
+    memcpy(char_buffer, hello_str, hello_str_len);
+
+    async_socket_write(new_socket, new_buffer, hello_str_len, send_cb);
+}
+
 int main(int argc, char* argv[]){
     asynC_init();
 
@@ -83,6 +108,7 @@ int main(int argc, char* argv[]){
 
     async_server* new_server = async_create_server();
     async_server_listen(new_server, port, "127.0.0.1", listen_callback);
+    async_server_on_connection(new_server, connection_handler);
 
     asynC_cleanup();
 

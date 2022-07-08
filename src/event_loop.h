@@ -27,5 +27,6 @@ void asynC_cleanup();
 void asynC_wait(); //TODO: make this available only among library files, not in driver/main.c code?
 
 void enqueue_event(event_node* event_node);
+void defer_enqueue_event(event_node* event_node);
 
 #endif

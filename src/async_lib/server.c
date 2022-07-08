@@ -3,7 +3,6 @@
 #include "../containers/linked_list.h"
 #include "../containers/thread_pool.h"
 #include "../event_loop.h"
-#include "async_socket.h"
 
 #include <sys/epoll.h>
 #include <stdlib.h>
@@ -17,14 +16,6 @@
 #include <stdio.h>
 
 #define MAX_BACKLOG_COUNT 32767
-
-typedef struct server_type {
-    int listening_socket;
-    int has_connection_waiting;
-    int is_listening;
-    vector listeners_vector;
-    vector connection_vector;
-} async_server;
 
 #ifndef SERVER_INFO
 #define SERVER_INFO
@@ -73,7 +64,8 @@ int server_accept_connections(event_node* server_event_node){
     server_info* node_server_info = (server_info*)server_event_node->data_ptr;
     async_server* listening_server = node_server_info->listening_server;
 
-    if(listening_server->is_listening && listening_server->has_connection_waiting){
+    if(listening_server->is_listening && listening_server->has_connection_waiting && !listening_server->is_currently_accepting){
+        listening_server->is_currently_accepting = 1;
         async_accept(listening_server);
     }
 
@@ -200,13 +192,20 @@ typedef struct connection_handler_cb {
 
 void uring_accept_interm(event_node* accept_node){
     uring_stats* accept_info = (uring_stats*)accept_node->data_ptr;
+    accept_info->listening_server->is_currently_accepting = 0;
+    accept_info->listening_server->has_connection_waiting = 0;
     
     int new_socket_fd = accept_info->return_val;
 
+    if(new_socket_fd < 0){
+        return;
+    }
+
     //TODO: create socket to put in here for event loop here
     event_node* socket_event_node = create_socket_node(new_socket_fd);
-    async_socket* new_socket_ptr = (async_socket*)socket_event_node->data_ptr;
-    
+    socket_info* new_socket_info = (socket_info*)socket_event_node->data_ptr;
+    async_socket* new_socket_ptr = new_socket_info->socket;
+
     epoll_add(
         new_socket_fd, 
         &new_socket_ptr->data_available_to_read,
@@ -237,7 +236,7 @@ void async_accept(async_server* accepting_server){
         uring_stats* accept_uring_data = (uring_stats*)accept_node->data_ptr;
         accept_uring_data->listening_server = accepting_server;
         accept_uring_data->is_done = 0;
-        enqueue_event(accept_node);
+        defer_enqueue_event(accept_node);
 
         socklen_t client_addr = sizeof(accept_uring_data->client_addr);
 
@@ -260,3 +259,9 @@ void async_accept(async_server* accepting_server){
     }
 }
 
+void async_server_on_connection(async_server* listening_server, void(*connection_handler)(async_socket*)){
+    vector* connection_vector_ptr = &listening_server->connection_vector;
+    connection_callback_t* connection_callback = (connection_callback_t*)malloc(sizeof(connection_callback_t));
+    connection_callback->connection_handler = connection_handler;
+    vec_add_last(connection_vector_ptr, connection_callback);
+}
