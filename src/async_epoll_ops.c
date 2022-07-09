@@ -3,6 +3,7 @@
 #include <sys/epoll.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdio.h>
 
 #include "containers/hash_table.h"
 
@@ -26,30 +27,27 @@ void epoll_add(int op_fd, int* able_to_read_ptr, int* peer_closed_ptr){
     new_event.events = EPOLLIN | EPOLLRDHUP;
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, op_fd, &new_event);
 
-    int op_fd_size = sizeof(op_fd);
-    char fd_str[op_fd_size + 2];
-    fd_str[op_fd_size + 1] = '\0';
-    memcpy(fd_str, &op_fd, op_fd_size);
+    int max_str_len = 20;
+    char fd_str[max_str_len];
+    int str_len = snprintf(fd_str, max_str_len, "%dR", op_fd);
 
-    fd_str[op_fd_size] = 'R';
     ht_set(epoll_hash_table, fd_str, able_to_read_ptr);
 
-    fd_str[op_fd_size] = 'P';
+    fd_str[str_len - 1] = 'P';
     ht_set(epoll_hash_table, fd_str, peer_closed_ptr);
 }
 
 void epoll_remove(int op_fd){
     struct epoll_event filler_event;
     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, op_fd, &filler_event);
-    int op_fd_size = sizeof(op_fd);
-    char fd_str[op_fd + 2];
-    fd_str[op_fd_size + 1] = '\0';
-    memcpy(fd_str, &op_fd, op_fd_size);
+   
+    int max_str_len = 20;
+    char fd_str[max_str_len];
+    int str_len = snprintf(fd_str, max_str_len, "%dR", op_fd);
 
-    fd_str[op_fd_size] = 'R';
     ht_set(epoll_hash_table, fd_str, NULL);
 
-    fd_str[op_fd_size] = 'P';
+    fd_str[str_len - 1] = 'P';
     ht_set(epoll_hash_table, fd_str, NULL);
 }
 
@@ -58,21 +56,19 @@ void epoll_check(void){
     struct epoll_event events[MAX_NUM_EPOLL_EVENTS];
     int num_fds = epoll_wait(epoll_fd, events, MAX_NUM_EPOLL_EVENTS, 0);
 
-    int fd_type_size = sizeof(int);
-    char fd_and_op[fd_type_size + 2];
-    fd_and_op[fd_type_size + 1] = '\0';
+    int max_str_len = 20;
+    char fd_str[max_str_len];
+    
 
     for(int i = 0; i < num_fds; i++){
-        memcpy(fd_and_op, &events[i].data.fd, fd_type_size);
-
         if(events[i].events & EPOLLIN){
-            fd_and_op[fd_type_size] = 'R';
-            int* is_ready_ptr = ht_get(epoll_hash_table, fd_and_op);
+            snprintf(fd_str, max_str_len, "%dR", events[i].data.fd);
+            int* is_ready_ptr = ht_get(epoll_hash_table, fd_str);
             *is_ready_ptr = 1;
         }
         if(events[i].events & EPOLLRDHUP){
-            fd_and_op[fd_type_size] = 'P';
-            int* peer_closed_ptr = ht_get(epoll_hash_table, fd_and_op);
+            snprintf(fd_str, max_str_len, "%dP", events[i].data.fd);
+            int* peer_closed_ptr = ht_get(epoll_hash_table, fd_str);
             *peer_closed_ptr = 1;
         }
     }

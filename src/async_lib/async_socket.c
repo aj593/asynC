@@ -2,6 +2,8 @@
 
 #include <pthread.h>
 #include <string.h>
+#include <stdio.h>
+
 #include "../event_loop.h"
 #include "../io_uring_ops.h"
 

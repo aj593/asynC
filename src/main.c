@@ -32,7 +32,8 @@ void send_cb(async_socket* socket_ptr, void* cb_arg){
 void data_handler(buffer* read_buffer){
     void* char_buff = get_internal_buffer(read_buffer);
 
-    write(STDOUT_FILENO, char_buff, 10);
+    write(STDOUT_FILENO, char_buff, get_buffer_capacity(read_buffer));
+    //write(STDOUT_FILENO, " ", 1);
 
     destroy_buffer(read_buffer);
 }
@@ -50,7 +51,7 @@ void connection_handler(async_socket* new_socket){
     memcpy(char_buffer, hello_str, hello_str_len);
 
     async_socket_write(new_socket, file_copied_buffer, get_buffer_capacity(file_copied_buffer), send_cb);
-    //async_socket_on_data(new_socket, data_handler);
+    async_socket_on_data(new_socket, data_handler);
 }
 
 #define MAX_BYTES_TO_READ 10000

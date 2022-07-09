@@ -53,10 +53,11 @@ typedef struct socket_channel {
     int socket_fd;
     int is_open;
     linked_list send_stream;
+    atomic_int is_reading;
     atomic_int is_writing;
     pthread_mutex_t send_stream_lock;
     buffer* receive_buffer;
-    atomic_int is_reading;
+    //int has_event_arr[2];
     int data_available_to_read;
     int peer_closed;
     //pthread_mutex_t receive_lock;
@@ -85,7 +86,9 @@ typedef union fs_cbs {
 
 typedef struct server_type {
     int listening_socket;
+    //int has_event_arr[2];
     int has_connection_waiting;
+    //int dummy_int;
     int is_listening;
     int is_currently_accepting;
     vector listeners_vector;

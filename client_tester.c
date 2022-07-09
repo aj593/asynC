@@ -54,8 +54,7 @@ int main(int argc, char* argv[]){
     struct epoll_event single_event;
 
     while(1){
-        printf("gonna check epoll\n");
-        int num_fds = epoll_wait(epoll_fd, &single_event, 1, -1);
+        int num_fds = epoll_wait(epoll_fd, &single_event, 1, 0);
         if(num_fds > 0){
             printf("got something on epoll, my event is ");
             if(single_event.events & EPOLLRDHUP){
@@ -68,13 +67,9 @@ int main(int argc, char* argv[]){
                 write(STDOUT_FILENO, response_buffer, num_bytes_read);
             }
         }
-        else if(num_fds == 0){
-            printf("no file descriptors this time\n");
-        }
-        else{
+        else if(num_fds < 0){
             perror("epoll_wait()");
         }
-
         
         printf("type a message\n");
         int stdin_num_bytes = read(STDIN_FILENO, stdin_buffer, RESPONSE_BUFFER_SIZE);
