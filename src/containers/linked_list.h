@@ -11,6 +11,9 @@
 
 #include "async_types.h"
 
+//typedef struct linked_list linked_list;
+//typedef struct event_node event_node;
+
 void linked_list_init(linked_list* list);
 void linked_list_destroy(linked_list* list);
 int is_linked_list_empty(linked_list* list);

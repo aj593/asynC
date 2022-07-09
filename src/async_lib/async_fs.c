@@ -4,6 +4,7 @@
 #include "../containers/thread_pool.h"
 //#include "../callback_handlers/fs_callbacks.h"
 #include "../event_loop.h"
+#include "../io_uring_ops.h"
 
 #include <stdlib.h>
 #include <stdio.h>

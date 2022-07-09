@@ -3,6 +3,7 @@
 #include "../containers/linked_list.h"
 #include "../containers/thread_pool.h"
 #include "../event_loop.h"
+#include "../io_uring_ops.h"
 
 #include <sys/epoll.h>
 #include <stdlib.h>
@@ -205,12 +206,6 @@ void uring_accept_interm(event_node* accept_node){
     event_node* socket_event_node = create_socket_node(new_socket_fd);
     socket_info* new_socket_info = (socket_info*)socket_event_node->data_ptr;
     async_socket* new_socket_ptr = new_socket_info->socket;
-
-    epoll_add(
-        new_socket_fd, 
-        &new_socket_ptr->data_available_to_read,
-        &new_socket_ptr->peer_closed
-    );
 
     vector* connection_handler_vector = &accept_info->listening_server->connection_vector;
     for(int i = 0; i < vector_size(connection_handler_vector); i++){
