@@ -1,10 +1,10 @@
 CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic
 #TODO: add # -Wextra flag later
 
-#pending output rules: io_uring_ops.o, obj/io_uring_ops.o
+#pending output rules:  
 
-output: buffer.o c_vector.o main.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o server.o async_socket.o 
-	gcc obj/buffer.o obj/c_vector.o obj/main.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/server.o obj/async_socket.o -o exec/main $(CFLAGS)
+output: buffer.o c_vector.o main.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o server.o async_socket.o io_uring_ops.o async_epoll_ops.o
+	gcc obj/buffer.o obj/c_vector.o obj/main.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/server.o obj/async_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o -o exec/main $(CFLAGS)
 
 async_fs.o: src/async_lib/async_fs.c src/async_lib/async_fs.h
 	gcc -c src/async_lib/async_fs.c -o obj/async_fs.o $(CFLAGS)
@@ -39,8 +39,12 @@ thread_pool.o: src/containers/thread_pool.c src/containers/thread_pool.h
 	gcc -c src/containers/thread_pool.c -o obj/thread_pool.o $(CFLAGS)
 
 #src/io_uring_ops.c
-#io_uring_ops.o: src/io_uring_ops.c src/io_uring_ops.h
-#	gcc -c src/io_uring_ops.c -o obj/io_uring_ops.o $(CFLAGS)
+io_uring_ops.o: src/io_uring_ops.c src/io_uring_ops.h
+	gcc -c src/io_uring_ops.c -o obj/io_uring_ops.o $(CFLAGS)
+
+#src/async_epoll_ops.c
+async_epoll_ops.o: src/async_epoll_ops.c src/async_epoll_ops.h
+	gcc -c src/async_epoll_ops.c -o obj/async_epoll_ops.o $(CFLAGS)
 
 #src/event_loop.c
 event_loop.o: src/event_loop.c src/event_loop.h

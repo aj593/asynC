@@ -74,7 +74,6 @@ int main(int argc, char* argv[]){
     file_copied_buffer = create_buffer(num_bytes_read, sizeof(char));
     char* char_buffer = get_internal_buffer(file_copied_buffer);
     memcpy(char_buffer, read_bytes, num_bytes_read);
-    
 
     async_server* new_server = async_create_server();
     async_server_listen(new_server, port, "127.0.0.1", listen_callback);

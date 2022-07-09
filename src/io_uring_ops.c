@@ -6,12 +6,12 @@
 #include <liburing.h>
 #include "containers/thread_pool.h"
 
-/*
 struct io_uring async_uring;
 #define IO_URING_NUM_ENTRIES 10 //TODO: change this later?
 int uring_has_sqe = 0;
 int num_entries_to_submit = 0;
-pthread_mutex_t uring_mutex; //TODO: initialize this with function call?
+//pthread_mutex_t uring_mutex;
+pthread_spinlock_t uring_spinlock;
 
 typedef struct uring_submit_task {
     struct io_uring* async_ring_ptr;
@@ -24,15 +24,14 @@ typedef struct uring_user_data {
 
 void io_uring_init(void){
     io_uring_queue_init(IO_URING_NUM_ENTRIES, &async_uring, 0);
-    int ret = pthread_mutex_init(&uring_mutex, NULL);
-    if(ret != 0){
-        perror("pthread_mutex_init()");
-    }
+    //pthread_mutex_init(&uring_mutex, NULL);
+    pthread_spin_init(&uring_spinlock, 0);
 }
 
 void io_uring_exit(void){
     io_uring_queue_exit(&async_uring);
-    pthread_mutex_destroy(&uring_mutex);
+    //pthread_mutex_destroy(&uring_mutex);
+    pthread_spin_destroy(&uring_spinlock);
 }
 
 void uring_check(void){
@@ -51,13 +50,15 @@ void uring_check(void){
 }
 
 void uring_lock(void){
-    pthread_mutex_lock(&uring_mutex);
+    //pthread_mutex_lock(&uring_mutex);
+    pthread_spin_lock(&uring_spinlock);
 }
 
 //TODO: make try lock function
 
 void uring_unlock(void){
-    pthread_mutex_unlock(&uring_mutex);
+    //pthread_mutex_unlock(&uring_mutex);
+    pthread_spin_unlock(&uring_spinlock);
 }
 
 int is_uring_done(event_node* uring_node){
@@ -121,4 +122,3 @@ void uring_submit_task_handler(void* uring_submit_task){
         printf("didn't submit anything??\n");
     }
 }
-*/
