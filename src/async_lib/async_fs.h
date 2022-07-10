@@ -21,4 +21,11 @@ void async_chmod(char* filename, mode_t mode, void(*chmod_callback)(int, void*),
 void async_chown(char* filename, int uid, int gid, void(*chown_callback)(int, void*), void* cb_arg);
 void async_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg);
 
+typedef struct fs_writable_stream async_fs_writestream;
+
+//TODO: add vectors to writestream struct and implement event handler functions for them
+async_fs_writestream* create_fs_writestream(char* filename);
+void async_fs_writestream_write(async_fs_writestream* writestream, buffer* write_buffer, int num_bytes_to_write, void(*write_callback)(int));
+void async_fs_writestream_end(async_fs_writestream* ending_writestream);
+
 #endif
