@@ -42,7 +42,7 @@ void thread_pool_destroy(){
 event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(void*)){
     event_node* new_task_node = create_event_node(sizeof(task_block), NULL, NULL);
     task_block* task_block_ptr = (task_block*)new_task_node->data_ptr;
-    task_block_ptr->async_task_info = malloc(task_struct_size);
+    task_block_ptr->async_task_info = calloc(1, task_struct_size);
     task_block_ptr->task_handler = task_handler;
 
     return new_task_node;

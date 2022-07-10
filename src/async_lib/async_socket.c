@@ -1,11 +1,15 @@
 #include "async_socket.h"
 
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
 #include <pthread.h>
 #include <string.h>
 #include <stdio.h>
 
 #include "../event_loop.h"
 #include "../io_uring_ops.h"
+#include "../containers/thread_pool.h"
 
 typedef struct socket_info {
     async_socket* socket;
@@ -20,10 +24,107 @@ typedef struct buffer_data_callback {
     void(*curr_data_handler)(buffer*);
 } buffer_callback_t;
 
+typedef struct connection_handler_callback {
+    void(*connection_handler)(async_socket*, void*);
+    void* arg;
+} connection_callback_t;
+
 void socket_read_cb(int socket_fd, buffer* read_buffer, int num_bytes_read, void* socket_arg);
 int socket_event_checker(event_node* socket_event_node);
 void destroy_socket(event_node* socket_node);
 void async_send(async_socket* sending_socket, socket_buffer_info* send_buffer_info, void* cb_arg);
+
+//TODO: make create_socket function to condense code?
+
+#define MAX_IP_ADDR_LEN 50
+
+typedef struct connect_info {
+    async_socket* connecting_socket;
+    char ip_address[MAX_IP_ADDR_LEN];
+    int port;
+    int* is_done_ptr;
+    int* socket_fd_ptr;
+} async_connect_info;
+
+void connect_task_handler(void* connect_task_info){
+    async_connect_info* connect_info = (async_connect_info*)connect_task_info;
+
+    *connect_info->socket_fd_ptr = socket(AF_INET, SOCK_STREAM, 0);
+
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(connect_info->port);
+    server_address.sin_addr.s_addr = inet_addr(connect_info->ip_address);
+
+    /*int connection_status = */connect(*connect_info->socket_fd_ptr, (struct sockaddr*)(&server_address), sizeof(server_address));
+
+    *connect_info->is_done_ptr = 1;
+}
+
+void thread_connect_interm(event_node* connect_task_node){
+    thread_task_info* connect_data = (thread_task_info*)connect_task_node->data_ptr;
+    async_socket* connected_socket = connect_data->rw_socket;
+    //TODO: move value assignments further down?
+    connected_socket->socket_fd = connect_data->fd;
+    connected_socket->is_open = 1;
+
+    vector* connection_callback_vector_ptr = &connected_socket->connection_handler_vector;
+
+    for(int i = 0; i < vector_size(connection_callback_vector_ptr); i++){
+        connection_callback_t* curr_connection_cb_item = get_index(connection_callback_vector_ptr, i);
+        void* callback_arg = curr_connection_cb_item->arg;
+        void(*curr_connection_handler)(async_socket*, void*) = curr_connection_cb_item->connection_handler;
+        curr_connection_handler(connected_socket, callback_arg);
+    }
+
+    event_node* new_socket_node = create_event_node(sizeof(socket_info), destroy_socket, socket_event_checker);
+    socket_info* new_socket_info = (socket_info*)new_socket_node->data_ptr;
+    new_socket_info->socket = connected_socket;
+
+    epoll_add(
+        connected_socket->socket_fd, 
+        &connected_socket->data_available_to_read,
+        &connected_socket->peer_closed
+    );
+
+    enqueue_event(new_socket_node);
+}
+
+async_socket* async_connect(char* ip_address, int port, void(*connection_handler)(async_socket*, void*), void* connection_arg){
+    async_socket* new_socket = (async_socket*)calloc(1, sizeof(async_socket));
+
+    linked_list_init(&new_socket->send_stream);
+    pthread_mutex_init(&new_socket->send_stream_lock, NULL);
+    new_socket->receive_buffer = create_buffer(64 * 1024, sizeof(char));
+    vector_init(&new_socket->data_handler_vector, 5, 2);
+    vector_init(&new_socket->connection_handler_vector, 5, 2);
+
+    event_node* thread_connect_node = create_event_node(sizeof(thread_task_info), thread_connect_interm, is_thread_task_done);
+    thread_task_info* new_connect_task = (thread_task_info*)thread_connect_node->data_ptr;
+    new_connect_task->rw_socket = new_socket;
+
+    connection_callback_t* new_connection_handler = (connection_callback_t*)malloc(sizeof(connection_callback_t));
+    new_connection_handler->connection_handler = connection_handler;
+    new_connection_handler->arg = connection_arg;
+    vec_add_last(&new_socket->connection_handler_vector, new_connection_handler);
+
+    event_node* connect_task_node = create_task_node(sizeof(async_connect_info), connect_task_handler);
+    task_block* curr_task_block = (task_block*)connect_task_node->data_ptr;
+
+    async_connect_info* connect_task_params = (async_connect_info*)curr_task_block->async_task_info;
+    connect_task_params->connecting_socket = new_socket;
+
+    strncpy(connect_task_params->ip_address, ip_address, MAX_IP_ADDR_LEN);
+    connect_task_params->port = port;
+
+    connect_task_params->is_done_ptr = &new_connect_task->is_done;
+    connect_task_params->socket_fd_ptr = &new_connect_task->fd;
+
+    enqueue_event(thread_connect_node);
+    enqueue_task(connect_task_node);
+
+    return new_socket;
+}
 
 event_node* create_socket_node(int new_socket_fd){
     event_node* socket_event_node = create_event_node(sizeof(socket_info), destroy_socket, socket_event_checker);
@@ -43,6 +144,7 @@ event_node* create_socket_node(int new_socket_fd){
     new_socket->peer_closed = 0;
     linked_list_init(&new_socket->send_stream);
     vector_init(&new_socket->data_handler_vector, 5, 2);
+    vector_init(&new_socket->connection_handler_vector, 5, 2);
     pthread_mutex_init(&new_socket->send_stream_lock, NULL);
     //pthread_mutex_init(&new_socket->receive_lock, NULL);
 

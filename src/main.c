@@ -18,15 +18,18 @@ void listen_callback(){
 }
 
 void send_cb(async_socket* socket_ptr, void* cb_arg){
-    printf("done writing to client socket!\n");
+    printf("write data to socket\n");
+    
+    int max_num_bytes = 64 * 1024;
+    char stdin_buffer[max_num_bytes];
+    int num_bytes_read = read(STDIN_FILENO, stdin_buffer, max_num_bytes);
 
-    char end_str[] = "z\n";
-    int end_str_size = sizeof(end_str);
-    buffer* end_buffer = create_buffer(end_str_size, sizeof(char));
-    char* end_str_buff = (char*)get_internal_buffer(end_buffer);
-    memcpy(end_str_buff, end_str, end_str_size);
+    buffer* send_buffer = create_buffer(num_bytes_read, sizeof(char));
+    char* internal_dest_buffer = (char*)get_internal_buffer(send_buffer);
+    memcpy(internal_dest_buffer, stdin_buffer, num_bytes_read);
 
-    async_socket_write(socket_ptr, end_buffer, end_str_size, NULL);
+    async_socket_write(socket_ptr, send_buffer, num_bytes_read, send_cb);
+    destroy_buffer(send_buffer);
 }
 
 void data_handler(buffer* read_buffer){
@@ -43,7 +46,7 @@ buffer* file_copied_buffer;
 void connection_handler(async_socket* new_socket){
     printf("got a connection!\n");
 
-    char hello_str[] = "Queens College enjoys a national reputation for its liberal arts and sciences and preprofessional programs.";
+    char hello_str[] = "hi there";
     int hello_str_len = sizeof(hello_str);
 
     buffer* new_buffer = create_buffer(hello_str_len, sizeof(char));
@@ -56,10 +59,37 @@ void connection_handler(async_socket* new_socket){
 
 #define MAX_BYTES_TO_READ 10000
 
+void connection_done_handler(async_socket* socket, void* arg){
+    printf("connection done\n");
+    char item[] = "mary had a little lamb as white as snow\n";
+    int item_size = sizeof(item);
+    buffer* new_buffer = create_buffer(item_size, sizeof(char));
+    char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
+    memcpy(str_internal_buffer, item, item_size);
+    async_socket_write(socket, new_buffer, item_size, send_cb);
+}
+
 int main(int argc, char* argv[]){
     asynC_init();
 
-    char* second_filename = argv[2];
+    async_connect("127.0.0.1", 3000, connection_done_handler, NULL);
+
+    asynC_cleanup();
+
+    return 0;
+}
+
+    /* from send_cb
+    char end_str[] = "z\n";
+    int end_str_size = sizeof(end_str);
+    buffer* end_buffer = create_buffer(end_str_size, sizeof(char));
+    char* end_str_buff = (char*)get_internal_buffer(end_buffer);
+    memcpy(end_str_buff, end_str, end_str_size);
+
+    async_socket_write(socket_ptr, end_buffer, end_str_size, NULL);
+    */
+
+/*char* second_filename = argv[2];
     printf("%s\n", second_filename);
     //async_open(argv[1], O_RDONLY, 0644, open_cb, NULL);
 
@@ -78,9 +108,6 @@ int main(int argc, char* argv[]){
 
     async_server* new_server = async_create_server();
     async_server_listen(new_server, port, "127.0.0.1", listen_callback);
-    async_server_on_connection(new_server, connection_handler);
+    async_server_on_connection(new_server, connection_handler);*/
 
-    asynC_cleanup();
-
-    return 0;
-}
+    /*async_socket* new_socket = */

@@ -6,9 +6,12 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 
+#include <time.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 
 #define RESPONSE_BUFFER_SIZE 10000
 #define READ_FILE_BUFF 3000
@@ -25,18 +28,39 @@ int main(int argc, char* argv[]){
 
     //int num_connections = atoi(argv[1]);
 
-    int network_socket = socket(AF_INET, SOCK_STREAM, 0);
+    clock_t before = clock();
+    int network_socket = socket(AF_INET, SOCK_NONBLOCK | SOCK_STREAM, 0);
+    clock_t after = clock();
+
+    printf("time passed is %ld\n", after - before);
 
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(3000);
     server_address.sin_addr.s_addr = inet_addr("127.0.0.1");
 
+    if(errno == EINPROGRESS){
+        printf("in progress?");
+    }
+    else{
+        printf("not in progress?\n");
+    }
+
+    before = clock();
     int connection_status = connect(network_socket, (struct sockaddr*)(&server_address), sizeof(server_address));
+    after = clock();
+
+    printf("time passed is %ld\n", after - before);
+
+    int count = 0;
     if(connection_status == -1){
         perror("connect()");
-        return 1;
+        while(errno == EINPROGRESS){
+            count++;
+        }
     }
+
+    printf("my count is %d\n", count);
 
     int epoll_fd = epoll_create1(0);
 
