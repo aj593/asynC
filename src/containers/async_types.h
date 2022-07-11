@@ -4,7 +4,7 @@
 #ifndef GROUPED_FS_CBS
 #define GROUPED_FS_CBS
 
-#include "../async_lib/async_socket.h"
+#include "../async_lib/async_tcp_socket.h"
 
 #ifndef C_VECTOR
 #define C_VECTOR

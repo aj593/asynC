@@ -1,4 +1,4 @@
-#include "async_socket.h"
+#include "async_tcp_socket.h"
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -21,7 +21,7 @@ typedef struct socket_send_buffer {
 } socket_buffer_info;
 
 typedef struct buffer_data_callback {
-    void(*curr_data_handler)(buffer*);
+    void(*curr_data_handler)(async_socket*, buffer*);
 } buffer_callback_t;
 
 typedef struct connection_handler_callback {
@@ -203,7 +203,7 @@ void destroy_socket(event_node* socket_node){
 }
 
 //TODO: error handle if fcn ptr in second param is NULL?
-void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(buffer*)){
+void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*)){
     buffer_callback_t* new_data_handler_item = (buffer_callback_t*)malloc(sizeof(buffer_callback_t));
     new_data_handler_item->curr_data_handler = new_data_handler;
 
@@ -230,8 +230,8 @@ void uring_recv_interm(event_node* uring_recv_node){
         void* internal_source_buffer = get_internal_buffer(reading_socket->receive_buffer);
         memcpy(internal_destination_buffer, internal_source_buffer, recv_uring_info->return_val);
 
-        void(*curr_data_handler)(buffer*) = ((buffer_callback_t*)get_index(data_handler_vector_ptr, i))->curr_data_handler;
-        curr_data_handler(buffer_copy);
+        void(*curr_data_handler)(async_socket*, buffer*) = ((buffer_callback_t*)get_index(data_handler_vector_ptr, i))->curr_data_handler;
+        curr_data_handler(reading_socket, buffer_copy);
     }
 }
 

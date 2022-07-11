@@ -11,7 +11,7 @@
 //typedef struct socket_channel async_socket;
 event_node* create_socket_node(int new_socket_fd);
 void async_socket_write(async_socket* writing_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_socket*, void*));
-void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(buffer*));
+void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*));
 async_socket* async_connect(char* ip_address, int port, void(*connection_handler)(async_socket*, void*), void* connection_arg);
 
 #endif

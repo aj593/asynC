@@ -12,13 +12,7 @@
 
 //void hi_handler(event_emitter* emitter, )
 
-int port = 3000;
-
-void listen_callback(){
-    printf("listening on port %d\n", port);
-}
-
-void data_handler(buffer* read_buffer){
+void data_handler(async_socket* socket, buffer* read_buffer){
     printf("buffer is %ld bytes long\n", get_buffer_capacity(read_buffer));
     /*void* char_buff = get_internal_buffer(read_buffer);
 
@@ -77,22 +71,66 @@ void connection_done_handler(async_socket* socket, void* arg){
     }
 }
 
+void write_callback(async_socket* written_socket, int num){
+    printf("done writing\n");
+}
+
+int port = 3000;
+
+void listen_callback(){
+    printf("listening on port %d\n", port);
+}
+
+void chat_data_handler(async_socket*, buffer* chat_data);
+
+#define max_num_sockets 10
+async_socket* socket_array[max_num_sockets];
+int curr_num_sockets = 0;
+
+void chat_connection_handler(async_socket* new_socket){
+    printf("got new connection!\n");
+    socket_array[curr_num_sockets++] = new_socket;
+    async_socket_on_data(new_socket, chat_data_handler);
+}
+
+void chat_data_handler(async_socket* reading_socket, buffer* chat_data){
+    for(int i = 0; i < curr_num_sockets; i++){
+        if(socket_array[i] != reading_socket){
+            async_socket_write(
+                socket_array[i], 
+                chat_data, 
+                get_buffer_capacity(chat_data),
+                NULL
+            );
+        }
+        
+    }
+}
+
 int main(int argc, char* argv[]){
     asynC_init();
-    
-    //char* IP_address = "93.184.216.34"; //"51.38.81.49";
-    int port = 80;
-    
-    for(int i = 0; i < 20; i++){
-        async_connect("93.184.216.34", port, connection_done_handler, NULL);
-    }
-    
-    //async_connect("51.38.81.49", port, connection_done_handler, NULL);
+
+    async_server* new_server = async_create_server();
+    async_server_listen(new_server, port, "127.0.0.1", listen_callback);
+    async_server_on_connection(new_server, chat_connection_handler);
 
     asynC_cleanup();
 
     return 0;
 }
+
+    /*
+    int read_fd = open(argv[2], O_RDONLY);
+    if(read_fd == -1){
+        perror("open()");
+    }
+    char read_bytes[MAX_BYTES_TO_READ];
+    int num_bytes_read = read(read_fd, read_bytes, MAX_BYTES_TO_READ);
+    file_copied_buffer = create_buffer(num_bytes_read, sizeof(char));
+    char* char_buffer = get_internal_buffer(file_copied_buffer);
+    memcpy(char_buffer, read_bytes, num_bytes_read);
+    */
+
 
     /* from send_cb
     char end_str[] = "z\n";
@@ -111,18 +149,25 @@ int main(int argc, char* argv[]){
     //event_emitter* emitter = create_emitter(NULL);
     //subscribe(emitter, "hi", hi_handler);
     
-    int read_fd = open(argv[2], O_RDONLY);
-    if(read_fd == -1){
-        perror("open()");
-    }
-    char read_bytes[MAX_BYTES_TO_READ];
-    int num_bytes_read = read(read_fd, read_bytes, MAX_BYTES_TO_READ);
-    file_copied_buffer = create_buffer(num_bytes_read, sizeof(char));
-    char* char_buffer = get_internal_buffer(file_copied_buffer);
-    memcpy(char_buffer, read_bytes, num_bytes_read);
-
-    async_server* new_server = async_create_server();
-    async_server_listen(new_server, port, "127.0.0.1", listen_callback);
-    async_server_on_connection(new_server, connection_handler);*/
+    */
 
     /*async_socket* new_socket = */
+
+    /*for(int i = 0; i < 20; i++){
+        async_connect("93.184.216.34", 80, connection_done_handler, NULL);
+    }*/
+
+    /*
+    char item[] = "mary had a little lamb as white as snow\n";
+    int item_size = sizeof(item);
+    buffer* new_buffer = create_buffer(item_size, sizeof(char));
+    char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
+    memcpy(str_internal_buffer, item, item_size);
+
+    async_fs_writestream* writestream = create_fs_writestream("writestream_test.txt");
+    async_fs_writestream_write(writestream, new_buffer, item_size, write_callback);
+    destroy_buffer(new_buffer);
+    async_fs_writestream_end(writestream);
+    */
+    
+    //async_connect("51.38.81.49", port, connection_done_handler, NULL);

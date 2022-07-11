@@ -313,7 +313,7 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, v
         write_uring_data->buffer = write_buff_ptr;
         write_uring_data->fs_cb.write_callback = write_callback;
         write_uring_data->cb_arg = cb_arg;
-        enqueue_event(write_uring_node);
+        defer_enqueue_event(write_uring_node);
 
         io_uring_prep_write(
             write_sqe, 
@@ -338,7 +338,7 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, v
         new_write_task->fs_cb.write_callback = write_callback;
         new_write_task->cb_arg = cb_arg;
 
-        enqueue_event(write_node);
+        defer_enqueue_event(write_node);
 
         event_node* task_node = create_task_node(sizeof(async_write_info), write_task_handler);
         task_block* curr_task_block = (task_block*)task_node->data_ptr;
@@ -649,6 +649,7 @@ int is_writestream_done(event_node* writestream_node){
         //TODO: make async_write() call here and remove item from writestream buffer?
         event_node* writestream_buffer_node = remove_first(&writestream->buffer_stream_list);
         writestream_buffer_item* removed_buffer_item = (writestream_buffer_item*)writestream_buffer_node->data_ptr;
+        removed_buffer_item->writestream = writestream;
         buffer* buffer_to_write = removed_buffer_item->writing_buffer;
 
         async_write(

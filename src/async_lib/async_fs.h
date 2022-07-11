@@ -6,8 +6,8 @@
 
 //#include "../async_types/callback_arg.h"
 #include "../async_types/buffer.h"
-#include "server.h"
-#include "../async_lib/async_socket.h"
+#include "async_tcp_server.h"
+#include "../async_lib/async_tcp_socket.h"
 #include "../containers/linked_list.h"
 #include "../containers/c_vector.h"
 #include "../containers/async_types.h"
