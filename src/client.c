@@ -133,8 +133,9 @@ void* chat_input(void* arg){
 
     while(1){
         int num_bytes_read = read(STDIN_FILENO, stdin_buffer, max_num_bytes);
-
-        if(strncmp(stdin_buffer, "exit", max_num_bytes) == 0){
+        
+        if(strncmp(stdin_buffer, "exit", num_bytes_read - 1) == 0){
+            async_tcp_socket_end(new_socket);
             break;
         }
 

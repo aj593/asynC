@@ -87,10 +87,15 @@ void chat_data_handler(async_socket*, buffer* chat_data);
 async_socket* socket_array[max_num_sockets];
 int curr_num_sockets = 0;
 
+void socket_end_callback(int shutdown_return_val){
+    printf("socket closed with return value %d\n", shutdown_return_val);
+}
+
 void chat_connection_handler(async_socket* new_socket){
     printf("got new connection!\n");
     socket_array[curr_num_sockets++] = new_socket;
     async_socket_on_data(new_socket, chat_data_handler);
+    async_tcp_socket_on_end(new_socket, socket_end_callback);
 }
 
 void chat_data_handler(async_socket* reading_socket, buffer* chat_data){

@@ -55,6 +55,8 @@ typedef struct socket_channel {
     linked_list send_stream;
     atomic_int is_reading;
     atomic_int is_writing;
+    int is_readable;
+    int is_writable;
     pthread_mutex_t send_stream_lock;
     buffer* receive_buffer;
     //int has_event_arr[2];
@@ -64,6 +66,7 @@ typedef struct socket_channel {
     //int able_to_write;
     vector data_handler_vector; //TODO: make other vectors for other event handlers
     vector connection_handler_vector;
+    vector shutdown_vector;
 } async_socket;
 
 #endif
@@ -77,6 +80,7 @@ typedef union fs_cbs {
     void(*close_callback)(int, void*);
     void(*send_callback)(async_socket*, void*);
     //void(*connect_callback)(async_socket*, void*);
+    //void(*shutdown_callback)(int);
 } grouped_fs_cbs;
 
 #endif
