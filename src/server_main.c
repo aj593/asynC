@@ -87,7 +87,18 @@ void chat_data_handler(async_socket*, buffer* chat_data);
 async_socket* socket_array[max_num_sockets];
 int curr_num_sockets = 0;
 
-void socket_end_callback(int shutdown_return_val){
+void socket_end_callback(async_socket* closed_socket, int shutdown_return_val){
+    for(int i = 0; i < curr_num_sockets; i++){
+        if(socket_array[i] == closed_socket){
+            for(int j = i; j < curr_num_sockets - 1; j++){
+                socket_array[j] = socket_array[j + 1];
+            }
+            curr_num_sockets--;
+
+            break;
+        }
+    }
+
     printf("socket closed with return value %d\n", shutdown_return_val);
 }
 
@@ -99,6 +110,9 @@ void chat_connection_handler(async_socket* new_socket){
 }
 
 void chat_data_handler(async_socket* reading_socket, buffer* chat_data){
+    char* internal_buffer = (char*)get_internal_buffer(chat_data);
+    write(STDOUT_FILENO, internal_buffer, get_buffer_capacity(chat_data));
+
     for(int i = 0; i < curr_num_sockets; i++){
         if(socket_array[i] != reading_socket){
             async_socket_write(

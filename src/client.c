@@ -20,10 +20,10 @@ void listen_callback(){
 }
 
 void data_handler(async_socket* socket, buffer* read_buffer){
-    printf("buffer is %ld bytes long\n", get_buffer_capacity(read_buffer));
-    /*void* char_buff = get_internal_buffer(read_buffer);
+    //printf("buffer is %ld bytes long\n", get_buffer_capacity(read_buffer));
+    void* char_buff = get_internal_buffer(read_buffer);
 
-    write(STDOUT_FILENO, char_buff, get_buffer_capacity(read_buffer));*/
+    write(STDOUT_FILENO, char_buff, get_buffer_capacity(read_buffer));
     //write(STDOUT_FILENO, " ", 1);
 
     destroy_buffer(read_buffer);
@@ -150,6 +150,9 @@ void* chat_input(void* arg){
             NULL
         );
 
+        async_tcp_socket_end(new_socket);
+        break;
+
         destroy_buffer(send_buffer);
     }
 
@@ -163,9 +166,11 @@ int main(int argc, char* argv[]){
     pthread_t thread_id;
     pthread_create(&thread_id, NULL, chat_input, new_socket);
 
+    async_connect("93.184.216.34", 80, connection_done_handler, NULL);
+
     asynC_cleanup();
 
-    pthread_join(thread_id, NULL);
+    //pthread_join(thread_id, NULL);
 
     return 0;
 }

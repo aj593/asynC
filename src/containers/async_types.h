@@ -57,6 +57,7 @@ typedef struct socket_channel {
     atomic_int is_writing;
     int is_readable;
     int is_writable;
+    int closed_self;
     pthread_mutex_t send_stream_lock;
     buffer* receive_buffer;
     //int has_event_arr[2];

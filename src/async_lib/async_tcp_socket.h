@@ -14,7 +14,7 @@ void async_socket_write(async_socket* writing_socket, buffer* buffer_to_write, i
 void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*));
 async_socket* async_connect(char* ip_address, int port, void(*connection_handler)(async_socket*, void*), void* connection_arg);
 
-void async_tcp_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(int));
+void async_tcp_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int));
 void async_tcp_socket_end(async_socket* ending_socket);
 
 #endif

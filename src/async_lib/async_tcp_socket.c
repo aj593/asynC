@@ -37,8 +37,8 @@ void async_send(async_socket* sending_socket);
 //TODO: make create_socket function to condense code?
 
 #define MAX_IP_ADDR_LEN 50
-#define DEFAULT_SEND_BUFFER_SIZE 64 * 1024
-#define DEFAULT_RECV_BUFFER_SIZE 64 * 1024
+#define DEFAULT_SEND_BUFFER_SIZE 1 //64 * 1024
+#define DEFAULT_RECV_BUFFER_SIZE 1 //64 * 1024
 
 typedef struct connect_info {
     async_socket* connecting_socket;
@@ -76,6 +76,7 @@ void thread_connect_interm(event_node* connect_task_node){
     connected_socket->is_open = 1;
     connected_socket->is_readable = 1;
     connected_socket->is_writable = 1;
+    connected_socket->closed_self = 0;
 
     vector* connection_callback_vector_ptr = &connected_socket->connection_handler_vector;
 
@@ -151,6 +152,7 @@ event_node* create_socket_node(int new_socket_fd){
     new_socket->is_open = 1;
     new_socket->is_readable = 1;
     new_socket->is_writable = 1;
+    new_socket->closed_self = 0;
     new_socket->receive_buffer = create_buffer(DEFAULT_RECV_BUFFER_SIZE, sizeof(char));
     new_socket->is_reading = 0;
     new_socket->is_writing = 0;
@@ -173,10 +175,10 @@ event_node* create_socket_node(int new_socket_fd){
 }
 
 typedef struct socket_shutdown_cb_holder {
-    void(*socket_end_callback)(int);
+    void(*socket_end_callback)(async_socket*, int);
 } socket_shutdown_callback_t;
 
-void async_tcp_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(int)){
+void async_tcp_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int)){
     socket_shutdown_callback_t* new_shutdown_callback = (socket_shutdown_callback_t*)malloc(sizeof(socket_shutdown_callback_t));
     new_shutdown_callback->socket_end_callback = socket_end_callback;
 
@@ -186,6 +188,7 @@ void async_tcp_socket_on_end(async_socket* ending_socket, void(*socket_end_callb
 
 void async_tcp_socket_end(async_socket* ending_socket){
     ending_socket->is_writable = 0;
+    ending_socket->closed_self = 1;
 }
 
 void uring_shutdown_interm(event_node* shutdown_uring_node){
@@ -195,12 +198,32 @@ void uring_shutdown_interm(event_node* shutdown_uring_node){
     vector* shutdown_vector = &closed_socket->shutdown_vector;
     for(int i = 0; i < vector_size(shutdown_vector); i++){
         socket_shutdown_callback_t* curr_shutdown_cb_item = (socket_shutdown_callback_t*)get_index(shutdown_vector, i);
-        void(*curr_end_callback)(int) = curr_shutdown_cb_item->socket_end_callback;
-        curr_end_callback(shutdown_uring_info->return_val);
+        void(*curr_end_callback)(async_socket*, int) = curr_shutdown_cb_item->socket_end_callback;
+        curr_end_callback(closed_socket, shutdown_uring_info->return_val);
         free(curr_shutdown_cb_item);
     }
 
+    destroy_buffer(closed_socket->receive_buffer);
+    for(int i = vector_size(&closed_socket->data_handler_vector) - 1; i >= 0; i--){
+        //TODO: call remove_last for vector also?
+        free(get_index(&closed_socket->data_handler_vector, i));
+    }
+
+    destroy_vector(&closed_socket->data_handler_vector);
+    
+    while(closed_socket->send_stream.size > 0){
+        event_node* curr_removed = remove_first(&closed_socket->send_stream);
+
+        socket_buffer_info* curr_buffer_info = (socket_buffer_info*)curr_removed->data_ptr;
+        destroy_buffer(curr_buffer_info->buffer_data);
+
+        destroy_event_node(curr_removed);
+    }
+
+    pthread_mutex_destroy(&closed_socket->send_stream_lock);
+
     destroy_vector(shutdown_vector);
+
     free(closed_socket);
 }
 
@@ -238,25 +261,6 @@ void async_shutdown(async_socket* closing_socket){
 void destroy_socket(event_node* socket_node){
     socket_info* destroyed_socket_info = (socket_info*)socket_node->data_ptr;
     async_socket* socket_ptr = destroyed_socket_info->socket;
-    
-    destroy_buffer(socket_ptr->receive_buffer);
-    for(int i = vector_size(&socket_ptr->data_handler_vector) - 1; i >= 0; i--){
-        //TODO: call remove_last for vector also?
-        free(get_index(&socket_ptr->data_handler_vector, i));
-    }
-
-    destroy_vector(&socket_ptr->data_handler_vector);
-    
-    while(socket_ptr->send_stream.size > 0){
-        event_node* curr_removed = remove_first(&socket_ptr->send_stream);
-
-        socket_buffer_info* curr_buffer_info = (socket_buffer_info*)curr_removed->data_ptr;
-        destroy_buffer(curr_buffer_info->buffer_data);
-
-        destroy_event_node(curr_removed);
-    }
-
-    pthread_mutex_destroy(&socket_ptr->send_stream_lock);
 
     epoll_remove(socket_ptr->socket_fd);
 
@@ -279,6 +283,7 @@ void uring_recv_interm(event_node* uring_recv_node){
     recv_uring_info->rw_socket->is_reading = 0;
     recv_uring_info->rw_socket->data_available_to_read = 0;
 
+    //TODO: don't need this if-statement here because socket event checker takes care of this case?
     if(reading_socket->peer_closed && recv_uring_info->return_val == 0){
         reading_socket->is_open = 0; //TODO: make extra field member in async_socket struct "is_no_longer_reading" instead of this?
         return;
@@ -336,13 +341,24 @@ int socket_event_checker(event_node* socket_event_node){
     socket_info* checked_socket_info = (socket_info*)socket_event_node->data_ptr;
     async_socket* checked_socket = checked_socket_info->socket;
 
-    /*
     //TODO: use this to check if peer is closed, set socket to no longer be writable?
-    if(checked_socket->peer_closed && !checked_socket->data_available_to_read){
-        checked_socket->is_open = 0;
-        //TODO: close/destroy socket here?
+    if(checked_socket->peer_closed){
+        checked_socket->is_writable = 0;
+
+        //TODO: need this here?
+        if(!checked_socket->data_available_to_read){
+            checked_socket->is_open = 0;
+        }
     }
-    */
+
+    if(
+        !checked_socket->is_writable && 
+        !checked_socket->is_writing && 
+        checked_socket->send_stream.size == 0 &&
+        checked_socket->closed_self
+    ){
+        checked_socket->is_open = 0;
+    }
 
     if(checked_socket->data_available_to_read && !checked_socket->is_reading && checked_socket->is_open){
         async_recv(checked_socket);
@@ -366,12 +382,7 @@ void uring_send_interm(event_node* send_event_node){
     void (*send_callback)(async_socket*, void*) = uring_info->fs_cb.send_callback;
     if(send_callback != NULL){
         //int success = uring_info->return_val;
-
         send_callback(uring_info->rw_socket, uring_info->cb_arg);
-    }
-
-    if(!written_socket->is_writable && written_socket->send_stream.size == 0){
-        written_socket->is_open = 0;
     }
 }
 
