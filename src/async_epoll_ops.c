@@ -31,10 +31,14 @@ void epoll_add(int op_fd, int* able_to_read_ptr, int* peer_closed_ptr){
     char fd_str[max_str_len];
     int str_len = snprintf(fd_str, max_str_len, "%dR", op_fd);
 
-    ht_set(epoll_hash_table, fd_str, able_to_read_ptr);
+    if(able_to_read_ptr != NULL){
+        ht_set(epoll_hash_table, fd_str, able_to_read_ptr);
+    }
 
-    fd_str[str_len - 1] = 'P';
-    ht_set(epoll_hash_table, fd_str, peer_closed_ptr);
+    if(peer_closed_ptr != NULL){
+        fd_str[str_len - 1] = 'P';
+        ht_set(epoll_hash_table, fd_str, peer_closed_ptr);
+    } 
 }
 
 void epoll_remove(int op_fd){

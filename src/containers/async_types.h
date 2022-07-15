@@ -5,6 +5,7 @@
 #define GROUPED_FS_CBS
 
 #include "../async_lib/async_tcp_socket.h"
+#include "../containers/hash_table.h"
 
 #ifndef C_VECTOR
 #define C_VECTOR
@@ -46,6 +47,24 @@ typedef struct linked_list {
 
 #endif
 
+#ifndef ASYNC_SERVER_TYPE
+#define ASYNC_SERVER_TYPE
+
+typedef struct server_type {
+    int listening_socket;
+    //int has_event_arr[2];
+    int has_connection_waiting;
+    //int dummy_int;
+    int is_listening;
+    int is_currently_accepting;
+    //hash_table* socket_table;
+    int num_connections;
+    vector listeners_vector;
+    vector connection_vector;
+} async_server;
+
+#endif
+
 #ifndef ASYNC_SOCKET_TYPE
 #define ASYNC_SOCKET_TYPE
 
@@ -63,6 +82,8 @@ typedef struct socket_channel {
     //int has_event_arr[2];
     int data_available_to_read;
     int peer_closed;
+    int shutdown_flags;
+    async_server* server_ptr;
     //pthread_mutex_t receive_lock;
     //int able_to_write;
     vector data_handler_vector; //TODO: make other vectors for other event handlers
@@ -83,22 +104,6 @@ typedef union fs_cbs {
     //void(*connect_callback)(async_socket*, void*);
     //void(*shutdown_callback)(int);
 } grouped_fs_cbs;
-
-#endif
-
-#ifndef ASYNC_SERVER_TYPE
-#define ASYNC_SERVER_TYPE
-
-typedef struct server_type {
-    int listening_socket;
-    //int has_event_arr[2];
-    int has_connection_waiting;
-    //int dummy_int;
-    int is_listening;
-    int is_currently_accepting;
-    vector listeners_vector;
-    vector connection_vector;
-} async_server;
 
 #endif
 

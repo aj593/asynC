@@ -22,14 +22,16 @@ int main(int argc, char* argv[]){
         return 1;
     }*/
 
+    /*
     int read_fd = open("IO_files/output/output.txt", O_RDONLY);
-    char str_compare[READ_FILE_BUFF];
+    char [READ_FILE_BUFF];
     int file_bytes_read = read(read_fd, str_compare, READ_FILE_BUFF);
+    */
 
     //int num_connections = atoi(argv[1]);
 
     clock_t before = clock();
-    int network_socket = socket(AF_INET, SOCK_NONBLOCK | SOCK_STREAM, 0);
+    int network_socket = socket(AF_INET, /*SOCK_NONBLOCK |*/ SOCK_STREAM, 0);
     clock_t after = clock();
 
     printf("time passed is %ld\n", after - before);
@@ -66,12 +68,12 @@ int main(int argc, char* argv[]){
 
     struct epoll_event new_event;
     new_event.data.fd = network_socket;
-    new_event.events = EPOLLRDHUP | EPOLLIN;
+    new_event.events = EPOLLRDHUP | EPOLLIN | EPOLLHUP | EPOLLET;
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, network_socket, &new_event);
 
     char response_buffer[RESPONSE_BUFFER_SIZE];
 
-    int total_socket_bytes_read = 0;
+    //int total_socket_bytes_read = 0;
 
     char stdin_buffer[RESPONSE_BUFFER_SIZE];
 
@@ -80,13 +82,17 @@ int main(int argc, char* argv[]){
     while(1){
         int num_fds = epoll_wait(epoll_fd, &single_event, 1, 0);
         if(num_fds > 0){
-            printf("got something on epoll, my event is ");
+            printf("got something on epoll, my event(s) are: ");
             if(single_event.events & EPOLLRDHUP){
-                printf("peer closed\n");
-                break;
+                printf("EPOLLRDHUP\n");
+                //break;
+            }
+            if(single_event.events & EPOLLHUP){
+                printf("EPOLLHUP\n");
+                //break;
             }
             if(single_event.events & EPOLLIN){
-                printf("received data\n");
+                printf("EPOLLIN\n");
                 int num_bytes_read = recv(network_socket, response_buffer, RESPONSE_BUFFER_SIZE, 0);
                 write(STDOUT_FILENO, response_buffer, num_bytes_read);
             }
@@ -103,7 +109,7 @@ int main(int argc, char* argv[]){
             perror("send()");
             break;
         }
-        
+        //shutdown(network_socket, SHUT_RD);
     }
 
     /*for(int i = 0; i < num_connections; i++){
@@ -114,7 +120,7 @@ int main(int argc, char* argv[]){
         }
         else if(curr_pid == 0){
             
-                /*int socket_bytes_read = recv(network_socket, response_buffer + total_socket_bytes_read, RESPONSE_BUFFER_SIZE, 0);
+                int socket_bytes_read = recv(network_socket, response_buffer + total_socket_bytes_read, RESPONSE_BUFFER_SIZE, 0);
                 write(STDOUT_FILENO, response_buffer + total_socket_bytes_read, socket_bytes_read);
                 total_socket_bytes_read += socket_bytes_read;
                 //printf("current bytes read = %d, total bytes read = %d\n", socket_bytes_read, total_socket_bytes_read);
@@ -124,7 +130,7 @@ int main(int argc, char* argv[]){
                 }
             } 
 
-            /*if(strncmp(response_buffer, str_compare, file_bytes_read) == 0){
+            if(strncmp(response_buffer, str_compare, file_bytes_read) == 0){
                 printf("\nstrings are the same!\n");
             }
             else {

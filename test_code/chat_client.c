@@ -9,7 +9,7 @@
 #include <netdb.h>
 #include <pthread.h>
 
-#include "asynC.h"
+#include "../src/asynC.h"
 
 //void hi_handler(event_emitter* emitter, )
 
@@ -47,6 +47,10 @@ void connection_handler(async_socket* new_socket){
 
 #define MAX_BYTES_TO_READ 10000
 
+void http_on_end(async_socket* closing_socket, int num){
+    printf("http response complete!\n");
+}
+
 void connection_done_handler(async_socket* socket, void* arg){
     if(socket->socket_fd == -1){
         printf("connection failed\n");
@@ -60,6 +64,7 @@ void connection_done_handler(async_socket* socket, void* arg){
         memcpy(str_internal_buffer, item, item_size);
         async_socket_on_data(socket, data_handler);
         async_socket_write(socket, new_buffer, item_size, NULL);
+        async_tcp_socket_on_end(socket, http_on_end);
     }
 }
 
@@ -163,14 +168,15 @@ int main(int argc, char* argv[]){
     asynC_init();
 
     async_socket* new_socket = async_connect("127.0.0.1", 3000, chat_connection_handler, NULL);
+    
     pthread_t thread_id;
     pthread_create(&thread_id, NULL, chat_input, new_socket);
-
-    async_connect("93.184.216.34", 80, connection_done_handler, NULL);
+    
+    //async_connect("93.184.216.34", 80, connection_done_handler, NULL);
 
     asynC_cleanup();
 
-    //pthread_join(thread_id, NULL);
+    pthread_join(thread_id, NULL);
 
     return 0;
 }

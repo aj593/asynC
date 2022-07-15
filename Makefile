@@ -3,11 +3,31 @@ CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic
 
 #pending output rules:  
 
-client: buffer.o c_vector.o client.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o
-	gcc obj/buffer.o obj/c_vector.o obj/client.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o -o exec/client $(CFLAGS)
+client: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o chat_client.o
+	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/chat_client.o -o exec/chat_client $(CFLAGS)
 
-server: buffer.o c_vector.o server_main.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o
-	gcc obj/buffer.o obj/c_vector.o obj/server_main.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o -o exec/server_main $(CFLAGS)
+server: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o chat_server.o
+	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/chat_server.o -o exec/chat_server $(CFLAGS)
+
+fs_writestream: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o writestream_test.o
+	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/writestream_test.o -o exec/writestream_test $(CFLAGS)
+
+server_listen: test_code/server_listen.c
+	gcc test_code/server_listen.c -o exec/server_listen $(CFLAGS)
+
+simple_client_tester: test_code/simple_client_tester.c
+	gcc test_code/simple_client_tester.c -o exec/simple_client_tester $(CFLAGS)
+
+#src/client.c
+chat_client.o: test_code/chat_client.c
+	gcc -c test_code/chat_client.c -o obj/chat_client.o $(CFLAGS)
+
+#src/server.c
+chat_server.o: test_code/chat_server.c
+	gcc -c test_code/chat_server.c -o obj/chat_server.o $(CFLAGS)
+
+writestream_test.o: test_code/writestream_test.c
+	gcc -c test_code/writestream_test.c -o obj/writestream_test.o $(CFLAGS)
 
 async_fs.o: src/async_lib/async_fs.c src/async_lib/async_fs.h
 	gcc -c src/async_lib/async_fs.c -o obj/async_fs.o $(CFLAGS)
@@ -52,14 +72,6 @@ async_epoll_ops.o: src/async_epoll_ops.c src/async_epoll_ops.h
 #src/event_loop.c
 event_loop.o: src/event_loop.c src/event_loop.h
 	gcc -c src/event_loop.c -o obj/event_loop.o $(CFLAGS)
-
-#src/client.c
-client.o: src/client.c
-	gcc -c src/client.c -o obj/client.o $(CFLAGS)
-
-#src/server.c
-server_main.o: src/server_main.c
-	gcc -c src/server_main.c -o obj/server_main.o $(CFLAGS)
 
 clean:
 	rm obj/*.o

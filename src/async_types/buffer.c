@@ -35,6 +35,44 @@ size_t get_buffer_capacity(buffer* buff_ptr){
     return buff_ptr->capacity;
 }
 
+//TODO: test the following 3 functions
+buffer* buffer_from_array(void* array_to_copy, size_t array_len){
+    buffer* new_array_buffer = create_buffer(array_len, sizeof(char));
+    void* destination_internal_buffer = get_internal_buffer(new_array_buffer);
+    memcpy(destination_internal_buffer, array_to_copy, array_len);
+
+    return new_array_buffer;
+}
+
+buffer* buffer_copy(buffer* buffer_to_copy){
+    size_t num_bytes_to_copy = get_buffer_capacity(buffer_to_copy);
+    buffer* copied_buffer = create_buffer(num_bytes_to_copy, sizeof(char));
+    void* destination_internal_buffer = get_internal_buffer(copied_buffer);
+    void* source_internal_buffer = get_internal_buffer(buffer_to_copy);
+    memcpy(destination_internal_buffer, source_internal_buffer, num_bytes_to_copy);
+
+    return copied_buffer;
+}
+
+buffer* buffer_concat(buffer* buffer_array[], int num_buffers){
+    size_t total_capacity = 0;
+    for(int i = 0; i < num_buffers; i++){
+        total_capacity += get_buffer_capacity(buffer_array[i]);
+    }
+
+    buffer* new_concat_buffer = create_buffer(total_capacity, sizeof(char));
+    char* internal_concat_buffer = (char*)get_internal_buffer(new_concat_buffer);
+
+    for(int i = 0; i < num_buffers; i++){
+        size_t curr_buff_capacity = get_buffer_capacity(buffer_array[i]);
+        void* source_internal_buffer = get_internal_buffer(buffer_array[i]);
+        memcpy(internal_concat_buffer, source_internal_buffer, curr_buff_capacity);
+        internal_concat_buffer += curr_buff_capacity;
+    }
+
+    return new_concat_buffer;
+}
+
 /*size_t get_buffer_size(buffer* buff_ptr){
     return buff_ptr->size;
 }

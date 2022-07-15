@@ -51,12 +51,41 @@ async_server* async_create_server(){
     async_server* new_server = (async_server*)calloc(1, sizeof(async_server));
     vector_init(&new_server->listeners_vector, 5, 2);
     vector_init(&new_server->connection_vector, 5, 2);
+    //new_server->socket_table = ht_create();
 
     return new_server;
 }
 
-void destroy_server(){
+void closing_server_callback(int result_val, void* cb_arg){
+    //TODO: need to do anything here?
+    //TODO: make int field for server that shows that listening fd was properly closed?
+}
 
+void async_server_close(async_server* closing_server){
+    closing_server->is_listening = 0;
+
+    epoll_remove(closing_server->listening_socket);
+
+    //TODO: make async call to close listening file descriptor for server
+    async_close(closing_server->listening_socket, closing_server_callback, NULL);
+}
+
+void destroy_server(event_node* server_node){
+    server_info* destroying_server_info = (server_info*)server_node->data_ptr;
+    async_server* destroying_server = destroying_server_info->listening_server;
+    //TODO: do other cleanups? remove items from each vector?
+    
+    vector* destroying_connection_vector = &destroying_server->connection_vector;
+    for(int i = 0; i < vector_size(destroying_connection_vector); i++){
+        free(get_index(destroying_connection_vector, i));
+    }
+    destroy_vector(destroying_connection_vector);
+
+    vector* destroying_listeners_vector = &destroying_server->listeners_vector;
+    for(int i = 0; i < vector_size(destroying_listeners_vector); i++){
+        free(get_index(destroying_listeners_vector, i));
+    }
+    destroy_vector(destroying_listeners_vector);
 }
 
 void async_accept(async_server* accepting_server);
@@ -70,7 +99,7 @@ int server_accept_connections(event_node* server_event_node){
         async_accept(listening_server);
     }
 
-    return !listening_server->is_listening;
+    return !listening_server->is_listening && listening_server->num_connections == 0;
 }
 
 #define MAX_IP_STR_LEN 50
@@ -193,8 +222,9 @@ typedef struct connection_handler_cb {
 
 void uring_accept_interm(event_node* accept_node){
     uring_stats* accept_info = (uring_stats*)accept_node->data_ptr;
-    accept_info->listening_server->is_currently_accepting = 0;
-    accept_info->listening_server->has_connection_waiting = 0;
+    async_server* listening_server = accept_info->listening_server;
+    listening_server->is_currently_accepting = 0;
+    listening_server->has_connection_waiting = 0;
     
     int new_socket_fd = accept_info->return_val;
 
@@ -207,7 +237,21 @@ void uring_accept_interm(event_node* accept_node){
     socket_info* new_socket_info = (socket_info*)socket_event_node->data_ptr;
     async_socket* new_socket_ptr = new_socket_info->socket;
 
-    vector* connection_handler_vector = &accept_info->listening_server->connection_vector;
+    listening_server->num_connections++;
+    new_socket_ptr->server_ptr = listening_server;
+
+    /* TODO: need hash table at all?
+    int max_num_digits = 20;
+    char fd_str_buffer[max_num_digits];
+    snprintf(fd_str_buffer, max_num_digits, "%d", new_socket_fd);
+    ht_set(
+        listening_server->socket_table,
+        fd_str_buffer,
+        new_socket_ptr
+    );
+    */
+
+    vector* connection_handler_vector = &listening_server->connection_vector;
     for(int i = 0; i < vector_size(connection_handler_vector); i++){
         //TODO: continue from here
         void(*connection_handler)(async_socket*) = ((connection_callback_t*)get_index(connection_handler_vector, i))->connection_handler;

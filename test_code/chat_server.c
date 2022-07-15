@@ -8,7 +8,7 @@
 #include <liburing.h>
 #include <netdb.h>
 
-#include "asynC.h"
+#include "../src/asynC.h"
 
 //void hi_handler(event_emitter* emitter, )
 
@@ -102,11 +102,17 @@ void socket_end_callback(async_socket* closed_socket, int shutdown_return_val){
     printf("socket closed with return value %d\n", shutdown_return_val);
 }
 
+async_server* new_server;
+
 void chat_connection_handler(async_socket* new_socket){
     printf("got new connection!\n");
     socket_array[curr_num_sockets++] = new_socket;
     async_socket_on_data(new_socket, chat_data_handler);
     async_tcp_socket_on_end(new_socket, socket_end_callback);
+    if(new_server->num_connections == 3){
+        printf("closing server!\n");
+        async_server_close(new_server);
+    }
 }
 
 void chat_data_handler(async_socket* reading_socket, buffer* chat_data){
@@ -129,7 +135,7 @@ void chat_data_handler(async_socket* reading_socket, buffer* chat_data){
 int main(int argc, char* argv[]){
     asynC_init();
 
-    async_server* new_server = async_create_server();
+    new_server = async_create_server();
     async_server_listen(new_server, port, "127.0.0.1", listen_callback);
     async_server_on_connection(new_server, chat_connection_handler);
 

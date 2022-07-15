@@ -37,6 +37,7 @@ void async_send(async_socket* sending_socket);
 //TODO: make create_socket function to condense code?
 
 #define MAX_IP_ADDR_LEN 50
+//TODO: change these values back later
 #define DEFAULT_SEND_BUFFER_SIZE 1 //64 * 1024
 #define DEFAULT_RECV_BUFFER_SIZE 1 //64 * 1024
 
@@ -47,6 +48,22 @@ typedef struct connect_info {
     int* is_done_ptr;
     int* socket_fd_ptr;
 } async_connect_info;
+
+async_socket* async_socket_create(){
+    async_socket* new_socket = (async_socket*)calloc(1, sizeof(async_socket));
+    new_socket->shutdown_flags = SHUT_WR;
+
+    vector_init(&new_socket->connection_handler_vector, 5, 2);
+    vector_init(&new_socket->data_handler_vector, 5, 2);
+    vector_init(&new_socket->shutdown_vector, 5, 2);
+
+    linked_list_init(&new_socket->send_stream);
+    pthread_mutex_init(&new_socket->send_stream_lock, NULL);
+
+    new_socket->receive_buffer = create_buffer(DEFAULT_RECV_BUFFER_SIZE, sizeof(char));
+
+    return new_socket;
+}
 
 void connect_task_handler(void* connect_task_info){
     async_connect_info* connect_info = (async_connect_info*)connect_task_info;
@@ -103,14 +120,7 @@ void thread_connect_interm(event_node* connect_task_node){
 }
 
 async_socket* async_connect(char* ip_address, int port, void(*connection_handler)(async_socket*, void*), void* connection_arg){
-    async_socket* new_socket = (async_socket*)calloc(1, sizeof(async_socket));
-
-    linked_list_init(&new_socket->send_stream);
-    pthread_mutex_init(&new_socket->send_stream_lock, NULL);
-    new_socket->receive_buffer = create_buffer(DEFAULT_RECV_BUFFER_SIZE, sizeof(char));
-    vector_init(&new_socket->data_handler_vector, 5, 2);
-    vector_init(&new_socket->connection_handler_vector, 5, 2);
-    vector_init(&new_socket->shutdown_vector, 5, 2);
+    async_socket* new_socket = async_socket_create();
 
     event_node* thread_connect_node = create_event_node(sizeof(thread_task_info), thread_connect_interm, is_thread_task_done);
     thread_task_info* new_connect_task = (thread_task_info*)thread_connect_node->data_ptr;
@@ -141,29 +151,15 @@ async_socket* async_connect(char* ip_address, int port, void(*connection_handler
 
 event_node* create_socket_node(int new_socket_fd){
     event_node* socket_event_node = create_event_node(sizeof(socket_info), destroy_socket, socket_event_checker);
-    //socket_event_node->event_checker = socket_event_checker;
-    //socket_event_node->callback_handler = destroy_socket;
 
     socket_info* new_socket_info = (socket_info*)socket_event_node->data_ptr;
-    async_socket* new_socket = (async_socket*)malloc(sizeof(async_socket));
+    async_socket* new_socket = async_socket_create();
     new_socket_info->socket = new_socket;
 
     new_socket->socket_fd = new_socket_fd;
     new_socket->is_open = 1;
     new_socket->is_readable = 1;
     new_socket->is_writable = 1;
-    new_socket->closed_self = 0;
-    new_socket->receive_buffer = create_buffer(DEFAULT_RECV_BUFFER_SIZE, sizeof(char));
-    new_socket->is_reading = 0;
-    new_socket->is_writing = 0;
-    new_socket->data_available_to_read = 0;
-    new_socket->peer_closed = 0;
-    linked_list_init(&new_socket->send_stream);
-    vector_init(&new_socket->data_handler_vector, 5, 2);
-    vector_init(&new_socket->connection_handler_vector, 5, 2);
-    vector_init(&new_socket->shutdown_vector, 5, 2);
-    pthread_mutex_init(&new_socket->send_stream_lock, NULL);
-    //pthread_mutex_init(&new_socket->receive_lock, NULL);
 
     epoll_add(
         new_socket_fd, 
@@ -189,6 +185,11 @@ void async_tcp_socket_on_end(async_socket* ending_socket, void(*socket_end_callb
 void async_tcp_socket_end(async_socket* ending_socket){
     ending_socket->is_writable = 0;
     ending_socket->closed_self = 1;
+}
+
+void async_tcp_socket_destroy(async_socket* socket_to_destroy){
+    socket_to_destroy->is_open = 0;
+    socket_to_destroy->shutdown_flags = SHUT_RDWR;
 }
 
 void uring_shutdown_interm(event_node* shutdown_uring_node){
@@ -224,6 +225,10 @@ void uring_shutdown_interm(event_node* shutdown_uring_node){
 
     destroy_vector(shutdown_vector);
 
+    if(closed_socket->server_ptr != NULL){
+        closed_socket->server_ptr->num_connections--;
+    }
+
     free(closed_socket);
 }
 
@@ -244,7 +249,7 @@ void async_shutdown(async_socket* closing_socket){
         io_uring_prep_shutdown(
             socket_shutdown_sqe, 
             closing_socket->socket_fd, 
-            SHUT_RDWR
+            closing_socket->shutdown_flags
         );
         set_sqe_data(socket_shutdown_sqe, shutdown_uring_node);
         increment_sqe_counter();
@@ -283,9 +288,13 @@ void uring_recv_interm(event_node* uring_recv_node){
     recv_uring_info->rw_socket->is_reading = 0;
     recv_uring_info->rw_socket->data_available_to_read = 0;
 
-    //TODO: don't need this if-statement here because socket event checker takes care of this case?
-    if(reading_socket->peer_closed && recv_uring_info->return_val == 0){
-        reading_socket->is_open = 0; //TODO: make extra field member in async_socket struct "is_no_longer_reading" instead of this?
+    //in case nonblocking recv() call did not read anything
+    if(recv_uring_info->return_val == 0){
+        //TODO: don't need this if-statement here because socket event checker takes care of this case?
+        if(reading_socket->peer_closed){
+            reading_socket->is_open = 0; //TODO: make extra field member in async_socket struct "is_no_longer_reading" instead of this?
+        }
+
         return;
     }
 

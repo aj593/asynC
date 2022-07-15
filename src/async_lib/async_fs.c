@@ -533,13 +533,15 @@ void async_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg){
     }
 }
 
+//TODO: make separate queue for writestreams and other items that don't keep event loop from exiting
 typedef struct fs_writable_stream {
     int write_fd;
     int is_writable;
-    char filename[PATH_MAX];
+    atomic_int is_writing;
+    int is_open;
+    char filename[PATH_MAX]; //TODO: need this?
     linked_list buffer_stream_list;
     pthread_mutex_t buffer_stream_lock;
-    atomic_int is_writing;
     //TODO: add event handler vectors? will have to be destroyed when writestream is closed
 } async_fs_writestream;
 
@@ -587,9 +589,13 @@ size_t min_size(size_t num1, size_t num2){
 
 #endif
 
-#define DEFAULT_WRITE_BUFFER_SIZE 64 * 1024
+#define DEFAULT_WRITE_BUFFER_SIZE 1 //64 * 1024
 
 void async_fs_writestream_write(async_fs_writestream* writestream, buffer* write_buffer, int num_bytes_to_write, void(*write_callback)(int)){
+    if(!writestream->is_writable){
+        return;
+    }
+
     int num_bytes_able_to_write = min_size(num_bytes_to_write, get_buffer_capacity(write_buffer));
 
     int buff_highwatermark_size = DEFAULT_WRITE_BUFFER_SIZE;
@@ -644,7 +650,11 @@ int is_writestream_done(event_node* writestream_node){
 
     pthread_mutex_lock(&writestream->buffer_stream_lock);
 
-    if(/*writestream->is_writable && */!writestream->is_writing && writestream->buffer_stream_list.size > 0){
+    if(
+        writestream->is_open && 
+        !writestream->is_writing && 
+        writestream->buffer_stream_list.size > 0
+    ){
         writestream->is_writing = 1;
         //TODO: make async_write() call here and remove item from writestream buffer?
         event_node* writestream_buffer_node = remove_first(&writestream->buffer_stream_list);
@@ -652,6 +662,7 @@ int is_writestream_done(event_node* writestream_node){
         removed_buffer_item->writestream = writestream;
         buffer* buffer_to_write = removed_buffer_item->writing_buffer;
 
+        
         async_write(
             writestream->write_fd,
             buffer_to_write,
@@ -669,9 +680,8 @@ int is_writestream_done(event_node* writestream_node){
 void after_writestream_open(int, void*);
 
 async_fs_writestream* create_fs_writestream(char* filename){
-    async_fs_writestream* new_writestream = (async_fs_writestream*)malloc(sizeof(async_fs_writestream));
-    new_writestream->is_writable = 0;
-    new_writestream->is_writing = 0;
+    async_fs_writestream* new_writestream = (async_fs_writestream*)calloc(1, sizeof(async_fs_writestream));
+    new_writestream->is_writable = 1;
 
     strncpy(new_writestream->filename, filename, PATH_MAX);
     linked_list_init(&new_writestream->buffer_stream_list);
@@ -694,8 +704,8 @@ async_fs_writestream* create_fs_writestream(char* filename){
     return new_writestream;
 }
 
-void after_writestream_open(int writestream_fd, void* writestream_ptr){
+void after_writestream_open(int new_writestream_fd, void* writestream_ptr){
     async_fs_writestream* fs_writestream_ptr = (async_fs_writestream*)writestream_ptr;
-    fs_writestream_ptr->write_fd = writestream_fd;
-    fs_writestream_ptr->is_writable = 1;
+    fs_writestream_ptr->write_fd = new_writestream_fd;
+    fs_writestream_ptr->is_open = 1;
 }
