@@ -354,7 +354,7 @@ int socket_event_checker(event_node* socket_event_node){
     if(checked_socket->peer_closed){
         checked_socket->is_writable = 0;
 
-        //TODO: need this here?
+        //TODO: need this here?, add condition in case socket allows or doesn't allow half-closure?
         if(!checked_socket->data_available_to_read){
             checked_socket->is_open = 0;
         }

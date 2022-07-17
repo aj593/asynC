@@ -101,6 +101,7 @@ typedef union fs_cbs {
     void(*chown_callback)(int, void*);
     void(*close_callback)(int, void*);
     void(*send_callback)(async_socket*, void*);
+    //void(*open_stat_callback)(int, size_t, void*);
     //void(*connect_callback)(async_socket*, void*);
     //void(*shutdown_callback)(int);
 } grouped_fs_cbs;
