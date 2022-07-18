@@ -38,8 +38,8 @@ void async_send(async_socket* sending_socket);
 
 #define MAX_IP_ADDR_LEN 50
 //TODO: change these values back later
-#define DEFAULT_SEND_BUFFER_SIZE 1 //64 * 1024
-#define DEFAULT_RECV_BUFFER_SIZE 1 //64 * 1024
+#define DEFAULT_SEND_BUFFER_SIZE 64 * 1024 //1
+#define DEFAULT_RECV_BUFFER_SIZE 64 * 1024 //1
 
 typedef struct connect_info {
     async_socket* connecting_socket;

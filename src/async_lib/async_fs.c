@@ -623,7 +623,7 @@ size_t min_size(size_t num1, size_t num2){
 
 #endif
 
-#define DEFAULT_WRITE_BUFFER_SIZE 1 //64 * 1024
+#define DEFAULT_WRITE_BUFFER_SIZE 64 * 1024 //1
 
 void async_fs_writestream_write(async_fs_writestream* writestream, buffer* write_buffer, int num_bytes_to_write, void(*write_callback)(int)){
     if(!writestream->is_writable){
@@ -744,7 +744,7 @@ void after_writestream_open(int new_writestream_fd, void* writestream_ptr){
     fs_writestream_ptr->is_open = 1;
 }
 
-#define DEFAULT_READSTREAM_CHUNK_SIZE 1 //64 * 1024
+#define DEFAULT_READSTREAM_CHUNK_SIZE 64 * 1024 //1
 
 typedef struct fs_readable_stream {
     int is_open;
@@ -785,7 +785,7 @@ int readstream_checker(event_node* readstream_node){
     fs_readstream_info* readstream_info = (fs_readstream_info*)readstream_node->data_ptr;
     async_fs_readstream* readstream = readstream_info->readstream_ptr;
     
-    printf("the size of stream list is %d\n", readstream->buffer_stream_list.size);
+    //printf("the size of stream list is %d\n", readstream->buffer_stream_list.size);
     
     if(readstream->is_readable && !readstream->reached_EOF){
         //TODO: make async pread() call on file

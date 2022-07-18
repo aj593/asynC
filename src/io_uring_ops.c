@@ -119,6 +119,6 @@ void uring_submit_task_handler(void* uring_submit_task){
     uring_unlock();
     //printf("time before and after is %ld\n", after - before);
     if(num_submitted == 0){
-        printf("didn't submit anything??\n");
+        //printf("didn't submit anything??\n");
     }
 }
