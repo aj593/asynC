@@ -64,8 +64,8 @@ void enqueue_task(event_node* task){
     pthread_cond_signal(&task_queue_cond_var);
 }
 
-int is_thread_task_done(event_node* fs_node){
-    thread_task_info* thread_task = (thread_task_info*)fs_node->data_ptr;
+int is_thread_task_done(event_node* thread_task_node){
+    thread_task_info* thread_task = (thread_task_info*)thread_task_node->data_ptr;
     //*event_index_ptr = thread_task->fs_index;
 
     return thread_task->is_done;
@@ -100,6 +100,11 @@ void* task_waiter(void* arg){
 
         //TODO: make it take pointer to task block instead of actual struct?
         exec_task_block->task_handler(exec_task_block->async_task_info);
+        //TODO: dont do this change it, dont do non-null check before
+        if(exec_task_block->is_done_ptr != NULL){
+            *exec_task_block->is_done_ptr = 1;
+        }
+        
 
         destroy_task_node(curr_task);
     }

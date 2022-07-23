@@ -18,7 +18,7 @@ int main(){
 }
 
 void connection_handler(async_socket* socket, void* cb_arg){
-    new_readstream = create_async_fs_readstream("Linux.pdf");
+    new_readstream = create_async_fs_readstream("http_req_sample.txt");
     fs_readstream_on_data(new_readstream, readstream_data_handler);
     async_fs_readstream_on_end(new_readstream, readstream_end_handler);
 }

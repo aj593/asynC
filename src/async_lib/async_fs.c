@@ -46,7 +46,7 @@ typedef struct open_task {
     char* filename;
     int flags;
     mode_t mode;
-    int* is_done_ptr;
+    //int* is_done_ptr;
     int* fd_ptr;
 } async_open_info;
 
@@ -58,7 +58,7 @@ void open_task_handler(void* open_task){
         //open_info.mode //TODO: need mode here? or make different version with it?
     );
 
-    *open_info->is_done_ptr = 1;
+    //*open_info->is_done_ptr = 1;
 }
 
 void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg){
@@ -94,12 +94,13 @@ void async_open(char* filename, int flags, int mode, void(*open_callback)(int, v
         //TODO: use create_event_node for this?
         event_node* task_node = create_task_node(sizeof(async_open_info), open_task_handler);
         task_block* curr_task_block = (task_block*)task_node->data_ptr; //(task_block*)task_node->event_data;
+        curr_task_block->is_done_ptr = &new_task->is_done;
 
         //TODO: condense this statement into single line/statement?
         async_open_info* open_task_params = (async_open_info*)curr_task_block->async_task_info;
         open_task_params->filename = filename; //TODO: make better way to reference filename?
         open_task_params->fd_ptr = &new_task->fd;
-        open_task_params->is_done_ptr = &new_task->is_done;
+        //open_task_params->is_done_ptr = &new_task->is_done;
         open_task_params->flags = flags;
         open_task_params->mode = mode;
 
@@ -165,7 +166,7 @@ typedef struct read_task {
     buffer* buffer; //use void* instead?
     int max_num_bytes_to_read;
     int* num_bytes_read_ptr;
-    int* is_done_ptr;
+    //int* is_done_ptr;
 } async_read_info;
 
 void read_cb_interm(event_node* exec_node){
@@ -190,7 +191,7 @@ void read_task_handler(void* read_task){
         read_info->max_num_bytes_to_read
     );
 
-    *read_info->is_done_ptr = 1;
+    //*read_info->is_done_ptr = 1;
 }
 
 //TODO: reimplement this with system calls?
@@ -238,12 +239,13 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, void(
 
         event_node* task_node = create_task_node(sizeof(async_read_info), read_task_handler);
         task_block* curr_task_block = (task_block*)task_node->data_ptr; //(task_block*)task_node->event_data;
+        curr_task_block->is_done_ptr = &new_task->is_done;
 
         async_read_info* read_info_block = (async_read_info*)curr_task_block->async_task_info;
         read_info_block->read_fd = read_fd;
         read_info_block->max_num_bytes_to_read = num_bytes_to_read;
         read_info_block->num_bytes_read_ptr = &new_task->num_bytes;
-        read_info_block->is_done_ptr = &new_task->is_done;
+        //read_info_block->is_done_ptr = &new_task->is_done;
         read_info_block->buffer = read_buff_ptr;
 
         //TODO: use only one of these??
@@ -291,7 +293,7 @@ typedef struct write_task {
     buffer* buffer;
     int max_num_bytes_to_write;
     int* num_bytes_written_ptr;
-    int* is_done_ptr;
+    //int* is_done_ptr;
 } async_write_info;
 
 void uring_write_interm(event_node* write_event_node){
@@ -328,7 +330,7 @@ void write_task_handler(void* write_task){
         write_info->max_num_bytes_to_write
     );
 
-    *write_info->is_done_ptr = 1;
+    //*write_info->is_done_ptr = 1;
 }
 
 //TODO: finish implementing this
@@ -376,13 +378,14 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, v
 
         event_node* task_node = create_task_node(sizeof(async_write_info), write_task_handler);
         task_block* curr_task_block = (task_block*)task_node->data_ptr;
+        curr_task_block->is_done_ptr = &new_write_task->is_done;
 
         async_write_info* write_info_block = (async_write_info*)curr_task_block->async_task_info;
         write_info_block->write_fd = write_fd;
         write_info_block->buffer = write_buff_ptr;
         write_info_block->max_num_bytes_to_write = num_bytes_to_write;
         write_info_block->num_bytes_written_ptr = &new_write_task->num_bytes;
-        write_info_block->is_done_ptr = &new_write_task->is_done;
+        //write_info_block->is_done_ptr = &new_write_task->is_done;
 
         enqueue_task(task_node);
     }
@@ -391,7 +394,7 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, v
 typedef struct chmod_task {
     char* filename;
     mode_t mode;
-    int* is_done_ptr;
+    //int* is_done_ptr;
     int* success_ptr;
 } async_chmod_info;
 
@@ -413,7 +416,7 @@ void chmod_task_handler(void* chmod_task){
         chmod_info->mode
     );
 
-    *chmod_info->is_done_ptr = 1;
+    //*chmod_info->is_done_ptr = 1;
 }
 
 void async_chmod(char* filename, mode_t mode, void(*chmod_callback)(int, void*), void* cb_arg){
@@ -426,11 +429,12 @@ void async_chmod(char* filename, mode_t mode, void(*chmod_callback)(int, void*),
 
     event_node* task_node = create_task_node(sizeof(async_chmod_info), chmod_task_handler);
     task_block* curr_task_block = (task_block*)task_node->data_ptr; //(task_block*)task_node->event_data;
+    curr_task_block->is_done_ptr = &new_task->is_done;
 
     async_chmod_info* chmod_info = (async_chmod_info*)curr_task_block->async_task_info;
     chmod_info->filename = filename;
     chmod_info->mode = mode;
-    chmod_info->is_done_ptr = &new_task->is_done;
+    //chmod_info->is_done_ptr = &new_task->is_done;
     chmod_info->success_ptr = &new_task->success;
 
     enqueue_task(task_node);
@@ -440,7 +444,7 @@ typedef struct chown_task {
     char* filename;
     int uid;
     int gid;
-    int* is_done_ptr;
+    //int* is_done_ptr;
     int* success_ptr;
 } async_chown_info;
 
@@ -463,7 +467,7 @@ void chown_task_handler(void* chown_task){
         chown_info->gid
     );
 
-    *chown_info->is_done_ptr = 1;
+    //*chown_info->is_done_ptr = 1;
 }
 
 void async_chown(char* filename, int uid, int gid, void(*chown_callback)(int, void*), void* cb_arg){
@@ -476,12 +480,13 @@ void async_chown(char* filename, int uid, int gid, void(*chown_callback)(int, vo
 
     event_node* task_node = create_task_node(sizeof(async_chown_info), chown_task_handler);
     task_block* curr_task_block = (task_block*)task_node->data_ptr;
+    curr_task_block->is_done_ptr = &new_task->is_done;
 
     async_chown_info* chown_task_info = (async_chown_info*)curr_task_block->async_task_info;
     chown_task_info->filename = filename;
     chown_task_info->uid = uid;
     chown_task_info->gid = gid;
-    chown_task_info->is_done_ptr = &new_task->is_done;
+    //schown_task_info->is_done_ptr = &new_task->is_done;
     chown_task_info->success_ptr = &new_task->success;
 
     enqueue_task(task_node);
@@ -509,7 +514,7 @@ void close_cb_interm(event_node* exec_node){
 
 typedef struct close_task {
     int fd;
-    int* is_done_ptr;
+    //int* is_done_ptr;
     int* success_ptr;
 } async_close_info;
 
@@ -518,7 +523,7 @@ void close_task_handler(void* close_task){
 
     *close_info->success_ptr = close(close_info->fd);
 
-    *close_info->is_done_ptr = 1;
+    //*close_info->is_done_ptr = 1;
 }
 
 void async_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg){
@@ -557,11 +562,12 @@ void async_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg){
 
         event_node* task_node = create_task_node(sizeof(async_close_info), close_task_handler);
         task_block* curr_task_block = (task_block*)task_node->data_ptr;
-        
+        curr_task_block->is_done_ptr = &new_task->is_done;
+
         async_close_info* close_task_block = (async_close_info*)curr_task_block->async_task_info;
         close_task_block->fd = close_fd;
         close_task_block->success_ptr = &new_task->success;
-        close_task_block->is_done_ptr = &new_task->is_done;
+        //close_task_block->is_done_ptr = &new_task->is_done;
     
         enqueue_task(task_node);
     }
@@ -880,7 +886,7 @@ void open_stat_interm(event_node* open_stat_node){
 
 typedef struct open_stat_task {
     char* filename;
-    int* is_done_ptr;
+    //int* is_done_ptr;
     int* fd_ptr;
     size_t* file_size_ptr;
 } async_open_stat_info;
@@ -903,7 +909,7 @@ void open_stat_task_handler(void* open_stat_info){
 
     *open_stat_params->file_size_ptr = file_stat_block.st_size;
 
-    *open_stat_params->is_done_ptr = 1;
+    //*open_stat_params->is_done_ptr = 1;
 }
 
 async_fs_readstream* create_async_fs_readstream(char* filename){
@@ -923,10 +929,11 @@ async_fs_readstream* create_async_fs_readstream(char* filename){
 
     event_node* task_node = create_task_node(sizeof(async_open_stat_info), open_stat_task_handler);
     task_block* curr_task_block = (task_block*)task_node->data_ptr;
+    curr_task_block->is_done_ptr = &new_open_stat_task->is_done;
 
     async_open_stat_info* open_stat_task_block = (async_open_stat_info*)curr_task_block->async_task_info;
     open_stat_task_block->fd_ptr = &new_readstream_ptr->read_fd;
-    open_stat_task_block->is_done_ptr = &new_open_stat_task->is_done;
+    //open_stat_task_block->is_done_ptr = &new_open_stat_task->is_done;
     open_stat_task_block->file_size_ptr = &new_readstream_ptr->total_file_size;
     //TODO: copy filename in better way? strncpy?
     open_stat_task_block->filename = filename;

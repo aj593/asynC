@@ -68,7 +68,7 @@ int main(){
     clock_t before = clock();
 
     /*
-    char* cmd_str = "netstat -atn | grep '3000.*LISTEN'";
+    char* cmd_str = "netstat -atn | grep '3000.*LISTEN'"; OR ss -ln | grep 'LISTEN.*3000'
     FILE* cmd_file_ptr = popen(cmd_str, "r");
     int max_num_bytes = 100;
     char cmd_output[max_num_bytes];

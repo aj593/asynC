@@ -22,7 +22,9 @@ typedef struct socket_send_buffer {
 } socket_buffer_info;
 
 typedef struct buffer_data_callback {
-    void(*curr_data_handler)(async_socket*, buffer*);
+    int is_temp_subscriber;
+    void(*curr_data_handler)(async_socket*, buffer*, void*);
+    void* arg;
 } buffer_callback_t;
 
 typedef struct connection_handler_callback {
@@ -272,10 +274,24 @@ void destroy_socket(event_node* socket_node){
     async_shutdown(socket_ptr);
 }
 
+//TODO: find way to condense following 2 functions
 //TODO: error handle if fcn ptr in second param is NULL?
-void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*)){
+void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
     buffer_callback_t* new_data_handler_item = (buffer_callback_t*)malloc(sizeof(buffer_callback_t));
     new_data_handler_item->curr_data_handler = new_data_handler;
+    new_data_handler_item->arg = arg;
+    new_data_handler_item->is_temp_subscriber = 0;
+
+    vector* data_handler_vector_ptr = &reading_socket->data_handler_vector;
+    vec_add_last(data_handler_vector_ptr, new_data_handler_item);
+}
+
+//TODO: error handle if fcn ptr in second param is NULL?
+void async_socket_once_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
+    buffer_callback_t* new_data_handler_item = (buffer_callback_t*)malloc(sizeof(buffer_callback_t));
+    new_data_handler_item->curr_data_handler = new_data_handler;
+    new_data_handler_item->arg = arg;
+    new_data_handler_item->is_temp_subscriber = 1;
 
     vector* data_handler_vector_ptr = &reading_socket->data_handler_vector;
     vec_add_last(data_handler_vector_ptr, new_data_handler_item);
@@ -305,8 +321,15 @@ void uring_recv_interm(event_node* uring_recv_node){
         void* internal_source_buffer = get_internal_buffer(reading_socket->receive_buffer);
         memcpy(internal_destination_buffer, internal_source_buffer, recv_uring_info->return_val);
 
-        void(*curr_data_handler)(async_socket*, buffer*) = ((buffer_callback_t*)get_index(data_handler_vector_ptr, i))->curr_data_handler;
-        curr_data_handler(reading_socket, buffer_copy);
+        buffer_callback_t* curr_buffer_cb_data_item = (buffer_callback_t*)get_index(data_handler_vector_ptr, i);
+        void(*curr_data_handler)(async_socket*, buffer*, void*) = curr_buffer_cb_data_item->curr_data_handler;
+        void* curr_arg = curr_buffer_cb_data_item->arg;
+        curr_data_handler(reading_socket, buffer_copy, curr_arg);
+
+        if(curr_buffer_cb_data_item->is_temp_subscriber){
+            remove_at_index(data_handler_vector_ptr, i);
+            i--;
+        }
     }
 }
 

@@ -1,25 +1,30 @@
 CFLAGS = -g -lrt -luring -pthread #-Wall -Werror -pedantic
+LIBRARY_OBJS = buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o async_http.o
+LIBRARY_OBJ_FOLDER = obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http.o
 #TODO: add # -Wextra flag later
 
 #pending output rules:  
 
-client: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o chat_client.o
-	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/chat_client.o -o exec/chat_client $(CFLAGS)
+client: $(LIBRARY_OBJS) chat_client.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/chat_client.o -o exec/chat_client $(CFLAGS)
 
-server: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o chat_server.o
-	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/chat_server.o -o exec/chat_server $(CFLAGS)
+server: $(LIBRARY_OBJS) chat_server.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/chat_server.o -o exec/chat_server $(CFLAGS)
 
-upload_server: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o upload_server_driver.o
-	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/upload_server_driver.o -o exec/upload_server $(CFLAGS)
+upload_server: $(LIBRARY_OBJS) upload_server_driver.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/upload_server_driver.o -o exec/upload_server $(CFLAGS)
 
-upload_client: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o upload_client_driver.o
-	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/upload_client_driver.o -o exec/upload_client $(CFLAGS)
+upload_client: $(LIBRARY_OBJS) upload_client_driver.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/upload_client_driver.o -o exec/upload_client $(CFLAGS)
 
-fs_writestream: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o writestream_test.o
-	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/writestream_test.o -o exec/writestream_test $(CFLAGS)
+fs_writestream: $(LIBRARY_OBJS) writestream_test.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/writestream_test.o -o exec/writestream_test $(CFLAGS)
 
-fs_readstream: buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o readstream_test.o
-	gcc obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/readstream_test.o -o exec/readstream_test $(CFLAGS)
+fs_readstream: $(LIBRARY_OBJS) readstream_test.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/readstream_test.o -o exec/readstream_test $(CFLAGS)
+
+http_test: $(LIBRARY_OBJS) http_test.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/http_test.o -o exec/http_test $(CFLAGS)
 
 server_listen: test_code/server_listen.c
 	gcc test_code/server_listen.c -o exec/server_listen $(CFLAGS)
@@ -30,6 +35,9 @@ simple_client_tester: test_code/simple_client_tester.c
 #src/client.c
 chat_client.o: test_code/chat_client.c
 	gcc -c test_code/chat_client.c -o obj/chat_client.o $(CFLAGS)
+
+http_test.o: test_code/http_test.c
+	gcc -c test_code/http_test.c -o obj/http_test.o $(CFLAGS)
 
 #src/server.c
 chat_server.o: test_code/chat_server.c
@@ -55,6 +63,9 @@ worker_thread.o: src/async_lib/worker_thread.c src/async_lib/worker_thread.h
 
 async_tcp_server.o: src/async_lib/async_tcp_server.c src/async_lib/async_tcp_server.h
 	gcc -c src/async_lib/async_tcp_server.c -o obj/async_tcp_server.o $(CFLAGS)
+
+async_http.o: src/async_lib/async_http.c src/async_lib/async_http.h
+	gcc -c src/async_lib/async_http.c -o obj/async_http.o $(CFLAGS)
 
 async_tcp_socket.o: src/async_lib/async_tcp_socket.c src/async_lib/async_tcp_socket.h
 	gcc -c src/async_lib/async_tcp_socket.c -o obj/async_tcp_socket.o $(CFLAGS)

@@ -14,6 +14,7 @@ typedef struct task_handler_block {
     void(*task_handler)(void*);
     void* async_task_info;
     int task_type;
+    int* is_done_ptr;
 } task_block;
 
 #endif

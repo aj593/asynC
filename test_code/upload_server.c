@@ -5,43 +5,55 @@
 
 #include "../src/asynC.h"
 
-async_server* upload_server;
+async_tcp_server* upload_server;
 async_fs_writestream* linux_writestream;
 
 int port = 3000;
 
-void server_listen_callback();
-void upload_connection_handler(async_socket*);
-void socket_on_data(async_socket*, buffer*);
+void server_listen_callback(void*);
+void upload_connection_handler(async_socket*, void*);
+void socket_on_data(async_socket*, buffer*, void*);
 void socket_end_callback(async_socket* ending_socket, int result);
 
 int main(void){
     asynC_init();
 
-    linux_writestream = create_fs_writestream("Linux_copy.pdf");
-    upload_server = async_create_server();
-    async_server_listen(upload_server, port, "127.0.0.1", server_listen_callback);
+    int* x = (int*)malloc(sizeof(int));
+    *x = 2;
+
+    linux_writestream = create_fs_writestream("lorem_ipsum_copy.txt");
+    upload_server = async_create_tcp_server();
+    async_tcp_server_listen(
+        upload_server, 
+        port, 
+        "127.0.0.1", 
+        server_listen_callback,
+        x
+    );
 
     asynC_cleanup();
 
     return 0;
 }
 
-void server_listen_callback(){
+void server_listen_callback(void* arg){
+    int* num_ptr = (int*)arg;
+    printf("the number in arg is %d\n", *num_ptr);
     printf("listening on port %d\n", port);
-    async_server_on_connection(upload_server, upload_connection_handler);
+    async_tcp_server_on_connection(upload_server, upload_connection_handler, NULL);
 }
 
-void upload_connection_handler(async_socket* new_socket){
-    async_server_close(upload_server);
-    async_socket_on_data(new_socket, socket_on_data);
+void upload_connection_handler(async_socket* new_socket, void* arg){
+    //async_server_close(upload_server);
+    async_socket_on_data(new_socket, socket_on_data, NULL);
     async_tcp_socket_on_end(new_socket, socket_end_callback);
 }
 
 void write_status(int);
 
-void socket_on_data(async_socket* socket_data, buffer* data_buffer){
-    char* str_buf = (char*)get_internal_buffer(data_buffer);
+void socket_on_data(async_socket* socket_data, buffer* data_buffer, void* arg){
+    //char* str_buf = (char*)get_internal_buffer(data_buffer);
+    
     async_fs_writestream_write(
         linux_writestream, 
         data_buffer, 

@@ -22,7 +22,7 @@
 #define SERVER_INFO
 
 typedef struct server_info {
-    async_server* listening_server;
+    async_tcp_server* listening_server;
 } server_info;
 
 #endif
@@ -47,8 +47,8 @@ typedef struct socket_send_buffer {
 
 #endif
 
-async_server* async_create_server(){
-    async_server* new_server = (async_server*)calloc(1, sizeof(async_server));
+async_tcp_server* async_create_tcp_server(){
+    async_tcp_server* new_server = (async_tcp_server*)calloc(1, sizeof(async_tcp_server));
     vector_init(&new_server->listeners_vector, 5, 2);
     vector_init(&new_server->connection_vector, 5, 2);
     //new_server->socket_table = ht_create();
@@ -61,7 +61,7 @@ void closing_server_callback(int result_val, void* cb_arg){
     //TODO: make int field for server that shows that listening fd was properly closed?
 }
 
-void async_server_close(async_server* closing_server){
+void async_tcp_server_close(async_tcp_server* closing_server){
     closing_server->is_listening = 0;
 
     epoll_remove(closing_server->listening_socket);
@@ -72,7 +72,7 @@ void async_server_close(async_server* closing_server){
 
 void destroy_server(event_node* server_node){
     server_info* destroying_server_info = (server_info*)server_node->data_ptr;
-    async_server* destroying_server = destroying_server_info->listening_server;
+    async_tcp_server* destroying_server = destroying_server_info->listening_server;
     //TODO: do other cleanups? remove items from each vector?
     
     vector* destroying_connection_vector = &destroying_server->connection_vector;
@@ -88,11 +88,11 @@ void destroy_server(event_node* server_node){
     destroy_vector(destroying_listeners_vector);
 }
 
-void async_accept(async_server* accepting_server);
+void async_accept(async_tcp_server* accepting_server);
 
 int server_accept_connections(event_node* server_event_node){
     server_info* node_server_info = (server_info*)server_event_node->data_ptr;
-    async_server* listening_server = node_server_info->listening_server;
+    async_tcp_server* listening_server = node_server_info->listening_server;
 
     if(listening_server->is_listening && listening_server->has_connection_waiting && !listening_server->is_currently_accepting){
         listening_server->is_currently_accepting = 1;
@@ -105,10 +105,10 @@ int server_accept_connections(event_node* server_event_node){
 #define MAX_IP_STR_LEN 50
 
 typedef struct listen_task {
-    async_server* listening_server;
+    async_tcp_server* listening_server;
     int port;
     char ip_address[MAX_IP_STR_LEN];
-    int* is_done_ptr;
+    //int* is_done_ptr;
     int* success_ptr;
 } async_listen_info;
 
@@ -163,11 +163,12 @@ void listen_task_handler(void* listen_task){
     );
 
     curr_listen_info->listening_server->is_listening = 1;
-    *curr_listen_info->is_done_ptr = 1;    
+    //*curr_listen_info->is_done_ptr = 1;    
 }
 
 typedef struct listen_cb {
-    void(*listen_callback)();
+    void(*listen_callback)(void*);
+    void* arg;
 } listen_callback_t;
 
 void listen_cb_interm(event_node* listen_node){
@@ -175,8 +176,10 @@ void listen_cb_interm(event_node* listen_node){
     vector* listening_vector = &listen_node_info->listening_server->listeners_vector;
 
     for(int i = 0; i < vector_size(listening_vector); i++){
-        void(*curr_listen_cb)() = ((listen_callback_t*)get_index(listening_vector, i))->listen_callback;
-        curr_listen_cb();
+        listen_callback_t* listen_cb_item = (listen_callback_t*)get_index(listening_vector, i);
+        void(*curr_listen_cb)(void*) = listen_cb_item->listen_callback;
+        void* curr_arg = listen_cb_item->arg;
+        curr_listen_cb(curr_arg);
     }
 
     event_node* server_node = create_event_node(sizeof(server_info), destroy_server, server_accept_connections);
@@ -185,11 +188,12 @@ void listen_cb_interm(event_node* listen_node){
     enqueue_event(server_node);
 }
 
-void async_server_listen(async_server* listening_server, int port, char* ip_address, void(*listen_callback)()){
+void async_tcp_server_listen(async_tcp_server* listening_server, int port, char* ip_address, void(*listen_callback)(void*), void* arg){
     //TODO: make case or rearrange code in this function for if listen_callback arg is NULL
     if(listen_callback != NULL){
         listen_callback_t* listener_callback_holder = (listen_callback_t*)malloc(sizeof(listen_callback_t));
         listener_callback_holder->listen_callback = listen_callback;
+        listener_callback_holder->arg = arg;
         vec_add_last(&listening_server->listeners_vector, listener_callback_holder);
     }
     
@@ -198,16 +202,18 @@ void async_server_listen(async_server* listening_server, int port, char* ip_addr
     thread_task_info* curr_listen_info = (thread_task_info*)listen_node->data_ptr;
     curr_listen_info->is_done = 0;
     curr_listen_info->listening_server = listening_server;
+    //curr_listen_info->cb_arg = arg;
 
     enqueue_event(listen_node);
     
     event_node* listen_thread_task_node = create_task_node(sizeof(async_listen_info), listen_task_handler); //create_event_node(sizeof(task_block));
     task_block* listen_task_block = (task_block*)listen_thread_task_node->data_ptr;
+    listen_task_block->is_done_ptr = &curr_listen_info->is_done;
     async_listen_info* listen_args_info = (async_listen_info*)listen_task_block->async_task_info;
 
     strncpy(listen_args_info->ip_address, ip_address, MAX_IP_STR_LEN);
     listen_args_info->port = port;
-    listen_args_info->is_done_ptr = &curr_listen_info->is_done;
+    //listen_args_info->is_done_ptr = &curr_listen_info->is_done;
     listen_args_info->listening_server = listening_server;
     //TODO: assign success_ptr?
 
@@ -217,12 +223,13 @@ void async_server_listen(async_server* listening_server, int port, char* ip_addr
 //TODO: make function to add server listen event listener
 
 typedef struct connection_handler_cb {
-    void(*connection_handler)(async_socket*);
+    void(*connection_handler)(async_socket*, void*);
+    void* arg;
 } connection_callback_t;
 
 void uring_accept_interm(event_node* accept_node){
     uring_stats* accept_info = (uring_stats*)accept_node->data_ptr;
-    async_server* listening_server = accept_info->listening_server;
+    async_tcp_server* listening_server = accept_info->listening_server;
     listening_server->is_currently_accepting = 0;
     listening_server->has_connection_waiting = 0;
     
@@ -254,15 +261,17 @@ void uring_accept_interm(event_node* accept_node){
     vector* connection_handler_vector = &listening_server->connection_vector;
     for(int i = 0; i < vector_size(connection_handler_vector); i++){
         //TODO: continue from here
-        void(*connection_handler)(async_socket*) = ((connection_callback_t*)get_index(connection_handler_vector, i))->connection_handler;
-        connection_handler(new_socket_ptr);
+        connection_callback_t* connection_block = (connection_callback_t*)get_index(connection_handler_vector, i);
+        void(*connection_handler)(async_socket*, void*) = connection_block->connection_handler;
+        void* curr_arg = connection_block->arg;
+        connection_handler(new_socket_ptr, curr_arg);
     }
 
     enqueue_event(socket_event_node);
 }
 
 //TODO: make extra param for accept() callback?
-void async_accept(async_server* accepting_server){
+void async_accept(async_tcp_server* accepting_server){
     uring_lock();
 
     struct io_uring_sqe* accept_sqe = get_sqe();
@@ -298,9 +307,10 @@ void async_accept(async_server* accepting_server){
     }
 }
 
-void async_server_on_connection(async_server* listening_server, void(*connection_handler)(async_socket*)){
+void async_tcp_server_on_connection(async_tcp_server* listening_server, void(*connection_handler)(async_socket*, void*), void* arg){
     vector* connection_vector_ptr = &listening_server->connection_vector;
     connection_callback_t* connection_callback = (connection_callback_t*)malloc(sizeof(connection_callback_t));
     connection_callback->connection_handler = connection_handler;
+    connection_callback->arg = arg;
     vec_add_last(connection_vector_ptr, connection_callback);
 }

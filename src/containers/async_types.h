@@ -6,6 +6,7 @@
 
 #include "../async_lib/async_tcp_socket.h"
 #include "../containers/hash_table.h"
+#include "../async_lib/async_http.h"
 
 #ifndef C_VECTOR
 #define C_VECTOR
@@ -61,7 +62,7 @@ typedef struct server_type {
     int num_connections;
     vector listeners_vector;
     vector connection_vector;
-} async_server;
+} async_tcp_server;
 
 #endif
 
@@ -83,7 +84,7 @@ typedef struct socket_channel {
     int data_available_to_read;
     int peer_closed;
     int shutdown_flags;
-    async_server* server_ptr;
+    async_tcp_server* server_ptr;
     //pthread_mutex_t receive_lock;
     //int able_to_write;
     vector data_handler_vector; //TODO: make other vectors for other event handlers
@@ -123,8 +124,9 @@ typedef struct thread_task_info {
     int fd; 
     int num_bytes;
     int success;
-    async_server* listening_server;
+    async_tcp_server* listening_server;
     async_socket* rw_socket;
+    http_parser_info* http_parse_info;
 } thread_task_info;
 
 #endif
@@ -140,7 +142,7 @@ typedef struct liburing_stats {
     grouped_fs_cbs fs_cb;
     void* cb_arg;
     struct sockaddr client_addr;
-    async_server* listening_server;
+    async_tcp_server* listening_server;
     async_socket* rw_socket;
 } uring_stats;
 
