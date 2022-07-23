@@ -1,4 +1,4 @@
-CFLAGS = -g -lrt -luring -pthread #-Wall -Werror -pedantic
+CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic
 LIBRARY_OBJS = buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o async_http.o
 LIBRARY_OBJ_FOLDER = obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http.o
 #TODO: add # -Wextra flag later
