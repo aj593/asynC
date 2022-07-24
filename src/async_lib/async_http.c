@@ -26,6 +26,7 @@ typedef struct async_http_server {
 
 typedef struct async_http_request {
     async_socket* tcp_socket_ptr;
+    linked_list buffer_data_list;
     hash_table* header_map;
     char* method;
     char* url;
@@ -34,7 +35,6 @@ typedef struct async_http_request {
     int num_payload_bytes_read;
     vector data_handler;
     vector end_handler;
-    buffer* start_of_body;
 } async_http_request;
 
 typedef struct async_http_response {
@@ -70,6 +70,7 @@ async_http_request* create_http_request(){
     new_http_request->header_map = ht_create();
     vector_init(&new_http_request->data_handler, 2, 2);
     vector_init(&new_http_request->end_handler, 2, 2);
+    linked_list_init(&new_http_request->buffer_data_list);
 
     return new_http_request;
 }
@@ -122,6 +123,11 @@ typedef struct http_parser_info {
     async_http_server* http_server;
 } http_parser_info;
 
+typedef struct async_http_transaction {
+    async_http_request* http_request_info;
+    async_http_response* http_response_info;
+} async_http_transaction;
+
 void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* arg){
     async_http_server* listening_http_server = (async_http_server*)arg;
 
@@ -142,11 +148,29 @@ void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* a
     new_http_parser_info->client_socket = read_socket;
     new_http_parser_info->http_header_data = data_buffer;
     new_http_parser_info->http_server = listening_http_server;
-    //http_parser_info_ptr->http_request_info = create_http_request();
-    //http_parser_info_ptr->http_response_info = create_http_response();
 
     enqueue_task(http_parse_task_node);
 }
+
+int str_to_num(char* num_str){
+    int content_len_num = 0;
+    int curr_index = 0;
+    while(num_str[curr_index] != '\0'){
+        int curr_digit = num_str[curr_index] - '0';
+        content_len_num = (content_len_num * 10) + curr_digit;
+
+        curr_index++;
+    }
+
+    return content_len_num;
+}
+
+typedef struct buffer_item {
+    buffer* buffer_array;
+} buffer_item;
+
+void http_transaction_handler(event_node* http_node);
+int http_transaction_event_checker(event_node* http_node);
 
 void http_parse_task(void* http_info){
     http_parser_info** info_to_parse = (http_parser_info**)http_info;
@@ -198,23 +222,21 @@ void http_parse_task(void* http_info){
 
     char* content_length_num_str = ht_get(curr_request_info->header_map, "Content-Length");
     if(content_length_num_str != NULL && is_number_str(content_length_num_str)){
-        int content_len_num = 0;
-        int curr_index = 0;
-        while(content_length_num_str[curr_index] != '\0'){
-            int curr_digit = content_length_num_str[curr_index] - '0';
-            content_len_num = (content_len_num * 10) + curr_digit;
-
-            curr_index++;
-        }
-
-        curr_request_info->content_length = content_len_num;
+        curr_request_info->content_length = str_to_num(content_length_num_str);
     }
     
     //copy start of buffer into data buffer
     size_t start_of_body_len = strnlen(rest_of_str, get_buffer_capacity((*info_to_parse)->http_header_data));
     if(start_of_body_len > 0){
-        curr_request_info->start_of_body = buffer_from_array(rest_of_str, start_of_body_len); //create_buffer(start_of_body_len, 1);
+        event_node* new_request_data = create_event_node(sizeof(buffer_item), NULL, NULL);
+        buffer_item* buff_item_ptr = (buffer_item*)new_request_data->data_ptr;
+        buff_item_ptr->buffer_array = buffer_from_array(rest_of_str, start_of_body_len);
+        //TODO: need mutex lock here?
+        append(&curr_request_info->buffer_data_list, new_request_data);
     }
+
+    //TODO: cant free this or its dereference, but should free something??
+    //free(*info_to_parse);
 }
 
 void http_parser_interm(event_node* http_parser_node){
@@ -230,18 +252,42 @@ void http_parser_interm(event_node* http_parser_node){
         request_handler_callback(http_request, http_response);
     }
 
-    if(http_request->start_of_body != NULL){
-        http_request_emit_data(http_request, http_request->start_of_body);
-        destroy_buffer(http_request->start_of_body);
-        http_request->start_of_body = NULL;
+    event_node* http_transaction_tracker_node = create_event_node(sizeof(async_http_transaction), http_transaction_handler, http_transaction_event_checker);
+    async_http_transaction* http_transaction_ptr = (async_http_transaction*)http_transaction_tracker_node->data_ptr;
+    http_transaction_ptr->http_request_info = http_request;
+    http_transaction_ptr->http_response_info = http_response;
+    enqueue_event(http_transaction_tracker_node);
+}
+
+int http_transaction_event_checker(event_node* http_node){
+    async_http_transaction* curr_working_transaction = (async_http_transaction*)http_node->data_ptr;
+
+    async_http_request* curr_http_request_info = curr_working_transaction->http_request_info;
+    linked_list* request_data_list = &curr_http_request_info->buffer_data_list;
+    while(request_data_list->size > 0){
+        event_node* buffer_node = remove_first(request_data_list);
+        buffer_item* buff_item = (buffer_item*)buffer_node->data_ptr;
+        buffer* curr_buffer = buff_item->buffer_array;
+        http_request_emit_data(curr_http_request_info, curr_buffer);
+        destroy_buffer(curr_buffer);
+        destroy_event_node(buffer_node);
     }
+
+    return 0; //TODO: return 1 (true) when underlying socket is closed?
+}
+
+void http_transaction_handler(event_node* http_node){
+    //TODO: do http transaction cleanup here?
 }
 
 void http_request_socket_data_handler(async_socket* socket, buffer* data, void* arg){
     async_http_request* req_with_data = (async_http_request*)arg;    
-    http_request_emit_data(req_with_data, data);
-
-    destroy_buffer(data);
+    
+    event_node* new_request_data = create_event_node(sizeof(buffer_item), NULL, NULL);
+    buffer_item* buff_item_ptr = (buffer_item*)new_request_data->data_ptr;
+    buff_item_ptr->buffer_array = data;
+    //TODO: need mutex lock here?
+    append(&req_with_data->buffer_data_list, new_request_data);
 }
 
 void http_request_emit_end(async_http_request* http_request);

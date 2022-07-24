@@ -19,25 +19,22 @@ int main(){
 }
 
 void data_handler(buffer* data, void* arg){
-    vector* buffer_vector = (vector*)arg;
-    vec_add_last(buffer_vector, data);
+    int* num_bytes = (int*)arg;
+    int curr_num_bytes = get_buffer_capacity(data);
+    *num_bytes += curr_num_bytes;
+    printf("i just got %d\n", curr_num_bytes);
 }
 
 void end_handler(void* arg){
-    vector* buffer_vector = (vector*)arg;
-    int total_num_bytes = 0;
-    for(int i = 0; i < vector_size(buffer_vector); i++){
-        int curr_num_bytes = get_buffer_capacity(get_index(buffer_vector, i));
-        printf("curr data is %d bytes long\n", curr_num_bytes);
-        total_num_bytes += curr_num_bytes;
-    }
-    printf("total number of bytes is %d\n", total_num_bytes);
+    int* num_bytes_ptr = (int*)arg;
+    printf("total number of bytes is %d\n", *num_bytes_ptr);
     write(STDOUT_FILENO, "\n", 1);
 }
 
 void http_server_on_request(async_http_request* req, async_http_response* res){
     printf("got request #%d\n", ++total_num_requests);
-    vector* buffer_vector = create_vector(5, 2);
-    async_http_request_on_data(req, data_handler, buffer_vector);
-    async_http_request_on_end(req, end_handler, buffer_vector);
+    int* total_num_bytes = (int*)malloc(sizeof(int));
+    *total_num_bytes = 0;
+    async_http_request_on_data(req, data_handler, total_num_bytes);
+    async_http_request_on_end(req, end_handler, total_num_bytes);
 }
