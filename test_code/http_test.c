@@ -18,23 +18,34 @@ int main(){
     return 0;
 }
 
+/*
 void data_handler(buffer* data, void* arg){
-    int* num_bytes = (int*)arg;
-    int curr_num_bytes = get_buffer_capacity(data);
-    *num_bytes += curr_num_bytes;
-    printf("i just got %d\n", curr_num_bytes);
+    vector* req_data_vector = (vector*)arg;
+    vec_add_last(req_data_vector, data);
 }
 
 void end_handler(void* arg){
-    int* num_bytes_ptr = (int*)arg;
-    printf("total number of bytes is %d\n", *num_bytes_ptr);
-    write(STDOUT_FILENO, "\n", 1);
+    vector* req_data_vector = (vector*)arg;
+    buffer* concatted_buffer = buffer_concat(req_data_vector->array, req_data_vector->size);
+    for(int i = 0; i < vector_size(req_data_vector); i++){
+        free(get_index(req_data_vector, i));
+    }
+
+    destroy_vector(req_data_vector);
+    free(req_data_vector);
 }
+*/
 
 void http_server_on_request(async_http_request* req, async_http_response* res){
-    printf("got request #%d\n", ++total_num_requests);
-    int* total_num_bytes = (int*)malloc(sizeof(int));
-    *total_num_bytes = 0;
-    async_http_request_on_data(req, data_handler, total_num_bytes);
-    async_http_request_on_end(req, end_handler, total_num_bytes);
+    //vector* req_data_vector = create_vector(5, 2);
+    //async_http_request_on_data(req, data_handler, req_data_vector);
+    //async_http_request_on_end(req, end_handler, req_data_vector);
+
+    async_http_response_set_header(res, "foo", "bar");
+    async_http_response_set_header(res, "Content-Type", "plain/text");
+    //async_http_response_set_header(res, "Content-Length", "8");
+    async_http_response_write_head(res);
+
+    async_http_response_write(res, buffer_from_array("hi there",8));
+    async_http_response_end(res);
 }

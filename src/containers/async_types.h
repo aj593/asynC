@@ -75,6 +75,7 @@ typedef struct socket_channel {
     linked_list send_stream;
     atomic_int is_reading;
     atomic_int is_writing;
+    atomic_int is_flowing;
     int is_readable;
     int is_writable;
     int closed_self;
@@ -88,6 +89,7 @@ typedef struct socket_channel {
     //pthread_mutex_t receive_lock;
     //int able_to_write;
     vector data_handler_vector; //TODO: make other vectors for other event handlers
+    pthread_mutex_t data_handler_vector_mutex;
     vector connection_handler_vector;
     vector shutdown_vector;
 } async_socket;

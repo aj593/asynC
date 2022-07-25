@@ -19,7 +19,7 @@ void listen_callback(){
     printf("listening on port %d\n", port);
 }
 
-void data_handler(async_socket* socket, buffer* read_buffer){
+void data_handler(async_socket* socket, buffer* read_buffer, void* arg){
     //printf("buffer is %ld bytes long\n", get_buffer_capacity(read_buffer));
     void* char_buff = get_internal_buffer(read_buffer);
 
@@ -42,7 +42,7 @@ void connection_handler(async_socket* new_socket){
     memcpy(char_buffer, hello_str, hello_str_len);
 
     async_socket_write(new_socket, file_copied_buffer, get_buffer_capacity(file_copied_buffer), NULL);
-    async_socket_on_data(new_socket, data_handler);
+    async_socket_on_data(new_socket, data_handler, NULL);
 }
 
 #define MAX_BYTES_TO_READ 10000
@@ -62,7 +62,7 @@ void connection_done_handler(async_socket* socket, void* arg){
         buffer* new_buffer = create_buffer(item_size, sizeof(char));
         char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
         memcpy(str_internal_buffer, item, item_size);
-        async_socket_on_data(socket, data_handler);
+        async_socket_on_data(socket, data_handler, NULL);
         async_socket_write(socket, new_buffer, item_size, NULL);
         async_tcp_socket_on_end(socket, http_on_end);
     }
@@ -102,7 +102,7 @@ void read_chat_input(async_socket* socket_ptr){
 }
 */
 
-void chat_data_handler(async_socket* data_socket, buffer* chat_buffer){
+void chat_data_handler(async_socket* data_socket, buffer* chat_buffer, void* arg){
     write(
         STDOUT_FILENO,
         get_internal_buffer(chat_buffer),
@@ -113,7 +113,7 @@ void chat_data_handler(async_socket* data_socket, buffer* chat_buffer){
 }
 
 void chat_connection_handler(async_socket* socket, void* arg){
-    async_socket_on_data(socket, chat_data_handler);
+    async_socket_on_data(socket, chat_data_handler, NULL);
 
     //read_chat_input(socket);
 }
@@ -155,8 +155,8 @@ void* chat_input(void* arg){
             NULL
         );
 
-        async_tcp_socket_end(new_socket);
-        break;
+        //async_tcp_socket_end(new_socket);
+        //break;
 
         destroy_buffer(send_buffer);
     }

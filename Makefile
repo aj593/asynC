@@ -5,10 +5,10 @@ LIBRARY_OBJ_FOLDER = obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emit
 
 #pending output rules:  
 
-client: $(LIBRARY_OBJS) chat_client.o
+chat_client: $(LIBRARY_OBJS) chat_client.o
 	gcc $(LIBRARY_OBJ_FOLDER) obj/chat_client.o -o exec/chat_client $(CFLAGS)
 
-server: $(LIBRARY_OBJS) chat_server.o
+chat_server: $(LIBRARY_OBJS) chat_server.o
 	gcc $(LIBRARY_OBJ_FOLDER) obj/chat_server.o -o exec/chat_server $(CFLAGS)
 
 upload_server: $(LIBRARY_OBJS) upload_server_driver.o

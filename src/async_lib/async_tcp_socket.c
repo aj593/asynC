@@ -36,12 +36,10 @@ int socket_event_checker(event_node* socket_event_node);
 void destroy_socket(event_node* socket_node);
 void async_send(async_socket* sending_socket);
 
-//TODO: make create_socket function to condense code?
-
 #define MAX_IP_ADDR_LEN 50
 //TODO: change these values back later
 #define DEFAULT_SEND_BUFFER_SIZE 64 * 1024 //1
-#define DEFAULT_RECV_BUFFER_SIZE 500 //64 * 1024 //1
+#define DEFAULT_RECV_BUFFER_SIZE 64 * 1024 //1
 
 typedef struct connect_info {
     async_socket* connecting_socket;
@@ -61,6 +59,7 @@ async_socket* async_socket_create(){
 
     linked_list_init(&new_socket->send_stream);
     pthread_mutex_init(&new_socket->send_stream_lock, NULL);
+    pthread_mutex_init(&new_socket->data_handler_vector_mutex, NULL);
 
     new_socket->receive_buffer = create_buffer(DEFAULT_RECV_BUFFER_SIZE, sizeof(char));
 
@@ -274,27 +273,31 @@ void destroy_socket(event_node* socket_node){
     async_shutdown(socket_ptr);
 }
 
-//TODO: find way to condense following 2 functions
-//TODO: error handle if fcn ptr in second param is NULL?
-void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
+buffer_callback_t* add_data_listener(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
     buffer_callback_t* new_data_handler_item = (buffer_callback_t*)malloc(sizeof(buffer_callback_t));
     new_data_handler_item->curr_data_handler = new_data_handler;
     new_data_handler_item->arg = arg;
-    new_data_handler_item->is_temp_subscriber = 0;
 
+    pthread_mutex_lock(&reading_socket->data_handler_vector_mutex);
     vector* data_handler_vector_ptr = &reading_socket->data_handler_vector;
     vec_add_last(data_handler_vector_ptr, new_data_handler_item);
+    reading_socket->is_flowing = 1;
+    pthread_mutex_unlock(&reading_socket->data_handler_vector_mutex);
+
+    return new_data_handler_item;
+}
+
+//TODO: find way to condense following 2 functions
+//TODO: error handle if fcn ptr in second param is NULL?
+void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
+    buffer_callback_t* buffer_cb_item = add_data_listener(reading_socket, new_data_handler, arg);
+    buffer_cb_item->is_temp_subscriber = 0;
 }
 
 //TODO: error handle if fcn ptr in second param is NULL?
 void async_socket_once_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
-    buffer_callback_t* new_data_handler_item = (buffer_callback_t*)malloc(sizeof(buffer_callback_t));
-    new_data_handler_item->curr_data_handler = new_data_handler;
-    new_data_handler_item->arg = arg;
-    new_data_handler_item->is_temp_subscriber = 1;
-
-    vector* data_handler_vector_ptr = &reading_socket->data_handler_vector;
-    vec_add_last(data_handler_vector_ptr, new_data_handler_item);
+    buffer_callback_t* buffer_cb_item = add_data_listener(reading_socket, new_data_handler, arg);
+    buffer_cb_item->is_temp_subscriber = 1;
 }
 
 void uring_recv_interm(event_node* uring_recv_node){
@@ -314,6 +317,7 @@ void uring_recv_interm(event_node* uring_recv_node){
         return;
     }
 
+    pthread_mutex_lock(&reading_socket->data_handler_vector_mutex);
     vector* data_handler_vector_ptr = &reading_socket->data_handler_vector;
     for(int i = 0; i < vector_size(data_handler_vector_ptr); i++){
         buffer* buffer_copy = create_buffer(recv_uring_info->return_val, sizeof(char));
@@ -327,10 +331,13 @@ void uring_recv_interm(event_node* uring_recv_node){
         curr_data_handler(reading_socket, buffer_copy, curr_arg);
 
         if(curr_buffer_cb_data_item->is_temp_subscriber){
-            remove_at_index(data_handler_vector_ptr, i);
-            i--;
+            remove_at_index(data_handler_vector_ptr, i--);
+            if(data_handler_vector_ptr->size == 0){
+                reading_socket->is_flowing = 0;
+            }
         }
     }
+    pthread_mutex_unlock(&reading_socket->data_handler_vector_mutex);
 }
 
 void async_recv(async_socket* receiving_socket){
@@ -384,15 +391,20 @@ int socket_event_checker(event_node* socket_event_node){
     }
 
     if(
-        !checked_socket->is_writable && 
-        !checked_socket->is_writing && 
-        checked_socket->send_stream.size == 0 &&
-        checked_socket->closed_self
+        !checked_socket->is_writable
+        && !checked_socket->is_writing
+        && checked_socket->send_stream.size == 0
+        && checked_socket->closed_self
     ){
         checked_socket->is_open = 0;
     }
 
-    if(checked_socket->data_available_to_read && !checked_socket->is_reading && checked_socket->is_open){
+    if(
+        checked_socket->data_available_to_read
+        && !checked_socket->is_reading 
+        && checked_socket->is_open
+        && checked_socket->is_flowing
+    ){
         async_recv(checked_socket);
     }
 

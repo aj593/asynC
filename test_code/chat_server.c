@@ -12,7 +12,7 @@
 
 //void hi_handler(event_emitter* emitter, )
 
-void data_handler(async_socket* socket, buffer* read_buffer){
+void data_handler(async_socket* socket, buffer* read_buffer, void* arg){
     printf("buffer is %ld bytes long\n", get_buffer_capacity(read_buffer));
     /*void* char_buff = get_internal_buffer(read_buffer);
 
@@ -50,7 +50,7 @@ void connection_handler(async_socket* new_socket){
     memcpy(char_buffer, hello_str, hello_str_len);
 
     async_socket_write(new_socket, file_copied_buffer, get_buffer_capacity(file_copied_buffer), send_cb);
-    async_socket_on_data(new_socket, data_handler);
+    async_socket_on_data(new_socket, data_handler, NULL);
 }
 
 #define MAX_BYTES_TO_READ 10000
@@ -66,7 +66,7 @@ void connection_done_handler(async_socket* socket, void* arg){
         buffer* new_buffer = create_buffer(item_size, sizeof(char));
         char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
         memcpy(str_internal_buffer, item, item_size);
-        async_socket_on_data(socket, data_handler);
+        async_socket_on_data(socket, data_handler, NULL);
         async_socket_write(socket, new_buffer, item_size, NULL);
     }
 }
@@ -81,7 +81,7 @@ void listen_callback(){
     printf("listening on port %d\n", port);
 }
 
-void chat_data_handler(async_socket*, buffer* chat_data);
+void chat_data_handler(async_socket*, buffer* chat_data, void* arg);
 
 #define max_num_sockets 10
 async_socket* socket_array[max_num_sockets];
@@ -104,10 +104,10 @@ void socket_end_callback(async_socket* closed_socket, int shutdown_return_val){
 
 async_tcp_server* new_server;
 
-void chat_connection_handler(async_socket* new_socket){
+void chat_connection_handler(async_socket* new_socket, void* arg){
     printf("got new connection!\n");
     socket_array[curr_num_sockets++] = new_socket;
-    async_socket_on_data(new_socket, chat_data_handler);
+    async_socket_on_data(new_socket, chat_data_handler, NULL);
     async_tcp_socket_on_end(new_socket, socket_end_callback);
     if(new_server->num_connections == 3){
         printf("closing server!\n");
@@ -115,7 +115,7 @@ void chat_connection_handler(async_socket* new_socket){
     }
 }
 
-void chat_data_handler(async_socket* reading_socket, buffer* chat_data){
+void chat_data_handler(async_socket* reading_socket, buffer* chat_data, void* arg){
     char* internal_buffer = (char*)get_internal_buffer(chat_data);
     write(STDOUT_FILENO, internal_buffer, get_buffer_capacity(chat_data));
 
@@ -136,8 +136,8 @@ int main(int argc, char* argv[]){
     asynC_init();
 
     new_server = async_create_tcp_server();
-    async_tcp_server_listen(new_server, port, "127.0.0.1", listen_callback);
-    async_tcp_server_on_connection(new_server, chat_connection_handler);
+    async_tcp_server_listen(new_server, port, "127.0.0.1", listen_callback, NULL);
+    async_tcp_server_on_connection(new_server, chat_connection_handler, NULL);
 
     asynC_cleanup();
 
