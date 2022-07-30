@@ -6,7 +6,7 @@
 
 #include "../async_lib/async_tcp_socket.h"
 #include "../containers/hash_table.h"
-#include "../async_lib/async_http.h"
+#include "../async_lib/async_http_server.h"
 
 #ifndef C_VECTOR
 #define C_VECTOR
@@ -84,7 +84,7 @@ typedef struct socket_channel {
     //int has_event_arr[2];
     int data_available_to_read;
     int peer_closed;
-    int shutdown_flags;
+    //int shutdown_flags;
     async_tcp_server* server_ptr;
     //pthread_mutex_t receive_lock;
     //int able_to_write;

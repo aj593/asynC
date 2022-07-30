@@ -9,21 +9,29 @@ typedef struct event_buffer {
     size_t capacity; 
 } buffer;
 
-//TODO: check if calloc calls return null?
-//TODO: change so it takes in 2 params, 1 for size of each block, and number of blocks
-buffer* create_buffer(size_t capacity, size_t size_of_each_element){
+/*
     buffer* storage_buff = (buffer*)malloc(sizeof(buffer));
     //allocating extra unit for internal buffer so we know buffer is null terminated?
     storage_buff->internal_buffer = calloc(capacity + 1, size_of_each_element);
     storage_buff->capacity = capacity;
     storage_buff->size_of_each_element = size_of_each_element;
     //storage_buff->size = 0;
+*/
+
+//TODO: check if calloc calls return null?
+//TODO: change so it takes in 2 params, 1 for size of each block, and number of blocks
+buffer* create_buffer(size_t capacity, size_t size_of_each_element){
+    void* whole_buffer_block = calloc(1, sizeof(buffer) + capacity);
+    buffer* storage_buff = (buffer*)whole_buffer_block;
+    storage_buff->capacity = capacity;
+    storage_buff->size_of_each_element = size_of_each_element;
+    storage_buff->internal_buffer = (void*)(storage_buff + 1);
 
     return storage_buff;
 }
 
 void destroy_buffer(buffer* buff_ptr){
-    free(buff_ptr->internal_buffer);
+    //free(buff_ptr->internal_buffer);
     free(buff_ptr);
 }
 

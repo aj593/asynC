@@ -1,6 +1,6 @@
 CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic
-LIBRARY_OBJS = buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o async_http.o
-LIBRARY_OBJ_FOLDER = obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http.o
+LIBRARY_OBJS = buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o
+LIBRARY_OBJ_FOLDER = obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o
 #TODO: add # -Wextra flag later
 
 #pending output rules:  
@@ -23,6 +23,9 @@ fs_writestream: $(LIBRARY_OBJS) writestream_test.o
 fs_readstream: $(LIBRARY_OBJS) readstream_test.o
 	gcc $(LIBRARY_OBJ_FOLDER) obj/readstream_test.o -o exec/readstream_test $(CFLAGS)
 
+fd_test: $(LIBRARY_OBJS) fd_ops.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/fd_ops.o -o exec/fd_ops $(CFLAGS)
+
 http_test: $(LIBRARY_OBJS) http_test.o
 	gcc $(LIBRARY_OBJ_FOLDER) obj/http_test.o -o exec/http_test $(CFLAGS)
 
@@ -35,6 +38,9 @@ simple_client_tester: test_code/simple_client_tester.c
 #src/client.c
 chat_client.o: test_code/chat_client.c
 	gcc -c test_code/chat_client.c -o obj/chat_client.o $(CFLAGS)
+
+fd_ops.o: test_code/fd_ops.c
+	gcc -c test_code/fd_ops.c -o obj/fd_ops.o $(CFLAGS)
 
 http_test.o: test_code/http_test.c
 	gcc -c test_code/http_test.c -o obj/http_test.o $(CFLAGS)
@@ -58,14 +64,20 @@ writestream_test.o: test_code/writestream_test.c
 async_fs.o: src/async_lib/async_fs.c src/async_lib/async_fs.h
 	gcc -c src/async_lib/async_fs.c -o obj/async_fs.o $(CFLAGS)
 
+async_fs_readstream.o: src/async_lib/async_fs_readstream.c src/async_lib/async_fs_readstream.h
+	gcc -c src/async_lib/async_fs_readstream.c -o obj/async_fs_readstream.o $(CFLAGS)
+
+async_fs_writestream.o: src/async_lib/async_fs_writestream.c src/async_lib/async_fs_writestream.h
+	gcc -c src/async_lib/async_fs_writestream.c -o obj/async_fs_writestream.o  $(CFLAGS)
+
 worker_thread.o: src/async_lib/worker_thread.c src/async_lib/worker_thread.h
 	gcc -c src/async_lib/worker_thread.c -o obj/worker_thread.o $(CFLAGS)
 
 async_tcp_server.o: src/async_lib/async_tcp_server.c src/async_lib/async_tcp_server.h
 	gcc -c src/async_lib/async_tcp_server.c -o obj/async_tcp_server.o $(CFLAGS)
 
-async_http.o: src/async_lib/async_http.c src/async_lib/async_http.h
-	gcc -c src/async_lib/async_http.c -o obj/async_http.o $(CFLAGS)
+async_http_server.o: src/async_lib/async_http_server.c src/async_lib/async_http_server.h
+	gcc -c src/async_lib/async_http_server.c -o obj/async_http_server.o $(CFLAGS)
 
 async_tcp_socket.o: src/async_lib/async_tcp_socket.c src/async_lib/async_tcp_socket.h
 	gcc -c src/async_lib/async_tcp_socket.c -o obj/async_tcp_socket.o $(CFLAGS)

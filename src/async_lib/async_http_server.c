@@ -1,4 +1,4 @@
-#include "async_http.h"
+#include "async_http_server.h"
 
 #include "async_tcp_server.h"
 #include "async_tcp_socket.h"
@@ -16,8 +16,8 @@ void http_parser_interm(event_node* http_parser_node);
 void http_connection_handler(async_socket* new_http_socket, void* arg);
 void http_request_socket_data_handler(async_socket* socket, buffer* data, void* arg);
 int is_number_str(char* num_str);
-void http_request_emit_data(async_http_request* http_request, buffer* emitted_data);
-void http_request_emit_end(async_http_request* http_request);
+void http_request_emit_data(async_incoming_http_request* http_request, buffer* emitted_data);
+void http_request_emit_end(async_incoming_http_request* http_request);
 
 typedef struct async_http_server {
     async_tcp_server* wrapped_tcp_server;
@@ -25,7 +25,7 @@ typedef struct async_http_server {
     vector listen_handler_vector;
 } async_http_server;
 
-typedef struct async_http_request {
+typedef struct async_incoming_http_request {
     async_socket* tcp_socket_ptr;
     linked_list buffer_data_list;
     hash_table* header_map;
@@ -37,18 +37,21 @@ typedef struct async_http_request {
     int has_emitted_end;
     vector data_handler;
     vector end_handler;
-} async_http_request;
+} async_incoming_http_request;
 
-typedef struct async_http_response {
+typedef struct async_http_outgoing_response {
     hash_table* response_header_table;
     async_socket* tcp_socket_ptr;
     int status_code;
     char* status_message;
     int was_header_written;
-} async_http_response;
+    char* header_buffer;
+    size_t header_buff_len;
+    size_t header_buff_capacity;
+} async_http_outgoing_response;
 
 typedef struct http_request_handler {
-    void(*http_request_callback)(async_http_request*, async_http_response*);
+    void(*http_request_callback)(async_incoming_http_request*, async_http_outgoing_response*);
 } http_request_handler;
 
 typedef struct request_data_callback {
@@ -61,6 +64,8 @@ typedef struct request_end_callback {
     void* arg;
 } request_end_callback;
 
+#define HEADER_BUFF_SIZE 50
+
 async_http_server* async_create_http_server(){
     async_http_server* new_http_server = (async_http_server*)calloc(1, sizeof(async_http_server));
     new_http_server->wrapped_tcp_server = async_create_tcp_server();
@@ -70,8 +75,8 @@ async_http_server* async_create_http_server(){
     return new_http_server;
 }
 
-async_http_request* create_http_request(){
-    async_http_request* new_http_request = (async_http_request*)calloc(1, sizeof(async_http_request));
+async_incoming_http_request* create_http_request(){
+    async_incoming_http_request* new_http_request = (async_incoming_http_request*)calloc(1, sizeof(async_incoming_http_request));
     new_http_request->header_map = ht_create();
     vector_init(&new_http_request->data_handler, 2, 2);
     vector_init(&new_http_request->end_handler, 2, 2);
@@ -80,11 +85,14 @@ async_http_request* create_http_request(){
     return new_http_request;
 }
 
-async_http_response* create_http_response(){
-    async_http_response* new_http_response = (async_http_response*)calloc(1, sizeof(async_http_response));
+async_http_outgoing_response* create_http_response(){
+    async_http_outgoing_response* new_http_response = (async_http_outgoing_response*)calloc(1, sizeof(async_http_outgoing_response));
     new_http_response->response_header_table = ht_create();
     new_http_response->status_code = 200;
     new_http_response->status_message = "OK";
+    new_http_response->header_buffer = (char*)malloc(sizeof(char) * HEADER_BUFF_SIZE);
+    new_http_response->header_buff_len = 0;
+    new_http_response->header_buff_capacity = HEADER_BUFF_SIZE;
 
     return new_http_response;
 }
@@ -123,16 +131,16 @@ void http_connection_handler(async_socket* new_http_socket, void* arg){
 }
 
 typedef struct http_parser_info {
-    async_http_request* http_request_info;
-    async_http_response* http_response_info;
+    async_incoming_http_request* http_request_info;
+    async_http_outgoing_response* http_response_info;
     buffer* http_header_data;
     async_socket* client_socket;
     async_http_server* http_server;
 } http_parser_info;
 
 typedef struct async_http_transaction {
-    async_http_request* http_request_info;
-    async_http_response* http_response_info;
+    async_incoming_http_request* http_request_info;
+    async_http_outgoing_response* http_response_info;
 } async_http_transaction;
 
 void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* arg){
@@ -156,6 +164,9 @@ void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* a
     new_http_parser_info->http_server = listening_http_server;
 
     enqueue_task(http_parse_task_node);
+
+    //char* data_print = (char*)get_internal_buffer(data_buffer);
+    //printf("%s\n", data_print);
 }
 
 int str_to_num(char* num_str){
@@ -181,7 +192,7 @@ int http_transaction_event_checker(event_node* http_node);
 void http_parse_task(void* http_info){
     http_parser_info** info_to_parse = (http_parser_info**)http_info;
     (*info_to_parse)->http_request_info = create_http_request();
-    async_http_request* curr_request_info = (*info_to_parse)->http_request_info;
+    async_incoming_http_request* curr_request_info = (*info_to_parse)->http_request_info;
     curr_request_info->tcp_socket_ptr = (*info_to_parse)->client_socket;
     
     async_socket_on_data(
@@ -191,7 +202,7 @@ void http_parse_task(void* http_info){
     );
     
     (*info_to_parse)->http_response_info = create_http_response();
-    async_http_response* curr_response_info = (*info_to_parse)->http_response_info;
+    async_http_outgoing_response* curr_response_info = (*info_to_parse)->http_response_info;
     curr_response_info->tcp_socket_ptr = (*info_to_parse)->client_socket;
 
     char* header_string = (char*)get_internal_buffer((*info_to_parse)->http_header_data);
@@ -249,13 +260,13 @@ void http_parse_task(void* http_info){
 void http_parser_interm(event_node* http_parser_node){
     thread_task_info* http_parse_data = (thread_task_info*)http_parser_node->data_ptr;
     http_parser_info* http_parse_ptr = http_parse_data->http_parse_info;
-    async_http_request* http_request = http_parse_ptr->http_request_info;
-    async_http_response* http_response = http_parse_ptr->http_response_info;
+    async_incoming_http_request* http_request = http_parse_ptr->http_request_info;
+    async_http_outgoing_response* http_response = http_parse_ptr->http_response_info;
 
     vector* request_handler_vector = &http_parse_ptr->http_server->request_handler_vector;
     for(int i = 0; i < vector_size(request_handler_vector); i++){
         http_request_handler* curr_request_handler = (http_request_handler*)get_index(request_handler_vector, i);
-        void(*request_handler_callback)(async_http_request*, async_http_response*) = curr_request_handler->http_request_callback;
+        void(*request_handler_callback)(async_incoming_http_request*, async_http_outgoing_response*) = curr_request_handler->http_request_callback;
         request_handler_callback(http_request, http_response);
     }
 
@@ -269,7 +280,7 @@ void http_parser_interm(event_node* http_parser_node){
 int http_transaction_event_checker(event_node* http_node){
     async_http_transaction* curr_working_transaction = (async_http_transaction*)http_node->data_ptr;
 
-    async_http_request* curr_http_request_info = curr_working_transaction->http_request_info;
+    async_incoming_http_request* curr_http_request_info = curr_working_transaction->http_request_info;
     linked_list* request_data_list = &curr_http_request_info->buffer_data_list;
     while(request_data_list->size > 0){
         event_node* buffer_node = remove_first(request_data_list);
@@ -294,7 +305,7 @@ void http_transaction_handler(event_node* http_node){
 }
 
 void http_request_socket_data_handler(async_socket* socket, buffer* data, void* arg){
-    async_http_request* req_with_data = (async_http_request*)arg;    
+    async_incoming_http_request* req_with_data = (async_incoming_http_request*)arg;    
     
     event_node* new_request_data = create_event_node(sizeof(buffer_item), NULL, NULL);
     buffer_item* buff_item_ptr = (buffer_item*)new_request_data->data_ptr;
@@ -303,7 +314,7 @@ void http_request_socket_data_handler(async_socket* socket, buffer* data, void* 
     append(&req_with_data->buffer_data_list, new_request_data);
 }
 
-void http_request_emit_data(async_http_request* http_request, buffer* emitted_data){
+void http_request_emit_data(async_incoming_http_request* http_request, buffer* emitted_data){
     vector* data_handler_vector = &http_request->data_handler;
     for(int i = 0; i < vector_size(data_handler_vector); i++){
         request_data_callback* curr_data_callback = get_index(data_handler_vector, i);
@@ -316,7 +327,7 @@ void http_request_emit_data(async_http_request* http_request, buffer* emitted_da
     http_request->num_payload_bytes_read += get_buffer_capacity(emitted_data);
 }
 
-void http_request_emit_end(async_http_request* http_request){
+void http_request_emit_end(async_incoming_http_request* http_request){
     vector* end_vector = &http_request->end_handler;
 
     for(int i = 0; i < vector_size(end_vector); i++){
@@ -346,23 +357,23 @@ int is_number_str(char* num_str){
     return 1;
 }
 
-char* async_http_request_get(async_http_request* http_req, char* header_key_name){
+char* async_incoming_http_request_get(async_incoming_http_request* http_req, char* header_key_name){
     return ht_get(http_req->header_map, header_key_name);
 }
 
-char* async_http_request_method(async_http_request* http_req){
+char* async_incoming_http_request_method(async_incoming_http_request* http_req){
     return http_req->method;
 }
 
-char* async_http_request_url(async_http_request* http_req){
+char* async_incoming_http_request_url(async_incoming_http_request* http_req){
     return http_req->url;
 }
 
-char* async_http_request_http_version(async_http_request* http_req){
+char* async_incoming_http_request_http_version(async_incoming_http_request* http_req){
     return http_req->http_version;
 }
 
-void async_http_request_on_data(async_http_request* http_req, void(*req_data_handler)(buffer*, void*), void* arg){
+void async_incoming_http_request_on_data(async_incoming_http_request* http_req, void(*req_data_handler)(buffer*, void*), void* arg){
     //TODO: put into separate vector instead?
     vector* data_handler_vector = &http_req->data_handler;
     request_data_callback* req_data_callback = (request_data_callback*)malloc(sizeof(request_data_callback));
@@ -371,7 +382,7 @@ void async_http_request_on_data(async_http_request* http_req, void(*req_data_han
     vec_add_last(data_handler_vector, req_data_callback);
 }
 
-void async_http_request_on_end(async_http_request* http_req, void(*req_end_handler)(void*), void* arg){
+void async_incoming_http_request_on_end(async_incoming_http_request* http_req, void(*req_end_handler)(void*), void* arg){
     if(http_req->has_emitted_end){
         return;
     }
@@ -384,7 +395,7 @@ void async_http_request_on_end(async_http_request* http_req, void(*req_end_handl
     vec_add_last(end_handler_vector, req_end_callback);
 }
 
-void async_http_server_on_request(async_http_server* async_http_server, void(*request_handler)(async_http_request*, async_http_response*)){
+void async_http_server_on_request(async_http_server* async_http_server, void(*request_handler)(async_incoming_http_request*, async_http_outgoing_response*)){
     http_request_handler* request_handler_item = (http_request_handler*)malloc(sizeof(http_request_handler));
     request_handler_item->http_request_callback = request_handler;
 
@@ -392,19 +403,69 @@ void async_http_server_on_request(async_http_server* async_http_server, void(*re
     vec_add_last(http_request_handler_vector, request_handler_item);
 }
 
-void async_http_response_set_status_code(async_http_response* curr_http_response, int status_code){
+void async_http_response_set_status_code(async_http_outgoing_response* curr_http_response, int status_code){
     curr_http_response->status_code = status_code;
 }
 
-void async_http_response_set_status_msg(async_http_response* curr_http_response, char* status_msg){
+void async_http_response_set_status_msg(async_http_outgoing_response* curr_http_response, char* status_msg){
     curr_http_response->status_message = status_msg;
 }
 
-void async_http_response_set_header(async_http_response* curr_http_response, char* header_key, char* header_val){
-    ht_set(curr_http_response->response_header_table, header_key, header_val);
+void async_http_response_set_header(async_http_outgoing_response* curr_http_response, char* header_key, char* header_val){
+    size_t key_len = strlen(header_key);
+    size_t value_len = strlen(header_val);
+    size_t new_header_len = key_len + value_len + 2;
+    //TODO: make sure indexing with capacity and lengths work?
+    if(curr_http_response->header_buff_len + new_header_len > curr_http_response->header_buff_capacity){
+        char* new_header_str = (char*)realloc(curr_http_response->header_buffer, curr_http_response->header_buff_capacity + HEADER_BUFF_SIZE);
+        if(new_header_str == NULL){
+            //TODO: error handling here
+            return;
+        }
+
+        curr_http_response->header_buff_capacity += HEADER_BUFF_SIZE;
+    }
+
+    strncpy(
+        curr_http_response->header_buffer + curr_http_response->header_buff_len, 
+        header_key,
+        key_len
+    );
+
+    size_t key_offset = curr_http_response->header_buff_len;
+
+    curr_http_response->header_buff_len += key_len;
+
+    curr_http_response->header_buffer[curr_http_response->header_buff_len++] = '\0';
+
+    strncpy(
+        curr_http_response->header_buffer + curr_http_response->header_buff_len,
+        header_val,
+        value_len
+    );
+
+    size_t val_offset = curr_http_response->header_buff_len;
+
+    curr_http_response->header_buff_len += value_len;
+
+    curr_http_response->header_buffer[curr_http_response->header_buff_len++] = '\0';
+
+    /*
+    write(
+        STDOUT_FILENO,
+        curr_http_response->header_buffer,
+        curr_http_response->header_buff_len
+    );
+    */
+
+    ht_set(
+        curr_http_response->response_header_table, 
+        curr_http_response->header_buffer + key_offset, 
+        curr_http_response->header_buffer + val_offset
+    );
 }
 
-void async_http_response_write_head(async_http_response* curr_http_response){
+void async_http_response_write_head(async_http_outgoing_response* curr_http_response){
     if(curr_http_response->was_header_written){
         return;
     }
@@ -489,7 +550,7 @@ void async_http_response_write_head(async_http_response* curr_http_response){
     curr_http_response->was_header_written = 1;
 }
 
-void async_http_response_write(async_http_response* curr_http_response, buffer* response_data){
+void async_http_response_write(async_http_outgoing_response* curr_http_response, buffer* response_data){
     if(!curr_http_response->was_header_written){
         async_http_response_write_head(curr_http_response);
     }
@@ -502,7 +563,7 @@ void async_http_response_write(async_http_response* curr_http_response, buffer* 
     );
 }
 
-void async_http_response_end(async_http_response* curr_http_response){
+void async_http_response_end(async_http_outgoing_response* curr_http_response){
     if(!curr_http_response->was_header_written){
         async_http_response_write_head(curr_http_response);
     }

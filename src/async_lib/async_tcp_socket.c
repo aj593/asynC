@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "../event_loop.h"
 #include "../io_uring_ops.h"
@@ -51,7 +52,6 @@ typedef struct connect_info {
 
 async_socket* async_socket_create(){
     async_socket* new_socket = (async_socket*)calloc(1, sizeof(async_socket));
-    new_socket->shutdown_flags = SHUT_WR;
 
     vector_init(&new_socket->connection_handler_vector, 5, 2);
     vector_init(&new_socket->data_handler_vector, 5, 2);
@@ -190,7 +190,6 @@ void async_tcp_socket_end(async_socket* ending_socket){
 
 void async_tcp_socket_destroy(async_socket* socket_to_destroy){
     socket_to_destroy->is_open = 0;
-    socket_to_destroy->shutdown_flags = SHUT_RDWR;
 }
 
 void uring_shutdown_interm(event_node* shutdown_uring_node){
@@ -230,6 +229,7 @@ void uring_shutdown_interm(event_node* shutdown_uring_node){
         closed_socket->server_ptr->num_connections--;
     }
 
+    //TODO: add async_close call here?
     free(closed_socket);
 }
 
@@ -250,7 +250,7 @@ void async_shutdown(async_socket* closing_socket){
         io_uring_prep_shutdown(
             socket_shutdown_sqe, 
             closing_socket->socket_fd, 
-            closing_socket->shutdown_flags
+            SHUT_WR
         );
         set_sqe_data(socket_shutdown_sqe, shutdown_uring_node);
         increment_sqe_counter();
@@ -263,6 +263,10 @@ void async_shutdown(async_socket* closing_socket){
 }
 
 #include <stdio.h>
+
+void close_cb(int result, void* arg){
+
+}
 
 void destroy_socket(event_node* socket_node){
     socket_info* destroyed_socket_info = (socket_info*)socket_node->data_ptr;
