@@ -2,6 +2,25 @@
 #define ASYNC_IO_URING_OPS_WRAPPER_H
 
 typedef struct event_node event_node;
+#include "async_lib/async_fs.h"
+#include "async_types/buffer.h"
+
+#ifndef LIBURING_STATS_INFO
+#define LIBURING_STATS_INFO
+
+typedef struct liburing_stats {
+    int fd;
+    buffer* buffer;
+    int return_val;
+    int is_done;
+    grouped_fs_cbs fs_cb;
+    void* cb_arg;
+    struct sockaddr client_addr;
+    async_tcp_server* listening_server;
+    async_socket* rw_socket;
+} uring_stats;
+
+#endif
 
 void io_uring_init(void);
 void io_uring_exit(void);

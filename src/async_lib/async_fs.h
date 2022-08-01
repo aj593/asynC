@@ -9,8 +9,23 @@
 #include "async_tcp_server.h"
 #include "../async_lib/async_tcp_socket.h"
 #include "../containers/linked_list.h"
-#include "../containers/c_vector.h"
+#include "../containers/async_container_vector.h"
 #include "../containers/async_types.h"
+#include <netdb.h>
+
+typedef union fs_cbs {
+    void(*open_callback)(int, void*);
+    void(*read_callback)(int, buffer*, int, void*);
+    void(*write_callback)(int, buffer*, int, void*);
+    void(*chmod_callback)(int, void*);
+    void(*chown_callback)(int, void*);
+    void(*close_callback)(int, void*);
+    void(*send_callback)(async_socket*, void*);
+    void(*dns_lookup_callback)(struct addrinfo*, void*);
+    //void(*open_stat_callback)(int, size_t, void*);
+    //void(*connect_callback)(async_socket*, void*);
+    //void(*shutdown_callback)(int);
+} grouped_fs_cbs;
 
 void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg);
 

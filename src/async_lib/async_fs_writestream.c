@@ -46,7 +46,7 @@ void writestream_finish_handler(event_node* writestream_node){
     fs_writestream_info* destroyed_writestream_ptr = (fs_writestream_info*)writestream_node->data_ptr;
     async_fs_writestream* closing_writestream_ptr = destroyed_writestream_ptr->writestream_info;
 
-    linked_list_destroy(&closing_writestream_ptr->buffer_stream_list);
+    //linked_list_destroy(&closing_writestream_ptr->buffer_stream_list);
     pthread_mutex_destroy(&closing_writestream_ptr->buffer_stream_lock);
 
     async_close(

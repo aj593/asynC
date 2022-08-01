@@ -1,6 +1,6 @@
 CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic
-LIBRARY_OBJS = buffer.o c_vector.o event_loop.o event_emitter.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o
-LIBRARY_OBJ_FOLDER = obj/buffer.o obj/c_vector.o obj/event_loop.o obj/event_emitter.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o
+LIBRARY_OBJS = buffer.o async_container_vector.o event_loop.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_tcp_server.o async_tcp_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o async_dns.o async_http_request.o
+LIBRARY_OBJ_FOLDER = obj/buffer.o obj/async_container_vector.o obj/event_loop.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o obj/async_dns.o obj/async_http_request.o
 #TODO: add # -Wextra flag later
 
 #pending output rules:  
@@ -96,8 +96,8 @@ linked_list.o: src/containers/linked_list.c src/containers/linked_list.h
 hash_table.o: src/containers/hash_table.c src/containers/hash_table.h
 	gcc -c src/containers/hash_table.c -o obj/hash_table.o $(CFLAGS)
 
-c_vector.o: src/containers/c_vector.c src/containers/c_vector.h
-	gcc -c src/containers/c_vector.c -o obj/c_vector.o $(CFLAGS)
+async_container_vector.o: src/containers/async_container_vector.c src/containers/async_container_vector.h
+	gcc -c src/containers/async_container_vector.c -o obj/async_container_vector.o $(CFLAGS)
 
 thread_pool.o: src/containers/thread_pool.c src/containers/thread_pool.h
 	gcc -c src/containers/thread_pool.c -o obj/thread_pool.o $(CFLAGS)
@@ -113,6 +113,12 @@ async_epoll_ops.o: src/async_epoll_ops.c src/async_epoll_ops.h
 #src/event_loop.c
 event_loop.o: src/event_loop.c src/event_loop.h
 	gcc -c src/event_loop.c -o obj/event_loop.o $(CFLAGS)
+
+async_dns.o: src/async_lib/async_dns.c src/async_lib/async_dns.h
+	gcc -c src/async_lib/async_dns.c -o obj/async_dns.o $(CFLAGS)
+
+async_http_request.o: src/async_lib/async_http_request.c src/async_lib/async_http_request.h
+	gcc -c src/async_lib/async_http_request.c -o obj/async_http_request.o $(CFLAGS)
 
 clean:
 	rm obj/*.o

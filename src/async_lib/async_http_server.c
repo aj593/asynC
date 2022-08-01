@@ -21,8 +21,8 @@ void http_request_emit_end(async_incoming_http_request* http_request);
 
 typedef struct async_http_server {
     async_tcp_server* wrapped_tcp_server;
-    vector request_handler_vector;
-    vector listen_handler_vector;
+    async_container_vector* request_handler_vector;
+    async_container_vector* listen_handler_vector;
 } async_http_server;
 
 typedef struct async_incoming_http_request {
@@ -35,8 +35,8 @@ typedef struct async_incoming_http_request {
     int content_length;
     int num_payload_bytes_read;
     int has_emitted_end;
-    vector data_handler;
-    vector end_handler;
+    async_container_vector* data_handler;
+    async_container_vector* end_handler;
 } async_incoming_http_request;
 
 typedef struct async_http_outgoing_response {
@@ -64,13 +64,18 @@ typedef struct request_end_callback {
     void* arg;
 } request_end_callback;
 
+typedef struct listen_callback_t {
+    void(*listen_callback)(void*);
+    void* arg;
+} listen_callback_t;
+
 #define HEADER_BUFF_SIZE 50
 
 async_http_server* async_create_http_server(){
     async_http_server* new_http_server = (async_http_server*)calloc(1, sizeof(async_http_server));
     new_http_server->wrapped_tcp_server = async_create_tcp_server();
-    vector_init(&new_http_server->request_handler_vector, 2, 2);
-    vector_init(&new_http_server->listen_handler_vector, 2, 2);
+    new_http_server->request_handler_vector = async_container_vector_create(2, 2, sizeof(http_request_handler));
+    new_http_server->listen_handler_vector = async_container_vector_create(2, 2, sizeof(listen_callback_t));
 
     return new_http_server;
 }
@@ -78,8 +83,8 @@ async_http_server* async_create_http_server(){
 async_incoming_http_request* create_http_request(){
     async_incoming_http_request* new_http_request = (async_incoming_http_request*)calloc(1, sizeof(async_incoming_http_request));
     new_http_request->header_map = ht_create();
-    vector_init(&new_http_request->data_handler, 2, 2);
-    vector_init(&new_http_request->end_handler, 2, 2);
+    new_http_request->data_handler = async_container_vector_create(2, 2, sizeof(request_data_callback));
+    new_http_request->end_handler = async_container_vector_create(2, 2, sizeof(request_end_callback));
     linked_list_init(&new_http_request->buffer_data_list);
 
     return new_http_request;
@@ -114,8 +119,8 @@ void async_http_server_listen(async_http_server* listening_server, int port, cha
 void after_http_listen(void* cb_arg){
     async_http_server* listening_server = (async_http_server*)cb_arg;
     
-    vector* http_listen_vector = &listening_server->listen_handler_vector;
-    for(int i = 0; i < vector_size(http_listen_vector); i++){
+    async_container_vector* http_listen_vector = listening_server->listen_handler_vector;
+    for(int i = 0; i < async_container_vector_size(http_listen_vector); i++){
         //TODO: execute all listeners callbacks here
     }
 
@@ -263,10 +268,11 @@ void http_parser_interm(event_node* http_parser_node){
     async_incoming_http_request* http_request = http_parse_ptr->http_request_info;
     async_http_outgoing_response* http_response = http_parse_ptr->http_response_info;
 
-    vector* request_handler_vector = &http_parse_ptr->http_server->request_handler_vector;
-    for(int i = 0; i < vector_size(request_handler_vector); i++){
-        http_request_handler* curr_request_handler = (http_request_handler*)get_index(request_handler_vector, i);
-        void(*request_handler_callback)(async_incoming_http_request*, async_http_outgoing_response*) = curr_request_handler->http_request_callback;
+    async_container_vector* request_handler_vector = http_parse_ptr->http_server->request_handler_vector;
+    http_request_handler curr_request_handler;
+    for(int i = 0; i < async_container_vector_size(request_handler_vector); i++){
+        async_container_vector_get(request_handler_vector, i, &curr_request_handler);
+        void(*request_handler_callback)(async_incoming_http_request*, async_http_outgoing_response*) = curr_request_handler.http_request_callback;
         request_handler_callback(http_request, http_response);
     }
 
@@ -315,12 +321,13 @@ void http_request_socket_data_handler(async_socket* socket, buffer* data, void* 
 }
 
 void http_request_emit_data(async_incoming_http_request* http_request, buffer* emitted_data){
-    vector* data_handler_vector = &http_request->data_handler;
-    for(int i = 0; i < vector_size(data_handler_vector); i++){
-        request_data_callback* curr_data_callback = get_index(data_handler_vector, i);
-        void(*curr_req_data_handler)(buffer*, void*) = curr_data_callback->req_data_handler;
+    async_container_vector* data_handler_vector = http_request->data_handler;
+    request_data_callback curr_data_callback;
+    for(int i = 0; i < async_container_vector_size(data_handler_vector); i++){
+        async_container_vector_get(data_handler_vector, i, &curr_data_callback);
+        void(*curr_req_data_handler)(buffer*, void*) = curr_data_callback.req_data_handler;
         buffer* req_buffer_copy = buffer_copy(emitted_data);
-        void* curr_arg = curr_data_callback->arg;
+        void* curr_arg = curr_data_callback.arg;
         curr_req_data_handler(req_buffer_copy, curr_arg);
     }
 
@@ -328,19 +335,22 @@ void http_request_emit_data(async_incoming_http_request* http_request, buffer* e
 }
 
 void http_request_emit_end(async_incoming_http_request* http_request){
-    vector* end_vector = &http_request->end_handler;
+    async_container_vector* end_vector = http_request->end_handler;
+    request_end_callback curr_end_callback_item;
 
-    for(int i = 0; i < vector_size(end_vector); i++){
-        request_end_callback* curr_end_callback_item = (request_end_callback*)get_index(end_vector, i);
-        void(*curr_end_callback)(void*) = curr_end_callback_item->req_end_handler;
-        void* curr_arg = curr_end_callback_item->arg;
+    for(int i = 0; i < async_container_vector_size(end_vector); i++){
+        async_container_vector_get(end_vector, i, &curr_end_callback_item);
+        void(*curr_end_callback)(void*) = curr_end_callback_item.req_end_handler;
+        void* curr_arg = curr_end_callback_item.arg;
         curr_end_callback(curr_arg);
     }
 
+    /*
     while(end_vector->size > 0){
         request_end_callback* curr_removing_end_callback = (request_end_callback*)vec_remove_last(end_vector);
         free(curr_removing_end_callback);
     }
+    */
 
     http_request->has_emitted_end = 1;
 }
@@ -375,11 +385,13 @@ char* async_incoming_http_request_http_version(async_incoming_http_request* http
 
 void async_incoming_http_request_on_data(async_incoming_http_request* http_req, void(*req_data_handler)(buffer*, void*), void* arg){
     //TODO: put into separate vector instead?
-    vector* data_handler_vector = &http_req->data_handler;
-    request_data_callback* req_data_callback = (request_data_callback*)malloc(sizeof(request_data_callback));
-    req_data_callback->req_data_handler = req_data_handler;
-    req_data_callback->arg = arg;
-    vec_add_last(data_handler_vector, req_data_callback);
+    async_container_vector** data_handler_vector = &http_req->data_handler;
+    request_data_callback req_data_callback = {
+        .req_data_handler = req_data_handler,
+        .arg = arg
+    };
+    
+    async_container_vector_add_last(data_handler_vector, &req_data_callback);
 }
 
 void async_incoming_http_request_on_end(async_incoming_http_request* http_req, void(*req_end_handler)(void*), void* arg){
@@ -387,20 +399,22 @@ void async_incoming_http_request_on_end(async_incoming_http_request* http_req, v
         return;
     }
 
-    request_end_callback* req_end_callback = (request_end_callback*)malloc(sizeof(request_end_callback));
-    req_end_callback->req_end_handler = req_end_handler;
-    req_end_callback->arg = arg;
+    request_end_callback req_end_callback = {
+        .req_end_handler = req_end_handler,
+        .arg = arg
+    };
 
-    vector* end_handler_vector = &http_req->end_handler;
-    vec_add_last(end_handler_vector, req_end_callback);
+    async_container_vector** end_handler_vector = &http_req->end_handler;
+    async_container_vector_add_last(end_handler_vector, &req_end_callback);
 }
 
 void async_http_server_on_request(async_http_server* async_http_server, void(*request_handler)(async_incoming_http_request*, async_http_outgoing_response*)){
-    http_request_handler* request_handler_item = (http_request_handler*)malloc(sizeof(http_request_handler));
-    request_handler_item->http_request_callback = request_handler;
+    http_request_handler request_handler_item = {
+        .http_request_callback = request_handler
+    };
 
-    vector* http_request_handler_vector = &async_http_server->request_handler_vector;
-    vec_add_last(http_request_handler_vector, request_handler_item);
+    async_container_vector** http_request_handler_vector = &async_http_server->request_handler_vector;
+    async_container_vector_add_last(http_request_handler_vector, &request_handler_item);
 }
 
 void async_http_response_set_status_code(async_http_outgoing_response* curr_http_response, int status_code){

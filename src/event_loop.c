@@ -1,9 +1,9 @@
 #include "event_loop.h"
 
-#include "async_types/event_emitter.h"
+//#include "async_types/event_emitter.h"
 
 #include "containers/hash_table.h"
-#include "containers/c_vector.h"
+#include "containers/async_container_vector.h"
 #include "containers/thread_pool.h"
 #include "io_uring_ops.h"
 
@@ -74,9 +74,9 @@ void asynC_cleanup(){
     //TODO: destroy child_spawner process
 
     //TODO: destroy all vectors in hash_table too and clean up other stuff
-    linked_list_destroy(&event_queue);
-    linked_list_destroy(&execute_queue);
-    linked_list_destroy(&defer_queue);
+    //linked_list_destroy(&event_queue);
+    //linked_list_destroy(&execute_queue);
+    //linked_list_destroy(&defer_queue);
 
     async_epoll_destroy();
 
@@ -93,8 +93,8 @@ void asynC_wait(){
         uring_check();
         epoll_check();
 
-        event_node* curr_node = event_queue.head->next;
-        while(curr_node != event_queue.tail){
+        event_node* curr_node = event_queue.head.next;
+        while(curr_node != &event_queue.tail){
             event_node* check_node = curr_node;
             int(*curr_event_checker)(event_node*) = check_node->event_checker;
             curr_node = curr_node->next;

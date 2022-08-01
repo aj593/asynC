@@ -2,7 +2,7 @@
 
 #include "../event_loop.h"
 #include "../containers/hash_table.h"
-#include "../containers/c_vector.h"
+#include "../containers/async_container_vector.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -41,7 +41,7 @@ void destroy_emitter(event_emitter* emitter){
 void subscribe(event_emitter* subscriber, char* event_name, void(*new_sub_callback)(event_emitter*, event_arg*)){
     //TODO: is this right way to do this? TEST THIS
     //if item not in hash table (key gets us NULL value) then add the new key-value pair into it
-    vector* vector_from_hash = (vector*)ht_get(subscriber_hash_table, event_name);
+    async_container_vector* vector_from_hash = (async_container_vector*)ht_get(subscriber_hash_table, event_name);
     if(vector_from_hash == NULL){
         vector_from_hash = create_vector(INITIAL_MAX_LISTENERS, EVENT_VEC_RESIZE_FACTOR);
 
@@ -55,7 +55,7 @@ void subscribe(event_emitter* subscriber, char* event_name, void(*new_sub_callba
     vec_entry->event_callback = new_sub_callback;
 
     //add this new item to the vector of subscribers
-    vec_add_last(vector_from_hash, vec_entry);
+    async_container_vector_add_last(&vector_from_hash, vec_entry);
 }
 
 //TODO: destroy vector and make hash table event key point to NULL if vector is empty after unsubscribing?
@@ -65,26 +65,26 @@ void unsubscribe_from_all_events(event_emitter* unsubscribing_emitter){
 
 //TODO: make return value for whether items were successfully unsubbed?
 void unsubscribe_all_listeners_from_event(event_emitter* unsubscribing_emitter, char* event_name){
-    vector* subscriber_vector = (vector*)ht_get(subscriber_hash_table, event_name);
+    async_container_vector* subscriber_vector = (async_container_vector*)ht_get(subscriber_hash_table, event_name);
     if(subscriber_vector == NULL){
         return;
     }
 
     //TODO: need to make any calls to free() or destroy_item() here?
     //traverse backwards cuz traversing forward and removing items can mess up indexes
-    for(int vec_index = vector_size(subscriber_vector) - 1; vec_index >= 0; vec_index--){
-        emitter_item* curr_emitter_item = (emitter_item*)get_index(subscriber_vector, vec_index);
+    for(int vec_index = async_container_vector_size(subscriber_vector) - 1; vec_index >= 0; vec_index--){
+        async_container_vector_get(subscriber_vector, vec_index);
         event_emitter* curr_emitter = curr_emitter_item->emitter;
         if(curr_emitter == unsubscribing_emitter){
-            remove_at_index(subscriber_vector, vec_index);
-            free(curr_emitter_item);
+            async_container_vector_remove(subscriber_vector, vec_index, NULL);
+            //free(curr_emitter_item);
         }
     }
 }
 
 //TODO: make return value for whether items were successfully unsubbed?
 void unsubscribe_single_listener_from_event(event_emitter* unsubscribing_emitter, char* event_name){
-    vector* subscriber_vector = (vector*)ht_get(subscriber_hash_table, event_name);
+    async_container_vector* subscriber_vector = (async_container_vector*)ht_get(subscriber_hash_table, event_name);
     if(subscriber_vector == NULL){
         return;
     }
@@ -95,8 +95,8 @@ void unsubscribe_single_listener_from_event(event_emitter* unsubscribing_emitter
         emitter_item* curr_emitter_item = (emitter_item*)get_index(subscriber_vector, vec_index);
         event_emitter* curr_emitter = curr_emitter_item->emitter;
         if(curr_emitter == unsubscribing_emitter){
-            remove_at_index(subscriber_vector, vec_index);
-            free(curr_emitter_item);
+            remove_at_index(subscriber_vector, vec_index, NULL);
+            //free(curr_emitter_item);
             break;
         }
     }
@@ -129,7 +129,7 @@ void destroy_emitter_arg(event_arg* event_arg){
 //TODO: have return value or use callback to show successful emission(s)?
 //TODO: make params take in void* and size, or event_arg*?
 void emit(event_emitter* announcing_emitter, char* event_name, void* original_data, size_t size_of_original_data){
-    vector* event_subscribers = ht_get(subscriber_hash_table, event_name);
+    async_container_vector* event_subscribers = (async_container_vector*)ht_get(subscriber_hash_table, event_name);
     if(event_subscribers == NULL){
         return;
     }

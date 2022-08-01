@@ -3,31 +3,26 @@
 #include <stddef.h>
 
 void linked_list_init(linked_list* list){
-    list->head = (event_node*)calloc(1, sizeof(event_node));
-    list->tail = (event_node*)calloc(1, sizeof(event_node));
+    list->head.next = &list->tail;
+    list->tail.prev = &list->head;
     
-    list->head->next = list->tail;
-    list->tail->prev = list->head;
-    
-    list->head->prev = NULL;
-    list->tail->next = NULL;
+    list->head.prev = NULL;
+    list->tail.next = NULL;
     
     list->size = 0;
 }
 
 void linked_list_destroy(linked_list* list){
-    event_node* currPCB = list->head;
+    event_node* curr_node = list->head.next;
 
-    while(currPCB != NULL){
-        event_node* PCB_to_free = currPCB;
+    while(curr_node != &list->tail){
+        event_node* node_to_free = curr_node;
         
-        currPCB = currPCB->next;
+        curr_node = curr_node->next;
 
-        free(PCB_to_free);
+        free(node_to_free);
     }
 
-    list->head = NULL;
-    list->tail = NULL;
     list->size = 0;
 }
 
@@ -75,7 +70,7 @@ void add_next(linked_list* list, event_node* curr, event_node* new_node){
 }
 
 void prepend(linked_list* list, event_node* new_first){
-    add_next(list, list->head, new_first);
+    add_next(list, &list->head, new_first);
 }
 
 //TODO: make it so ppl can't add previous node to dummy head node?
@@ -92,7 +87,7 @@ void add_prev(linked_list* list, event_node* curr, event_node* new_node){
 }
 
 void append(linked_list* list, event_node* new_last){
-    add_prev(list, list->tail, new_last);
+    add_prev(list, &list->tail, new_last);
 }
 
 //TODO: change names of following functions to include "list_" in their names
@@ -117,9 +112,9 @@ event_node* remove_curr(linked_list* list, event_node* curr_removed_node){
 }
 
 event_node* remove_first(linked_list* list){
-    return remove_curr(list, list->head->next);
+    return remove_curr(list, list->head.next);
 }
 
 event_node* remove_last(linked_list* list){
-    return remove_curr(list, list->tail->prev);
+    return remove_curr(list, list->tail.prev);
 }

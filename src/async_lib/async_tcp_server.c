@@ -47,11 +47,20 @@ typedef struct socket_send_buffer {
 
 #endif
 
+typedef struct listen_cb {
+    void(*listen_callback)(void*);
+    void* arg;
+} listen_callback_t;
+
+typedef struct connection_handler_cb {
+    void(*connection_handler)(async_socket*, void*);
+    void* arg;
+} connection_callback_t;
+
 async_tcp_server* async_create_tcp_server(){
     async_tcp_server* new_server = (async_tcp_server*)calloc(1, sizeof(async_tcp_server));
-    vector_init(&new_server->listeners_vector, 5, 2);
-    vector_init(&new_server->connection_vector, 5, 2);
-    //new_server->socket_table = ht_create();
+    new_server->listeners_vector = async_container_vector_create(2, 2, sizeof(listen_callback_t));
+    new_server->connection_vector = async_container_vector_create(2, 2, sizeof(connection_callback_t));
 
     return new_server;
 }
@@ -75,17 +84,23 @@ void destroy_server(event_node* server_node){
     async_tcp_server* destroying_server = destroying_server_info->listening_server;
     //TODO: do other cleanups? remove items from each vector?
     
-    vector* destroying_connection_vector = &destroying_server->connection_vector;
+    free(destroying_server->connection_vector);
+    free(destroying_server->listeners_vector);
+
+    /*
+    async_container_vector* destroying_connection_vector = destroying_server->connection_vector;
     for(int i = 0; i < vector_size(destroying_connection_vector); i++){
-        free(get_index(destroying_connection_vector, i));
+        //free(get_index(destroying_connection_vector, i));
     }
     destroy_vector(destroying_connection_vector);
 
-    vector* destroying_listeners_vector = &destroying_server->listeners_vector;
+    async_container_vector* destroying_listeners_vector = destroying_server->listeners_vector;
     for(int i = 0; i < vector_size(destroying_listeners_vector); i++){
-        free(get_index(destroying_listeners_vector, i));
+        //free(get_index(destroying_listeners_vector, i));
     }
     destroy_vector(destroying_listeners_vector);
+    */
+    
 }
 
 void async_accept(async_tcp_server* accepting_server);
@@ -166,19 +181,16 @@ void listen_task_handler(void* listen_task){
     //*curr_listen_info->is_done_ptr = 1;    
 }
 
-typedef struct listen_cb {
-    void(*listen_callback)(void*);
-    void* arg;
-} listen_callback_t;
-
 void listen_cb_interm(event_node* listen_node){
     thread_task_info* listen_node_info = (thread_task_info*)listen_node->data_ptr;
-    vector* listening_vector = &listen_node_info->listening_server->listeners_vector;
+    async_container_vector* listening_vector = listen_node_info->listening_server->listeners_vector;
 
-    for(int i = 0; i < vector_size(listening_vector); i++){
-        listen_callback_t* listen_cb_item = (listen_callback_t*)get_index(listening_vector, i);
-        void(*curr_listen_cb)(void*) = listen_cb_item->listen_callback;
-        void* curr_arg = listen_cb_item->arg;
+    listen_callback_t listen_cb_item;
+
+    for(int i = 0; i < async_container_vector_size(listening_vector); i++){
+        async_container_vector_get(listening_vector, i, &listen_cb_item);
+        void(*curr_listen_cb)(void*) = listen_cb_item.listen_callback;
+        void* curr_arg = listen_cb_item.arg;
         curr_listen_cb(curr_arg);
     }
 
@@ -191,10 +203,10 @@ void listen_cb_interm(event_node* listen_node){
 void async_tcp_server_listen(async_tcp_server* listening_server, int port, char* ip_address, void(*listen_callback)(void*), void* arg){
     //TODO: make case or rearrange code in this function for if listen_callback arg is NULL
     if(listen_callback != NULL){
-        listen_callback_t* listener_callback_holder = (listen_callback_t*)malloc(sizeof(listen_callback_t));
-        listener_callback_holder->listen_callback = listen_callback;
-        listener_callback_holder->arg = arg;
-        vec_add_last(&listening_server->listeners_vector, listener_callback_holder);
+        listen_callback_t listener_callback_holder;
+        listener_callback_holder.listen_callback = listen_callback;
+        listener_callback_holder.arg = arg;
+        async_container_vector_add_last(&listening_server->listeners_vector, &listener_callback_holder);
     }
     
     event_node* listen_node = create_event_node(sizeof(thread_task_info), listen_cb_interm, is_thread_task_done);
@@ -221,11 +233,6 @@ void async_tcp_server_listen(async_tcp_server* listening_server, int port, char*
 }
 
 //TODO: make function to add server listen event listener
-
-typedef struct connection_handler_cb {
-    void(*connection_handler)(async_socket*, void*);
-    void* arg;
-} connection_callback_t;
 
 void uring_accept_interm(event_node* accept_node){
     uring_stats* accept_info = (uring_stats*)accept_node->data_ptr;
@@ -258,12 +265,13 @@ void uring_accept_interm(event_node* accept_node){
     );
     */
 
-    vector* connection_handler_vector = &listening_server->connection_vector;
-    for(int i = 0; i < vector_size(connection_handler_vector); i++){
+    async_container_vector* connection_handler_vector = listening_server->connection_vector;
+    connection_callback_t connection_block;
+    for(int i = 0; i < async_container_vector_size(connection_handler_vector); i++){
         //TODO: continue from here
-        connection_callback_t* connection_block = (connection_callback_t*)get_index(connection_handler_vector, i);
-        void(*connection_handler)(async_socket*, void*) = connection_block->connection_handler;
-        void* curr_arg = connection_block->arg;
+        async_container_vector_get(connection_handler_vector, i, &connection_block);
+        void(*connection_handler)(async_socket*, void*) = connection_block.connection_handler;
+        void* curr_arg = connection_block.arg;
         connection_handler(new_socket_ptr, curr_arg);
     }
 
@@ -308,9 +316,10 @@ void async_accept(async_tcp_server* accepting_server){
 }
 
 void async_tcp_server_on_connection(async_tcp_server* listening_server, void(*connection_handler)(async_socket*, void*), void* arg){
-    vector* connection_vector_ptr = &listening_server->connection_vector;
-    connection_callback_t* connection_callback = (connection_callback_t*)malloc(sizeof(connection_callback_t));
-    connection_callback->connection_handler = connection_handler;
-    connection_callback->arg = arg;
-    vec_add_last(connection_vector_ptr, connection_callback);
+    connection_callback_t connection_callback = {
+        .connection_handler = connection_handler,
+        .arg = arg
+    };
+
+    async_container_vector_add_last(&listening_server->connection_vector, &connection_callback);
 }

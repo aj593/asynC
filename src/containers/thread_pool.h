@@ -2,6 +2,8 @@
 #define THREAD_POOL
 
 #include "linked_list.h"
+#include "../async_lib/async_http_server.h"
+#include "../async_lib/async_fs.h"
 
 #define TERM_FLAG -1
 //TODO: allow user to decide number of threads in thread pool?
@@ -16,6 +18,29 @@ typedef struct task_handler_block {
     int task_type;
     int* is_done_ptr;
 } task_block;
+
+#endif
+
+#ifndef THREAD_TASK_INFO
+#define THREAD_TASK_INFO
+
+//TODO: make another union to go into this struct for different kind of return/result values from different tasks?
+typedef struct thread_task_info {
+    //int fs_index; //TODO: need this?
+    grouped_fs_cbs fs_cb;
+    void* cb_arg;
+    int is_done; //TODO: make this atomic?
+
+    //following fields may be placed in union
+    buffer* buffer;
+    int fd; 
+    int num_bytes;
+    int success;
+    async_tcp_server* listening_server;
+    async_socket* rw_socket;
+    http_parser_info* http_parse_info;
+    struct addrinfo* dns_lookup_addrinfo;
+} thread_task_info;
 
 #endif
 

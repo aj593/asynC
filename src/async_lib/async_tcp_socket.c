@@ -33,6 +33,10 @@ typedef struct connection_handler_callback {
     void* arg;
 } connection_callback_t;
 
+typedef struct socket_shutdown_cb_holder {
+    void(*socket_end_callback)(async_socket*, int);
+} socket_shutdown_callback_t;
+
 int socket_event_checker(event_node* socket_event_node);
 void destroy_socket(event_node* socket_node);
 void async_send(async_socket* sending_socket);
@@ -53,9 +57,9 @@ typedef struct connect_info {
 async_socket* async_socket_create(){
     async_socket* new_socket = (async_socket*)calloc(1, sizeof(async_socket));
 
-    vector_init(&new_socket->connection_handler_vector, 5, 2);
-    vector_init(&new_socket->data_handler_vector, 5, 2);
-    vector_init(&new_socket->shutdown_vector, 5, 2);
+    new_socket->connection_handler_vector = async_container_vector_create(2, 2, sizeof(connection_callback_t));
+    new_socket->data_handler_vector = async_container_vector_create(2, 2, sizeof(buffer_callback_t));
+    new_socket->shutdown_vector = async_container_vector_create(2, 2, sizeof(socket_shutdown_callback_t));
 
     linked_list_init(&new_socket->send_stream);
     pthread_mutex_init(&new_socket->send_stream_lock, NULL);
@@ -96,12 +100,13 @@ void thread_connect_interm(event_node* connect_task_node){
     connected_socket->is_writable = 1;
     connected_socket->closed_self = 0;
 
-    vector* connection_callback_vector_ptr = &connected_socket->connection_handler_vector;
+    async_container_vector* connection_callback_vector_ptr = connected_socket->connection_handler_vector;
+    connection_callback_t curr_connection_cb_item;
 
-    for(int i = 0; i < vector_size(connection_callback_vector_ptr); i++){
-        connection_callback_t* curr_connection_cb_item = get_index(connection_callback_vector_ptr, i);
-        void* callback_arg = curr_connection_cb_item->arg;
-        void(*curr_connection_handler)(async_socket*, void*) = curr_connection_cb_item->connection_handler;
+    for(int i = 0; i < async_container_vector_size(connection_callback_vector_ptr); i++){
+        async_container_vector_get(connection_callback_vector_ptr, i, &curr_connection_cb_item);
+        void(*curr_connection_handler)(async_socket*, void*) = curr_connection_cb_item.connection_handler;
+        void* callback_arg = curr_connection_cb_item.arg;
         curr_connection_handler(connected_socket, callback_arg);
     }
 
@@ -127,10 +132,12 @@ async_socket* async_connect(char* ip_address, int port, void(*connection_handler
     thread_task_info* new_connect_task = (thread_task_info*)thread_connect_node->data_ptr;
     new_connect_task->rw_socket = new_socket;
 
-    connection_callback_t* new_connection_handler = (connection_callback_t*)malloc(sizeof(connection_callback_t));
-    new_connection_handler->connection_handler = connection_handler;
-    new_connection_handler->arg = connection_arg;
-    vec_add_last(&new_socket->connection_handler_vector, new_connection_handler);
+    connection_callback_t new_connection_handler = {
+        .connection_handler = connection_handler,
+        .arg = connection_arg
+    };
+
+    async_container_vector_add_last(&new_socket->connection_handler_vector, &new_connection_handler);
 
     event_node* connect_task_node = create_task_node(sizeof(async_connect_info), connect_task_handler);
     task_block* curr_task_block = (task_block*)connect_task_node->data_ptr;
@@ -171,16 +178,12 @@ event_node* create_socket_node(int new_socket_fd){
     return socket_event_node;
 }
 
-typedef struct socket_shutdown_cb_holder {
-    void(*socket_end_callback)(async_socket*, int);
-} socket_shutdown_callback_t;
-
 void async_tcp_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int)){
-    socket_shutdown_callback_t* new_shutdown_callback = (socket_shutdown_callback_t*)malloc(sizeof(socket_shutdown_callback_t));
-    new_shutdown_callback->socket_end_callback = socket_end_callback;
+    socket_shutdown_callback_t new_shutdown_callback = {
+        .socket_end_callback = socket_end_callback
+    };
 
-    vector* socket_shutdown_vector_ptr = &ending_socket->shutdown_vector;
-    vec_add_last(socket_shutdown_vector_ptr, new_shutdown_callback);
+    async_container_vector_add_last(&ending_socket->shutdown_vector, &new_shutdown_callback);
 }
 
 void async_tcp_socket_end(async_socket* ending_socket){
@@ -196,21 +199,22 @@ void uring_shutdown_interm(event_node* shutdown_uring_node){
     uring_stats* shutdown_uring_info = (uring_stats*)shutdown_uring_node->data_ptr;
     async_socket* closed_socket = shutdown_uring_info->rw_socket;
 
-    vector* shutdown_vector = &closed_socket->shutdown_vector;
-    for(int i = 0; i < vector_size(shutdown_vector); i++){
-        socket_shutdown_callback_t* curr_shutdown_cb_item = (socket_shutdown_callback_t*)get_index(shutdown_vector, i);
-        void(*curr_end_callback)(async_socket*, int) = curr_shutdown_cb_item->socket_end_callback;
+    async_container_vector* shutdown_vector = closed_socket->shutdown_vector;
+    socket_shutdown_callback_t curr_shutdown_cb_item;
+    for(int i = 0; i < async_container_vector_size(shutdown_vector); i++){
+        async_container_vector_get(shutdown_vector, i, &curr_shutdown_cb_item);
+        void(*curr_end_callback)(async_socket*, int) = curr_shutdown_cb_item.socket_end_callback;
         curr_end_callback(closed_socket, shutdown_uring_info->return_val);
-        free(curr_shutdown_cb_item);
     }
 
     destroy_buffer(closed_socket->receive_buffer);
+    /*
     for(int i = vector_size(&closed_socket->data_handler_vector) - 1; i >= 0; i--){
         //TODO: call remove_last for vector also?
         free(get_index(&closed_socket->data_handler_vector, i));
-    }
+    }*/
 
-    destroy_vector(&closed_socket->data_handler_vector);
+    free(closed_socket->data_handler_vector);
     
     while(closed_socket->send_stream.size > 0){
         event_node* curr_removed = remove_first(&closed_socket->send_stream);
@@ -223,7 +227,7 @@ void uring_shutdown_interm(event_node* shutdown_uring_node){
 
     pthread_mutex_destroy(&closed_socket->send_stream_lock);
 
-    destroy_vector(shutdown_vector);
+    free(shutdown_vector);
 
     if(closed_socket->server_ptr != NULL){
         closed_socket->server_ptr->num_connections--;
@@ -277,31 +281,35 @@ void destroy_socket(event_node* socket_node){
     async_shutdown(socket_ptr);
 }
 
-buffer_callback_t* add_data_listener(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
-    buffer_callback_t* new_data_handler_item = (buffer_callback_t*)malloc(sizeof(buffer_callback_t));
-    new_data_handler_item->curr_data_handler = new_data_handler;
-    new_data_handler_item->arg = arg;
-
+void add_data_listener(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, buffer_callback_t* data_callback_item){
     pthread_mutex_lock(&reading_socket->data_handler_vector_mutex);
-    vector* data_handler_vector_ptr = &reading_socket->data_handler_vector;
-    vec_add_last(data_handler_vector_ptr, new_data_handler_item);
+    async_container_vector** data_handler_vector_ptr = &reading_socket->data_handler_vector;
+    async_container_vector_add_last(data_handler_vector_ptr, data_callback_item);
     reading_socket->is_flowing = 1;
     pthread_mutex_unlock(&reading_socket->data_handler_vector_mutex);
-
-    return new_data_handler_item;
 }
 
 //TODO: find way to condense following 2 functions
 //TODO: error handle if fcn ptr in second param is NULL?
 void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
-    buffer_callback_t* buffer_cb_item = add_data_listener(reading_socket, new_data_handler, arg);
-    buffer_cb_item->is_temp_subscriber = 0;
+    buffer_callback_t new_data_handler_item = {
+        .curr_data_handler = new_data_handler,
+        .arg = arg,
+        .is_temp_subscriber = 0
+    };
+
+    add_data_listener(reading_socket, new_data_handler, arg, &new_data_handler_item);
 }
 
 //TODO: error handle if fcn ptr in second param is NULL?
 void async_socket_once_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
-    buffer_callback_t* buffer_cb_item = add_data_listener(reading_socket, new_data_handler, arg);
-    buffer_cb_item->is_temp_subscriber = 1;
+    buffer_callback_t new_data_handler_item = {
+        .curr_data_handler = new_data_handler,
+        .arg = arg,
+        .is_temp_subscriber = 1
+    };
+
+    add_data_listener(reading_socket, new_data_handler, arg, &new_data_handler_item);
 }
 
 void uring_recv_interm(event_node* uring_recv_node){
@@ -322,21 +330,19 @@ void uring_recv_interm(event_node* uring_recv_node){
     }
 
     pthread_mutex_lock(&reading_socket->data_handler_vector_mutex);
-    vector* data_handler_vector_ptr = &reading_socket->data_handler_vector;
-    for(int i = 0; i < vector_size(data_handler_vector_ptr); i++){
-        buffer* buffer_copy = create_buffer(recv_uring_info->return_val, sizeof(char));
-        void* internal_destination_buffer = get_internal_buffer(buffer_copy);
-        void* internal_source_buffer = get_internal_buffer(reading_socket->receive_buffer);
-        memcpy(internal_destination_buffer, internal_source_buffer, recv_uring_info->return_val);
+    async_container_vector* data_handler_vector_ptr = reading_socket->data_handler_vector;
+    buffer_callback_t curr_buffer_cb_data_item;
+    for(int i = 0; i < async_container_vector_size(data_handler_vector_ptr); i++){
+        buffer* new_buffer_copy = buffer_copy(reading_socket->receive_buffer); 
 
-        buffer_callback_t* curr_buffer_cb_data_item = (buffer_callback_t*)get_index(data_handler_vector_ptr, i);
-        void(*curr_data_handler)(async_socket*, buffer*, void*) = curr_buffer_cb_data_item->curr_data_handler;
-        void* curr_arg = curr_buffer_cb_data_item->arg;
-        curr_data_handler(reading_socket, buffer_copy, curr_arg);
+        async_container_vector_get(data_handler_vector_ptr, i, &curr_buffer_cb_data_item);
+        void(*curr_data_handler)(async_socket*, buffer*, void*) = curr_buffer_cb_data_item.curr_data_handler;
+        void* curr_arg = curr_buffer_cb_data_item.arg;
+        curr_data_handler(reading_socket, new_buffer_copy, curr_arg);
 
-        if(curr_buffer_cb_data_item->is_temp_subscriber){
-            remove_at_index(data_handler_vector_ptr, i--);
-            if(data_handler_vector_ptr->size == 0){
+        if(curr_buffer_cb_data_item.is_temp_subscriber){
+            async_container_vector_remove(data_handler_vector_ptr, i--, NULL);
+            if(async_container_vector_size(data_handler_vector_ptr) == 0){
                 reading_socket->is_flowing = 0;
             }
         }
