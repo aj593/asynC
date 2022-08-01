@@ -39,7 +39,7 @@ typedef struct thread_task_info {
     async_tcp_server* listening_server;
     async_socket* rw_socket;
     http_parser_info* http_parse_info;
-    struct addrinfo* dns_lookup_addrinfo;
+    char** resolved_ip_addresses;
 } thread_task_info;
 
 #endif

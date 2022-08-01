@@ -11,7 +11,6 @@
 #include "../containers/linked_list.h"
 #include "../containers/async_container_vector.h"
 #include "../containers/async_types.h"
-#include <netdb.h>
 
 typedef union fs_cbs {
     void(*open_callback)(int, void*);
@@ -21,7 +20,7 @@ typedef union fs_cbs {
     void(*chown_callback)(int, void*);
     void(*close_callback)(int, void*);
     void(*send_callback)(async_socket*, void*);
-    void(*dns_lookup_callback)(struct addrinfo*, void*);
+    void(*dns_lookup_callback)(char**, int, void*);
     //void(*open_stat_callback)(int, size_t, void*);
     //void(*connect_callback)(async_socket*, void*);
     //void(*shutdown_callback)(int);

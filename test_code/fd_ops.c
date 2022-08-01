@@ -1,9 +1,6 @@
 #include <stdio.h>
 
 #include "../src/asynC.h"
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 
 void after_open(int fd, void* cb_arg);
 
@@ -21,49 +18,23 @@ void callchmod(){
     async_chmod(filename, 0644, after_chmod, NULL);
 }
 
-void after_dns(struct addrinfo* result_ptr, void* arg){
-    struct addrinfo* result_copy = result_ptr;
+void after_dns(char** ip_list, int num_ips, void* arg){
 
-    int num_bytes = 100;
-    char addrstr[num_bytes];
-    void* ptr;
-
-    while(result_copy != NULL){
-        
-        inet_ntop(
-            result_copy->ai_family,
-            result_copy->ai_addr->sa_data,
-            addrstr,
-            num_bytes
-        );
-        
-
-        switch (result_copy->ai_family){
-            case AF_INET:
-                ptr = &((struct sockaddr_in *) result_copy->ai_addr)->sin_addr;
-                break;
-            case AF_INET6:
-                ptr = &((struct sockaddr_in6 *) result_copy->ai_addr)->sin6_addr;
-                break;
-        }
-        
-        inet_ntop(
-            result_copy->ai_family,
-            ptr,
-            addrstr,
-            num_bytes
-        );
-        
-        printf ("IPv%d address: %s (%s)\n", result_copy->ai_family == PF_INET6 ? 6 : 4, addrstr, result_copy->ai_canonname);
-
-        result_copy = result_copy->ai_next;
+    for(int i = 0; i < num_ips; i++){
+        printf("curr address is %s\n", ip_list[i]);
     }
-
-    freeaddrinfo(result_ptr);
+    free(ip_list);
 }
 
 int main(){
     asynC_init();
+
+    //async_dns_lookup("www.tire.com", after_dns, NULL);
+    http_request_options options;
+    async_http_request_options_init(&options);
+    async_http_request_options_set_header(&options, "foo", "bar");
+    async_http_request_options_set_header(&options, "spaghetti", "meatball");
+    /*async_outgoing_http_request* new_request = */async_http_request("example.com", "GET", &options, NULL);
 
     //call_async_open();
     //callchmod();
@@ -83,7 +54,6 @@ int main(){
         printf("curr num is %d\n", curr_num);
     }
     */
-    async_dns_lookup("aol.com", after_dns, NULL);
 
     asynC_cleanup();
 
