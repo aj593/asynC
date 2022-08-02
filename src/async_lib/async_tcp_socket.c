@@ -128,16 +128,31 @@ void thread_connect_interm(event_node* connect_task_node){
 async_socket* async_connect(char* ip_address, int port, void(*connection_handler)(async_socket*, void*), void* connection_arg){
     async_socket* new_socket = async_socket_create();
 
+    if(connection_handler != NULL){
+        connection_callback_t new_connection_handler = {
+            .connection_handler = connection_handler,
+            .arg = connection_arg
+        };
+
+        async_container_vector_add_last(&new_socket->connection_handler_vector, &new_connection_handler);
+    }
+
+    new_task_node_info socket_connect;
+    create_thread_task(sizeof(async_connect_info), connect_task_handler, thread_connect_interm, &socket_connect);
+    thread_task_info* new_connect_task = socket_connect.new_thread_task_info;
+    new_connect_task->rw_socket = new_socket;
+
+    async_connect_info* connect_task_params = (async_connect_info*)socket_connect.async_task_info;
+    connect_task_params->connecting_socket = new_socket;
+    connect_task_params->is_done_ptr = &new_connect_task->is_done;
+    connect_task_params->socket_fd_ptr = &new_connect_task->fd;
+    strncpy(connect_task_params->ip_address, ip_address, MAX_IP_ADDR_LEN);
+    connect_task_params->port = port;
+
+    /*
     event_node* thread_connect_node = create_event_node(sizeof(thread_task_info), thread_connect_interm, is_thread_task_done);
     thread_task_info* new_connect_task = (thread_task_info*)thread_connect_node->data_ptr;
     new_connect_task->rw_socket = new_socket;
-
-    connection_callback_t new_connection_handler = {
-        .connection_handler = connection_handler,
-        .arg = connection_arg
-    };
-
-    async_container_vector_add_last(&new_socket->connection_handler_vector, &new_connection_handler);
 
     event_node* connect_task_node = create_task_node(sizeof(async_connect_info), connect_task_handler);
     task_block* curr_task_block = (task_block*)connect_task_node->data_ptr;
@@ -153,6 +168,7 @@ async_socket* async_connect(char* ip_address, int port, void(*connection_handler
 
     enqueue_event(thread_connect_node);
     enqueue_task(connect_task_node);
+    */
 
     return new_socket;
 }

@@ -190,9 +190,16 @@ int readstream_checker(event_node* readstream_node){
         event_node* removed_buffer_node = remove_first(&readstream->buffer_stream_list);
         readstream_buffer* removed_buffer_item = (readstream_buffer*)removed_buffer_node->data_ptr;
         buffer* curr_completed_buffer = removed_buffer_item->read_chunk_buffer;
-        destroy_event_node(removed_buffer_node);
         async_container_vector* data_handler_vector = readstream->data_handler_vector;
         readstream_data_callback curr_data_handler;
+        if((long)curr_completed_buffer > 0x555555500000){
+            int x = 3;
+            x++;
+        }
+        else{
+            int x = 3;
+            x--;
+        }
         for(int i = 0; i < async_container_vector_size(data_handler_vector); i++){
             async_container_vector_get(data_handler_vector, i, &curr_data_handler);
             void(*curr_data_handler_cb)(buffer*, void*) = curr_data_handler.data_handler;
@@ -202,6 +209,7 @@ int readstream_checker(event_node* readstream_node){
         }
 
         destroy_buffer(curr_completed_buffer);
+        destroy_event_node(removed_buffer_node);
     }
 
     return readstream->reached_EOF && readstream->buffer_stream_list.size == 0;

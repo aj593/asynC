@@ -90,6 +90,10 @@ void set_sqe_data(struct io_uring_sqe* incoming_sqe, event_node* uring_node){
     io_uring_sqe_set_data(incoming_sqe, new_uring_check_data);
 }
 
+void after_uring_submit(event_node* uring_node){
+    //TODO: put something in here?
+}
+
 void uring_try_submit_task(void){
     uring_lock();
 
@@ -98,11 +102,10 @@ void uring_try_submit_task(void){
         uring_unlock();
         
         //TODO: make separate event node in event queue to get callback for result of uring_submit?
-        event_node* submit_thread_task_node = create_task_node(sizeof(uring_submit_task_params), uring_submit_task_handler); //create_event_node(sizeof(task_block));
-        task_block* curr_task_block = (task_block*)submit_thread_task_node->data_ptr;
-        uring_submit_task_params* curr_uring_submit_params = (uring_submit_task_params*)curr_task_block->async_task_info;
+        new_task_node_info uring_submit_info;
+        create_thread_task(sizeof(uring_submit_task_params), uring_submit_task_handler, after_uring_submit, &uring_submit_info);
+        uring_submit_task_params* curr_uring_submit_params = (uring_submit_task_params*)uring_submit_info.async_task_info;
         curr_uring_submit_params->async_ring_ptr = &async_uring;
-        enqueue_task(submit_thread_task_node);
     }
     else{
         uring_unlock();

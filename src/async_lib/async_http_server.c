@@ -151,27 +151,18 @@ typedef struct async_http_transaction {
 void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* arg){
     async_http_server* listening_http_server = (async_http_server*)arg;
 
-    event_node* http_request_parser_node = create_event_node(sizeof(thread_task_info), http_parser_interm, is_thread_task_done);
-    thread_task_info* curr_request_parser_node = (thread_task_info*)http_request_parser_node->data_ptr;
-    curr_request_parser_node->is_done = 0;
-    enqueue_event(http_request_parser_node);
-
     http_parser_info* new_http_parser_info = (http_parser_info*)malloc(sizeof(http_parser_info));
-    event_node* http_parse_task_node = create_task_node(sizeof(http_parser_info*), http_parse_task);
-    task_block* http_parse_task_block = (task_block*)http_parse_task_node->data_ptr;
-    http_parse_task_block->is_done_ptr = &curr_request_parser_node->is_done;
 
-    http_parser_info** http_parser_info_ptr = (http_parser_info**)http_parse_task_block->async_task_info;
+    new_task_node_info request_handle_info;
+    create_thread_task(sizeof(http_parser_info*), http_parse_task, http_parser_interm, &request_handle_info);
+    http_parser_info** http_parser_info_ptr = (http_parser_info**)request_handle_info.async_task_info;
     *http_parser_info_ptr = new_http_parser_info;
-    curr_request_parser_node->http_parse_info = *http_parser_info_ptr;
     new_http_parser_info->client_socket = read_socket;
     new_http_parser_info->http_header_data = data_buffer;
     new_http_parser_info->http_server = listening_http_server;
 
-    enqueue_task(http_parse_task_node);
-
-    //char* data_print = (char*)get_internal_buffer(data_buffer);
-    //printf("%s\n", data_print);
+    thread_task_info* curr_request_parser_node = request_handle_info.new_thread_task_info;
+    curr_request_parser_node->http_parse_info = *http_parser_info_ptr;
 }
 
 int str_to_num(char* num_str){

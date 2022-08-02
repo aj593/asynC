@@ -7,15 +7,26 @@
 pthread_t thread_id_array[NUM_THREADS];
 
 linked_list task_queue;
+linked_list defer_task_queue;
 
+pthread_mutex_t defer_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t task_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t task_queue_cond_var = PTHREAD_COND_INITIALIZER;
 
 void* task_waiter(void* arg);
+void enqueue_task(event_node* task);
+void defer_enqueue_task(event_node* task);
+
+/*
+int is_defer_queue_empty(){
+    return defer_task_queue.size == 0;
+}
+*/
 
 //TODO: also make thread_pool_destroy() function to terminate all threads
 void thread_pool_init(){
     linked_list_init(&task_queue);
+    linked_list_init(&defer_task_queue);
 
     for(int i = 0; i < NUM_THREADS; i++){
         //TODO: use pthread_create() return value later?
@@ -82,6 +93,7 @@ void create_thread_task(size_t thread_task_size, void(*thread_task_func)(void*),
     task_info_struct_ptr->async_task_info = curr_task_block->async_task_info;
 
     enqueue_event(event_queue_node);
+    //defer_enqueue_task(thread_task_node);
     enqueue_task(thread_task_node);
 }
 
@@ -100,6 +112,26 @@ void enqueue_task(event_node* task){
 
     pthread_cond_signal(&task_queue_cond_var);
 }
+
+void submit_thread_tasks(void){
+    pthread_mutex_lock(&defer_queue_mutex);
+
+    while(defer_task_queue.size > 0){
+        event_node* curr_remove = remove_first(&defer_task_queue);
+        enqueue_task(curr_remove);
+    }
+
+    pthread_mutex_unlock(&defer_queue_mutex);
+}
+
+void defer_enqueue_task(event_node* task){
+    pthread_mutex_lock(&defer_queue_mutex);
+
+    append(&defer_task_queue, task);
+
+    pthread_mutex_unlock(&defer_queue_mutex);
+}
+
 
 int is_thread_task_done(event_node* thread_task_node){
     thread_task_info* thread_task = (thread_task_info*)thread_task_node->data_ptr;

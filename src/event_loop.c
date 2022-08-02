@@ -120,6 +120,7 @@ void asynC_wait(){
         }
 
         uring_try_submit_task();
+        submit_thread_tasks();
 
         pthread_mutex_lock(&event_queue_mutex);
     }

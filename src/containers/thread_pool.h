@@ -52,9 +52,12 @@ typedef struct new_task_node_info {
 void thread_pool_init();
 void thread_pool_destroy();
 
+//int is_defer_queue_empty();
+void submit_thread_tasks(void);
+
 event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(void*));
 void create_thread_task(size_t thread_task_size, void(*thread_task_func)(void*), void(*post_task_handler)(event_node*), new_task_node_info* task_info_struct_ptr);
-void enqueue_task(event_node* task);
+//void enqueue_task(event_node* task);
 int is_thread_task_done(event_node* fs_node);
 
 #endif

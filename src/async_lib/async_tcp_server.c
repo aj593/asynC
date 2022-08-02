@@ -208,28 +208,18 @@ void async_tcp_server_listen(async_tcp_server* listening_server, int port, char*
         listener_callback_holder.arg = arg;
         async_container_vector_add_last(&listening_server->listeners_vector, &listener_callback_holder);
     }
+
+    new_task_node_info server_listen_info;
+    create_thread_task(sizeof(async_listen_info), listen_task_handler, listen_cb_interm, &server_listen_info);
+    thread_task_info* new_task = server_listen_info.new_thread_task_info;
+    new_task->is_done = 0;
+    new_task->listening_server = listening_server;
     
-    event_node* listen_node = create_event_node(sizeof(thread_task_info), listen_cb_interm, is_thread_task_done);
-
-    thread_task_info* curr_listen_info = (thread_task_info*)listen_node->data_ptr;
-    curr_listen_info->is_done = 0;
-    curr_listen_info->listening_server = listening_server;
-    //curr_listen_info->cb_arg = arg;
-
-    enqueue_event(listen_node);
-    
-    event_node* listen_thread_task_node = create_task_node(sizeof(async_listen_info), listen_task_handler); //create_event_node(sizeof(task_block));
-    task_block* listen_task_block = (task_block*)listen_thread_task_node->data_ptr;
-    listen_task_block->is_done_ptr = &curr_listen_info->is_done;
-    async_listen_info* listen_args_info = (async_listen_info*)listen_task_block->async_task_info;
-
+    async_listen_info* listen_args_info = (async_listen_info*)server_listen_info.async_task_info;
     strncpy(listen_args_info->ip_address, ip_address, MAX_IP_STR_LEN);
     listen_args_info->port = port;
-    //listen_args_info->is_done_ptr = &curr_listen_info->is_done;
     listen_args_info->listening_server = listening_server;
     //TODO: assign success_ptr?
-
-    enqueue_task(listen_thread_task_node);
 }
 
 //TODO: make function to add server listen event listener
