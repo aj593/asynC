@@ -24,7 +24,8 @@ typedef struct fs_readable_stream {
     int read_fd;
     int fstat_result;
     int reached_EOF;
-    linked_list buffer_stream_list;
+    int is_currently_reading;
+    buffer* read_buffer;
     //TODO: add vectors here for data and other event handlers
     async_container_vector* data_handler_vector;
     async_container_vector* end_handler_vector;
@@ -38,10 +39,12 @@ typedef struct readstream_ptr_data {
     async_fs_readstream* readstream_ptr;
 } fs_readstream_info;
 
+/*
 typedef struct read_buffer_info {
     buffer* read_chunk_buffer;
     int is_complete;
 } readstream_buffer;
+*/
 
 typedef struct open_stat_task {
     char* filename;
@@ -69,7 +72,8 @@ int readstream_checker(event_node* readstream_node);
 async_fs_readstream* create_async_fs_readstream(char* filename){
     async_fs_readstream* new_readstream_ptr = calloc(1, sizeof(async_fs_readstream));
     new_readstream_ptr->read_chunk_size = DEFAULT_READSTREAM_CHUNK_SIZE;
-    linked_list_init(&new_readstream_ptr->buffer_stream_list);
+    //linked_list_init(&new_readstream_ptr->buffer_stream_list);
+    new_readstream_ptr->read_buffer = create_buffer(DEFAULT_READSTREAM_CHUNK_SIZE, 1);
     pthread_mutex_init(&new_readstream_ptr->stream_list_lock, NULL);
     new_readstream_ptr->data_handler_vector = async_container_vector_create(2, 2, sizeof(readstream_data_callback));
     new_readstream_ptr->end_handler_vector = async_container_vector_create(2, 2, sizeof(readstream_end_callback_t));
@@ -139,80 +143,48 @@ void open_stat_interm(event_node* open_stat_node){
 }
 
 void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, int num_bytes_read, void* buffer_cb_arg){
-    readstream_buffer* readstream_buffer_ptr_arg = (readstream_buffer*)buffer_cb_arg;
-    readstream_buffer_ptr_arg->is_complete = 1;
+    async_fs_readstream* readstream_ptr_arg = (async_fs_readstream*)buffer_cb_arg;
+    async_container_vector* data_handler_vector = readstream_ptr_arg->data_handler_vector;
+    readstream_data_callback readstream_info;
+    
+    for(int i = 0; i < async_container_vector_size(data_handler_vector); i++){
+        async_container_vector_get(data_handler_vector, i, &readstream_info);
+
+        void(*curr_data_handler)(buffer*, void*) = readstream_info.data_handler;
+        buffer* new_buffer_copy = buffer_copy_num_bytes(filled_readstream_buffer, num_bytes_read);
+        void* arg = readstream_info.arg;
+
+        curr_data_handler(new_buffer_copy, arg);
+    }
+
+    readstream_ptr_arg->is_currently_reading = 0;
 }
 
 int readstream_checker(event_node* readstream_node){
     fs_readstream_info* readstream_info = (fs_readstream_info*)readstream_node->data_ptr;
     async_fs_readstream* readstream = readstream_info->readstream_ptr;
     
-    //printf("the size of stream list is %d\n", readstream->buffer_stream_list.size);
-    
-    if(readstream->is_readable && !readstream->reached_EOF){
-        //TODO: make async pread() call on file
-        size_t num_bytes_left_to_read = readstream->total_file_size - readstream->curr_file_offset;
-        size_t curr_buffer_size = min_size(num_bytes_left_to_read, DEFAULT_READSTREAM_CHUNK_SIZE);
-        event_node* readstream_buffer_node = create_event_node(sizeof(readstream_buffer), NULL, NULL);
-        readstream_buffer* readstream_buffer_ptr = (readstream_buffer*)readstream_buffer_node->data_ptr;
-        readstream_buffer_ptr->read_chunk_buffer = create_buffer(curr_buffer_size, sizeof(char));
-        readstream_buffer_ptr->is_complete = 0; //TODO: need to set is_complete here?
-        pthread_mutex_lock(&readstream->stream_list_lock);
-        append(&readstream->buffer_stream_list, readstream_buffer_node);
-        pthread_mutex_unlock(&readstream->stream_list_lock);
+    if(!readstream->is_currently_reading && readstream->is_readable && !readstream->reached_EOF){
+        readstream->is_currently_reading = 1;
 
         async_pread(
             readstream->read_fd,
-            readstream_buffer_ptr->read_chunk_buffer,
+            readstream->read_buffer,
             readstream->read_chunk_size,
             readstream->curr_file_offset,
             after_readstream_read,
-            readstream_buffer_ptr
+            readstream
         );
 
         size_t offset_after_read = readstream->curr_file_offset + readstream->read_chunk_size;
         readstream->curr_file_offset = min_size(offset_after_read, readstream->total_file_size);
         if(readstream->curr_file_offset == readstream->total_file_size){
-            //sleep(2);
             readstream->reached_EOF = 1;
             readstream->is_readable = 0; //TODO: need to set this here?
         }
     }
 
-    while(readstream->buffer_stream_list.size > 0){
-        //TODO: make get_first() method for lists then use here?
-        event_node* curr_buffer_node = readstream->buffer_stream_list.head.next;
-        readstream_buffer* checked_buffer = (readstream_buffer*)curr_buffer_node->data_ptr;
-        if(!checked_buffer->is_complete){
-            break;
-        }
-
-        event_node* removed_buffer_node = remove_first(&readstream->buffer_stream_list);
-        readstream_buffer* removed_buffer_item = (readstream_buffer*)removed_buffer_node->data_ptr;
-        buffer* curr_completed_buffer = removed_buffer_item->read_chunk_buffer;
-        async_container_vector* data_handler_vector = readstream->data_handler_vector;
-        readstream_data_callback curr_data_handler;
-        if((long)curr_completed_buffer > 0x555555500000){
-            int x = 3;
-            x++;
-        }
-        else{
-            int x = 3;
-            x--;
-        }
-        for(int i = 0; i < async_container_vector_size(data_handler_vector); i++){
-            async_container_vector_get(data_handler_vector, i, &curr_data_handler);
-            void(*curr_data_handler_cb)(buffer*, void*) = curr_data_handler.data_handler;
-            buffer* curr_buffer_copy = buffer_copy(curr_completed_buffer);
-            void* curr_arg = curr_data_handler.arg;
-            curr_data_handler_cb(curr_buffer_copy, curr_arg);
-        }
-
-        destroy_buffer(curr_completed_buffer);
-        destroy_event_node(removed_buffer_node);
-    }
-
-    return readstream->reached_EOF && readstream->buffer_stream_list.size == 0;
+    return readstream->reached_EOF && !readstream->is_currently_reading;
 }
 
 void async_fs_readstream_on_end(async_fs_readstream* ending_readstream, void(*new_readstream_end_handler_cb)(void*), void* arg){

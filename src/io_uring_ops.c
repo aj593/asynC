@@ -104,8 +104,6 @@ void uring_try_submit_task(void){
         //TODO: make separate event node in event queue to get callback for result of uring_submit?
         new_task_node_info uring_submit_info;
         create_thread_task(sizeof(uring_submit_task_params), uring_submit_task_handler, after_uring_submit, &uring_submit_info);
-        uring_submit_task_params* curr_uring_submit_params = (uring_submit_task_params*)uring_submit_info.async_task_info;
-        curr_uring_submit_params->async_ring_ptr = &async_uring;
     }
     else{
         uring_unlock();
@@ -113,14 +111,10 @@ void uring_try_submit_task(void){
 }
 
 void uring_submit_task_handler(void* uring_submit_task){
-    uring_submit_task_params* uring_submit_task_info = (uring_submit_task_params*)uring_submit_task;
     uring_lock();
-    //clock_t before = clock();
-    int num_submitted = io_uring_submit(uring_submit_task_info->async_ring_ptr);
-    //clock_t after = clock();
+    int num_submitted = io_uring_submit(&async_uring);
     num_entries_to_submit -= num_submitted;
     uring_unlock();
-    //printf("time before and after is %ld\n", after - before);
     if(num_submitted == 0){
         //printf("didn't submit anything??\n");
     }

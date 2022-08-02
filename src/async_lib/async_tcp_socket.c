@@ -149,27 +149,6 @@ async_socket* async_connect(char* ip_address, int port, void(*connection_handler
     strncpy(connect_task_params->ip_address, ip_address, MAX_IP_ADDR_LEN);
     connect_task_params->port = port;
 
-    /*
-    event_node* thread_connect_node = create_event_node(sizeof(thread_task_info), thread_connect_interm, is_thread_task_done);
-    thread_task_info* new_connect_task = (thread_task_info*)thread_connect_node->data_ptr;
-    new_connect_task->rw_socket = new_socket;
-
-    event_node* connect_task_node = create_task_node(sizeof(async_connect_info), connect_task_handler);
-    task_block* curr_task_block = (task_block*)connect_task_node->data_ptr;
-
-    async_connect_info* connect_task_params = (async_connect_info*)curr_task_block->async_task_info;
-    connect_task_params->connecting_socket = new_socket;
-
-    strncpy(connect_task_params->ip_address, ip_address, MAX_IP_ADDR_LEN);
-    connect_task_params->port = port;
-
-    connect_task_params->is_done_ptr = &new_connect_task->is_done;
-    connect_task_params->socket_fd_ptr = &new_connect_task->fd;
-
-    enqueue_event(thread_connect_node);
-    enqueue_task(connect_task_node);
-    */
-
     return new_socket;
 }
 
@@ -349,7 +328,7 @@ void uring_recv_interm(event_node* uring_recv_node){
     async_container_vector* data_handler_vector_ptr = reading_socket->data_handler_vector;
     buffer_callback_t curr_buffer_cb_data_item;
     for(int i = 0; i < async_container_vector_size(data_handler_vector_ptr); i++){
-        buffer* new_buffer_copy = buffer_copy(reading_socket->receive_buffer); 
+        buffer* new_buffer_copy = buffer_copy_num_bytes(reading_socket->receive_buffer, recv_uring_info->return_val); 
 
         async_container_vector_get(data_handler_vector_ptr, i, &curr_buffer_cb_data_item);
         void(*curr_data_handler)(async_socket*, buffer*, void*) = curr_buffer_cb_data_item.curr_data_handler;

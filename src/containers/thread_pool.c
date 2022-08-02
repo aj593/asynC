@@ -57,6 +57,13 @@ void thread_pool_destroy(){
     return new_task_node;
 */
 
+int is_thread_task_done(event_node* thread_task_node){
+    thread_task_info* thread_task = (thread_task_info*)thread_task_node->data_ptr;
+    //*event_index_ptr = thread_task->fs_index;
+
+    return thread_task->is_done;
+}
+
 //TODO: take in params for task type and handler?
 event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(void*)){
     void* whole_task_node_block = calloc(1, sizeof(event_node) + sizeof(task_block) + task_struct_size);
@@ -92,9 +99,9 @@ void create_thread_task(size_t thread_task_size, void(*thread_task_func)(void*),
     curr_task_block->async_task_info = (void*)(curr_task_block + 1);
     task_info_struct_ptr->async_task_info = curr_task_block->async_task_info;
 
+    //TODO: use defer enqueue event here?
     enqueue_event(event_queue_node);
-    //defer_enqueue_task(thread_task_node);
-    enqueue_task(thread_task_node);
+    defer_enqueue_task(thread_task_node);
 }
 
 void destroy_task_node(event_node* destroy_node){
@@ -130,14 +137,6 @@ void defer_enqueue_task(event_node* task){
     append(&defer_task_queue, task);
 
     pthread_mutex_unlock(&defer_queue_mutex);
-}
-
-
-int is_thread_task_done(event_node* thread_task_node){
-    thread_task_info* thread_task = (thread_task_info*)thread_task_node->data_ptr;
-    //*event_index_ptr = thread_task->fs_index;
-
-    return thread_task->is_done;
 }
 
 /*

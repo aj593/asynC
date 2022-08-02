@@ -62,6 +62,15 @@ buffer* buffer_copy(buffer* buffer_to_copy){
     return copied_buffer;
 }
 
+buffer* buffer_copy_num_bytes(buffer* buffer_to_copy, size_t num_bytes_to_copy){
+    buffer* copied_buffer = create_buffer(num_bytes_to_copy, sizeof(char));
+    void* destination_internal_buffer = get_internal_buffer(copied_buffer);
+    void* source_internal_buffer = get_internal_buffer(buffer_to_copy);
+    memcpy(destination_internal_buffer, source_internal_buffer, num_bytes_to_copy);
+
+    return copied_buffer;
+}
+
 buffer* buffer_concat(buffer* buffer_array[], int num_buffers){
     size_t total_capacity = 0;
     for(int i = 0; i < num_buffers; i++){
