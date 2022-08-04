@@ -10,7 +10,6 @@ struct io_uring async_uring;
 #define IO_URING_NUM_ENTRIES 10 //TODO: change this later?
 int uring_has_sqe = 0;
 int num_entries_to_submit = 0;
-//pthread_mutex_t uring_mutex;
 pthread_spinlock_t uring_spinlock;
 
 typedef struct uring_submit_task {
@@ -24,13 +23,11 @@ typedef struct uring_user_data {
 
 void io_uring_init(void){
     io_uring_queue_init(IO_URING_NUM_ENTRIES, &async_uring, 0);
-    //pthread_mutex_init(&uring_mutex, NULL);
     pthread_spin_init(&uring_spinlock, 0);
 }
 
 void io_uring_exit(void){
     io_uring_queue_exit(&async_uring);
-    //pthread_mutex_destroy(&uring_mutex);
     pthread_spin_destroy(&uring_spinlock);
 }
 
@@ -50,14 +47,12 @@ void uring_check(void){
 }
 
 void uring_lock(void){
-    //pthread_mutex_lock(&uring_mutex);
     pthread_spin_lock(&uring_spinlock);
 }
 
 //TODO: make try lock function
 
 void uring_unlock(void){
-    //pthread_mutex_unlock(&uring_mutex);
     pthread_spin_unlock(&uring_spinlock);
 }
 

@@ -3,7 +3,8 @@
 #include "async_tcp_server.h"
 #include "async_tcp_socket.h"
 #include "../containers/thread_pool.h"
-#include "../containers/hash_table.h"
+#include "http_utility.h"
+
 #include <string.h>
 #include <unistd.h>
 
@@ -15,7 +16,6 @@ void http_parse_task(void* http_info);
 void http_parser_interm(event_node* http_parser_node);
 void http_connection_handler(async_socket* new_http_socket, void* arg);
 void http_request_socket_data_handler(async_socket* socket, buffer* data, void* arg);
-int is_number_str(char* num_str);
 void http_request_emit_data(async_incoming_http_request* http_request, buffer* emitted_data);
 void http_request_emit_end(async_incoming_http_request* http_request);
 
@@ -32,8 +32,8 @@ typedef struct async_incoming_http_request {
     char* method;
     char* url;
     char* http_version;
-    int content_length;
-    int num_payload_bytes_read;
+    size_t content_length;
+    size_t num_payload_bytes_read;
     int has_emitted_end;
     async_container_vector* data_handler;
     async_container_vector* end_handler;
@@ -165,23 +165,6 @@ void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* a
     curr_request_parser_node->http_parse_info = *http_parser_info_ptr;
 }
 
-int str_to_num(char* num_str){
-    int content_len_num = 0;
-    int curr_index = 0;
-    while(num_str[curr_index] != '\0'){
-        int curr_digit = num_str[curr_index] - '0';
-        content_len_num = (content_len_num * 10) + curr_digit;
-
-        curr_index++;
-    }
-
-    return content_len_num;
-}
-
-typedef struct buffer_item {
-    buffer* buffer_array;
-} buffer_item;
-
 void http_transaction_handler(event_node* http_node);
 int http_transaction_event_checker(event_node* http_node);
 
@@ -201,53 +184,17 @@ void http_parse_task(void* http_info){
     async_http_outgoing_response* curr_response_info = (*info_to_parse)->http_response_info;
     curr_response_info->tcp_socket_ptr = (*info_to_parse)->client_socket;
 
-    char* header_string = (char*)get_internal_buffer((*info_to_parse)->http_header_data);
-    //int buffer_capacity = get_buffer_capacity((*info_to_parse)->http_header_data);
-    
-    char* rest_of_str = header_string;
-    char* curr_line_token = strtok_r(rest_of_str, "\r", &rest_of_str);
-    char* token_ptr = curr_line_token;
-    //TODO: get method, url, and http version in while-loop instead?
-    char* curr_first_line_token = strtok_r(token_ptr, " ", &token_ptr);
-    curr_request_info->method = curr_first_line_token;
+    parse_http(
+        (*info_to_parse)->http_header_data,
+        &curr_request_info->method,
+        &curr_request_info->url,
+        &curr_request_info->http_version,
+        curr_request_info->header_map,
+        &curr_request_info->content_length,
+        &curr_request_info->buffer_data_list
+    );
 
-    curr_first_line_token = strtok_r(token_ptr, " ", &token_ptr);
-    curr_request_info->url = curr_first_line_token;
-
-    curr_first_line_token = strtok_r(token_ptr, " ", &token_ptr);
-    curr_request_info->http_version = curr_first_line_token;
-
-    curr_line_token = strtok_r(rest_of_str, "\r\n", &rest_of_str);
-    while(curr_line_token != NULL && strncmp("\r", curr_line_token, 10) != 0){
-        char* curr_key_token = strtok_r(curr_line_token, ": ", &curr_line_token);
-        char* curr_val_token = strtok_r(curr_line_token, "\r", &curr_line_token);
-        while(curr_val_token != NULL && *curr_val_token == ' '){
-            curr_val_token++;
-        }
-
-        ht_set(
-            curr_request_info->header_map,
-            curr_key_token,
-            curr_val_token
-        );
-
-        curr_line_token = strtok_r(rest_of_str, "\n", &rest_of_str);
-    }
-
-    char* content_length_num_str = ht_get(curr_request_info->header_map, "Content-Length");
-    if(content_length_num_str != NULL && is_number_str(content_length_num_str)){
-        curr_request_info->content_length = str_to_num(content_length_num_str);
-    }
-    
-    //copy start of buffer into data buffer
-    size_t start_of_body_len = strnlen(rest_of_str, get_buffer_capacity((*info_to_parse)->http_header_data));
-    if(start_of_body_len > 0){
-        event_node* new_request_data = create_event_node(sizeof(buffer_item), NULL, NULL);
-        buffer_item* buff_item_ptr = (buffer_item*)new_request_data->data_ptr;
-        buff_item_ptr->buffer_array = buffer_from_array(rest_of_str, start_of_body_len);
-        //TODO: need mutex lock here?
-        prepend(&curr_request_info->buffer_data_list, new_request_data);
-    }
+    destroy_buffer((*info_to_parse)->http_header_data);
 
     //TODO: cant free this or its dereference, but should free something??
     //free(*info_to_parse);
@@ -344,18 +291,6 @@ void http_request_emit_end(async_incoming_http_request* http_request){
     */
 
     http_request->has_emitted_end = 1;
-}
-
-#include <ctype.h>
-
-int is_number_str(char* num_str){
-    for(int i = 0; i < 20 && num_str[i] != '\0'; i++){
-        if(!isdigit(num_str[i])){
-            return 0;
-        }
-    }
-
-    return 1;
 }
 
 char* async_incoming_http_request_get(async_incoming_http_request* http_req, char* header_key_name){
@@ -533,15 +468,6 @@ void async_http_response_write_head(async_http_outgoing_response* curr_http_resp
 
     strncpy(buffer_internal_array, "\r\n", CRLF_len);
     buffer_internal_array += CRLF_len;
-
-    /*
-    char* curr_buffer = (char*)get_internal_buffer(response_header_buffer);
-    write(
-        STDOUT_FILENO,
-        curr_buffer,
-        total_header_len
-    );
-    */
 
     async_socket_write(
         curr_http_response->tcp_socket_ptr,

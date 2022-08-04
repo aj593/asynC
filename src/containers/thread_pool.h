@@ -40,6 +40,7 @@ typedef struct thread_task_info {
     async_socket* rw_socket;
     http_parser_info* http_parse_info;
     char** resolved_ip_addresses;
+    void* custom_data_ptr;
 } thread_task_info;
 
 #endif

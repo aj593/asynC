@@ -109,10 +109,12 @@ void chat_connection_handler(async_socket* new_socket, void* arg){
     socket_array[curr_num_sockets++] = new_socket;
     async_socket_on_data(new_socket, chat_data_handler, NULL);
     async_tcp_socket_on_end(new_socket, socket_end_callback);
+    /*
     if(new_server->num_connections == 3){
         printf("closing server!\n");
         async_tcp_server_close(new_server);
     }
+    */
 }
 
 void chat_data_handler(async_socket* reading_socket, buffer* chat_data, void* arg){

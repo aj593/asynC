@@ -26,15 +26,19 @@ void after_dns(char** ip_list, int num_ips, void* arg){
     free(ip_list);
 }
 
+void response_handler(async_http_incoming_response* response, void* arg){
+    printf("got my response!\n");
+}
+
 int main(){
     asynC_init();
 
     //async_dns_lookup("www.tire.com", after_dns, NULL);
     http_request_options options;
     async_http_request_options_init(&options);
-    async_http_request_options_set_header(&options, "foo", "bar");
-    async_http_request_options_set_header(&options, "spaghetti", "meatball");
-    /*async_outgoing_http_request* new_request = */async_http_request("example.com", "GET", &options, NULL);
+    //async_http_request_options_set_header(&options, "foo", "bar");
+    //async_http_request_options_set_header(&options, "spaghetti", "meatball");
+    /*async_outgoing_http_request* new_request = */async_http_request("example.com", "GET", &options, response_handler, NULL);
 
     //call_async_open();
     //callchmod();

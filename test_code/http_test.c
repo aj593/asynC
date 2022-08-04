@@ -11,7 +11,7 @@ int main(){
     asynC_init();
 
     async_http_server* new_http_server = async_create_http_server();
-    async_http_server_listen(new_http_server, 3000, "127.0.0.1", NULL);
+    async_http_server_listen(new_http_server, 3000, "192.168.1.195", NULL);
     async_http_server_on_request(new_http_server, http_server_on_request);
 
     asynC_cleanup();
@@ -37,19 +37,19 @@ void end_handler(void* arg){
 }
 */
 
-int total_num_bytes_read = 0;
+//int total_num_bytes_read = 0;
 
 void response_writer(buffer* html_buffer, void* res_arg){
     async_http_outgoing_response* res = (async_http_outgoing_response*)res_arg;
     async_http_response_write(res, html_buffer);
-    total_num_bytes_read += get_buffer_capacity(html_buffer);
+    //total_num_bytes_read += get_buffer_capacity(html_buffer);
     //printf("i read %d bytes\n", total_num_bytes_read);
     destroy_buffer(html_buffer);
 }
 
 void response_stream_ender(void* arg){
     //printf("i read %d bytes\n", total_num_bytes_read);
-    total_num_bytes_read = 0;
+    //total_num_bytes_read = 0;
     async_http_outgoing_response* res = (async_http_outgoing_response*)arg;
     //sleep(1);
     async_http_response_end(res);
@@ -84,6 +84,8 @@ void http_server_on_request(async_incoming_http_request* req, async_http_outgoin
         printf("test file is %s and format str is %s\n", req_str, format_str);
         /*int num_bytes_formatted = */snprintf(format_str, max_format_bytes, "image/%s", format_type);
         async_http_response_set_header(res, "Content-Type", format_str);
+        //async_http_response_set_header(res, "Content-Length", "6696058");
+        //async_http_response_set_header(res, "Content-Length", "1530825");
         async_fs_readstream* quasar_readstream = create_async_fs_readstream(req_str);
         fs_readstream_on_data(quasar_readstream, response_writer, res);
         async_fs_readstream_on_end(quasar_readstream, response_stream_ender, res);

@@ -2,6 +2,8 @@
 #define ASYNC_HTTP_LIB_H
 
 #include "../async_types/buffer.h"
+#include "../containers/hash_table.h"
+#include "../containers/linked_list.h"
 
 typedef struct async_http_server async_http_server;
 typedef struct async_incoming_http_request async_incoming_http_request;
