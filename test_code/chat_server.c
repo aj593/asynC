@@ -137,8 +137,8 @@ void chat_data_handler(async_socket* reading_socket, buffer* chat_data, void* ar
 int main(int argc, char* argv[]){
     asynC_init();
 
-    new_server = async_create_tcp_server();
-    async_tcp_server_listen(new_server, port, "127.0.0.1", listen_callback, NULL);
+    new_server = async_tcp_server_create();
+    async_tcp_server_listen(new_server, port, "192.168.1.195", listen_callback, NULL);
     async_tcp_server_on_connection(new_server, chat_connection_handler, NULL);
 
     asynC_cleanup();

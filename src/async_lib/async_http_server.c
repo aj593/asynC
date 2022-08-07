@@ -73,7 +73,7 @@ typedef struct listen_callback_t {
 
 async_http_server* async_create_http_server(){
     async_http_server* new_http_server = (async_http_server*)calloc(1, sizeof(async_http_server));
-    new_http_server->wrapped_tcp_server = async_create_tcp_server();
+    new_http_server->wrapped_tcp_server = async_tcp_server_create();
     new_http_server->request_handler_vector = async_container_vector_create(2, 2, sizeof(http_request_handler));
     new_http_server->listen_handler_vector = async_container_vector_create(2, 2, sizeof(listen_callback_t));
 

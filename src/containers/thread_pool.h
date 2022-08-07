@@ -4,6 +4,7 @@
 #include "linked_list.h"
 #include "../async_lib/async_http_server.h"
 #include "../async_lib/async_fs.h"
+#include "../async_lib/async_server.h"
 
 #define TERM_FLAG -1
 //TODO: allow user to decide number of threads in thread pool?
@@ -36,7 +37,7 @@ typedef struct thread_task_info {
     int fd; 
     int num_bytes;
     int success;
-    async_tcp_server* listening_server;
+    async_server* listening_server;
     async_socket* rw_socket;
     http_parser_info* http_parse_info;
     char** resolved_ip_addresses;

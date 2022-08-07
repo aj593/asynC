@@ -240,7 +240,7 @@ async_outgoing_http_request* async_http_request(char* host_url, char* http_metho
     return new_http_request;
 }
 
-typedef struct connect_attempt_info{
+typedef struct connect_attempt_info {
     async_outgoing_http_request* http_request_info;
     char** ip_list;
     int total_ips;
@@ -257,7 +257,7 @@ void after_request_dns_callback(char** ip_list, int num_ips, void* arg){
     new_connect_info->curr_index = 0;
 
     //TODO: write http info here instead of in http_request_connection_handler?
-    /*async_socket* new_socket = */async_connect(
+    /*async_socket* new_socket = */async_tcp_connect(
         new_connect_info->ip_list[new_connect_info->curr_index++],
         80,
         http_request_connection_handler,
@@ -294,7 +294,7 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
 int client_http_request_event_checker(event_node* client_http_transaction_node){
     client_side_http_transaction_info* http_info = (client_side_http_transaction_info*)client_http_transaction_node->data_ptr;
 
-    //TODO add extra condition that request should also be writeable
+    //TODO add extra condition that request should also be writeable, allow request to be ended/not writable anymore
     while(http_info->request_info->request_write_list.size > 0){
         event_node* buffer_node = remove_first(&http_info->request_info->request_write_list);
         buffer_holder_t* buffer_holder = (buffer_holder_t*)buffer_node->data_ptr;
@@ -323,7 +323,7 @@ int client_http_request_event_checker(event_node* client_http_transaction_node){
         destroy_event_node(response_node);
     }
 
-    return 0;
+    return 0; //TODO: make request exit when underlying tcp socket is closed?
 }
 
 void client_http_request_finish_handler(event_node* finished_http_request_node){

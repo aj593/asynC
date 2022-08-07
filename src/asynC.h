@@ -8,6 +8,8 @@
 //#include "async_types/event_emitter.h"
 #include "async_lib/async_http_server.h"
 #include "async_lib/async_http_request.h"
+#include "async_lib/async_tcp_socket.h"
+#include "async_lib/async_tcp_server.h"
 #include "async_lib/async_dns.h"
 
 #endif

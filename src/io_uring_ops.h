@@ -16,7 +16,7 @@ typedef struct liburing_stats {
     grouped_fs_cbs fs_cb;
     void* cb_arg;
     struct sockaddr client_addr;
-    async_tcp_server* listening_server;
+    async_server* listening_server;
     async_socket* rw_socket;
 } uring_stats;
 
