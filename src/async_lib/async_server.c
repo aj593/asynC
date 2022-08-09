@@ -8,7 +8,6 @@
 #include <sys/epoll.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/un.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -48,7 +47,7 @@ typedef struct socket_send_buffer {
 #endif
 
 typedef struct listen_cb {
-    void(*listen_callback)(void*);
+    void(*listen_callback)(async_server*, void*);
     void* arg;
 } listen_callback_t;
 
@@ -57,7 +56,7 @@ typedef struct connection_handler_cb {
     void* arg;
 } connection_callback_t;
 
-async_server* async_create_server(int domain, int type, int protocol){
+async_server* async_create_server(void){
     async_server* new_server = (async_server*)calloc(1, sizeof(async_server));
     //new_server->domain = domain;
     //new_server->type = type;
@@ -107,15 +106,17 @@ int server_accept_connections(event_node* server_event_node){
 
 void listen_cb_interm(event_node* listen_node){
     thread_task_info* listen_node_info = (thread_task_info*)listen_node->data_ptr;
+    listen_node_info->listening_server->is_listening = 1;
     async_container_vector* listening_vector = listen_node_info->listening_server->listeners_vector;
 
     listen_callback_t listen_cb_item;
 
     for(int i = 0; i < async_container_vector_size(listening_vector); i++){
         async_container_vector_get(listening_vector, i, &listen_cb_item);
-        void(*curr_listen_cb)(void*) = listen_cb_item.listen_callback;
+        void(*curr_listen_cb)(async_server*, void*) = listen_cb_item.listen_callback;
+        async_server* listening_server = listen_node_info->listening_server;
         void* curr_arg = listen_cb_item.arg;
-        curr_listen_cb(curr_arg);
+        curr_listen_cb(listening_server, curr_arg);
     }
 
     event_node* server_node = create_event_node(sizeof(server_info), destroy_server, server_accept_connections);
@@ -124,7 +125,7 @@ void listen_cb_interm(event_node* listen_node){
     enqueue_event(server_node);
 }
 
-void async_server_listen(async_server* listening_server, async_listen_info* curr_listen_info, void(*listen_task_handler)(void*), void(*listen_callback)(void*), void* arg){
+void async_server_listen(async_server* listening_server, async_listen_info* curr_listen_info, void(*listen_task_handler)(void*), void(*listen_callback)(async_server*, void*), void* arg){
     //TODO: make case or rearrange code in this function for if listen_callback arg is NULL
     if(listen_callback != NULL){
         listen_callback_t listener_callback_holder;
@@ -168,17 +169,6 @@ void uring_accept_interm(event_node* accept_node){
 
     listening_server->num_connections++;
     new_socket_ptr->server_ptr = listening_server;
-
-    /* TODO: need hash table at all?
-    int max_num_digits = 20;
-    char fd_str_buffer[max_num_digits];
-    snprintf(fd_str_buffer, max_num_digits, "%d", new_socket_fd);
-    ht_set(
-        listening_server->socket_table,
-        fd_str_buffer,
-        new_socket_ptr
-    );
-    */
 
     async_container_vector* connection_handler_vector = listening_server->connection_vector;
     connection_callback_t connection_block;

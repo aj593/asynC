@@ -8,6 +8,7 @@
 #include "io_uring_ops.h"
 
 #include "async_lib/async_fs.h"
+#include "async_lib/async_child_process.h"
 
 #include "async_epoll_ops.h"
 
@@ -32,7 +33,7 @@ linked_list execute_queue;
 linked_list defer_queue;
 
 //TODO: put this in a different file?
-hash_table* subscriber_hash_table; //hash table that maps null-terminated strings to vectors of emitter items so we keep track of which emitters subscribed what events
+//hash_table* subscriber_hash_table; //hash table that maps null-terminated strings to vectors of emitter items so we keep track of which emitters subscribed what events
 
 //TODO: use is_linked_list_empty() instead? (but uses extra function call)
 int is_event_queue_empty(){
@@ -50,8 +51,10 @@ void asynC_init(){
     linked_list_init(&event_queue); //TODO: error check singly_linked_list.c
     linked_list_init(&execute_queue);
     linked_list_init(&defer_queue);
+    //TODO: add error checking with this
+    child_process_creator_init();
 
-    subscriber_hash_table = ht_create();
+    //subscriber_hash_table = ht_create();
 
     async_epoll_init();
 
@@ -77,10 +80,11 @@ void asynC_cleanup(){
     //linked_list_destroy(&event_queue);
     //linked_list_destroy(&execute_queue);
     //linked_list_destroy(&defer_queue);
+    child_process_creator_destroy();
 
     async_epoll_destroy();
 
-    ht_destroy(subscriber_hash_table);
+    //ht_destroy(subscriber_hash_table);
     thread_pool_destroy(); //TODO: uncomment later
     io_uring_exit();
 }

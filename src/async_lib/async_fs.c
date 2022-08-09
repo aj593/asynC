@@ -283,13 +283,26 @@ void write_task_handler(void* write_task){
         get_internal_buffer(write_info->buffer),
         write_info->max_num_bytes_to_write
     );
-
-    //*write_info->is_done_ptr = 1;
 }
 
 //TODO: finish implementing this
 void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, void(*write_callback)(int, buffer*, int, void*), void* cb_arg){
     //event_node* write_node = create_event_node(FS_EVENT_INDEX);
+    new_task_node_info async_write_node_info;
+    create_thread_task(sizeof(async_write_info), write_task_handler, write_cb_interm, &async_write_node_info);
+    thread_task_info* write_task_info_ptr = async_write_node_info.new_thread_task_info;
+    write_task_info_ptr->fd = write_fd;
+    write_task_info_ptr->buffer = write_buff_ptr;
+    write_task_info_ptr->fs_cb.write_callback = write_callback;
+    write_task_info_ptr->cb_arg = cb_arg;
+
+    async_write_info* write_task_info = (async_write_info*)async_write_node_info.async_task_info;
+    write_task_info->write_fd = write_fd;
+    write_task_info->buffer = write_buff_ptr;
+    write_task_info->max_num_bytes_to_write = num_bytes_to_write;
+    write_task_info->num_bytes_written_ptr = &write_task_info_ptr->num_bytes;
+
+    /*
     uring_lock();
 
     struct io_uring_sqe* write_sqe = get_sqe();
@@ -319,21 +332,8 @@ void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, v
     }
     else{
         uring_unlock();
-
-        new_task_node_info async_write_node_info;
-        create_thread_task(sizeof(async_write_info), write_task_handler, write_cb_interm, &async_write_node_info);
-        thread_task_info* write_task_info_ptr = async_write_node_info.new_thread_task_info;
-        write_task_info_ptr->fd = write_fd;
-        write_task_info_ptr->buffer = write_buff_ptr;
-        write_task_info_ptr->fs_cb.write_callback = write_callback;
-        write_task_info_ptr->cb_arg = cb_arg;
-
-        async_write_info* write_task_info = (async_write_info*)async_write_node_info.async_task_info;
-        write_task_info->write_fd = write_fd;
-        write_task_info->buffer = write_buff_ptr;
-        write_task_info->max_num_bytes_to_write = num_bytes_to_write;
-        write_task_info->num_bytes_written_ptr = &write_task_info_ptr->num_bytes;
     }
+    */
 }
 
 typedef struct chmod_task {

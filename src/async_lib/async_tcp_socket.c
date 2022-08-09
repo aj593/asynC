@@ -10,27 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 
-void tcp_connect_task_handler(void* connect_task_info){
-    async_connect_info* connect_info = (async_connect_info*)connect_task_info;
-    int new_socket_fd = socket(
-        AF_INET, 
-        SOCK_STREAM,
-        0
-    );
-
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET;
-    server_address.sin_port = htons(connect_info->port);
-    server_address.sin_addr.s_addr = inet_addr(connect_info->ip_address);
-
-    int connection_status = connect(new_socket_fd, (struct sockaddr*)(&server_address), sizeof(server_address));
-    if(connection_status == -1){
-        perror("connect()");
-        new_socket_fd = -1;
-    }
-
-    *connect_info->socket_fd_ptr = new_socket_fd;
-}
+void tcp_connect_task_handler(void* connect_task_info);
 
 async_tcp_socket* async_tcp_connect(char* ip_address, int port, void(*connection_handler)(async_tcp_socket*, void*), void* arg){
     async_connect_info curr_connect_info;
@@ -38,6 +18,23 @@ async_tcp_socket* async_tcp_connect(char* ip_address, int port, void(*connection
     curr_connect_info.port = port;
     
     return async_connect(&curr_connect_info, tcp_connect_task_handler, connection_handler, arg);
+}
+
+void tcp_connect_task_handler(void* connect_task_info){
+    async_connect_info* connect_info = (async_connect_info*)connect_task_info;
+    *connect_info->socket_fd_ptr = socket(AF_INET, SOCK_STREAM, 0);
+
+    //TODO: zero out bytes for this struct before assigning values?
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(connect_info->port);
+    server_address.sin_addr.s_addr = inet_addr(connect_info->ip_address);
+
+    int connection_status = connect(*connect_info->socket_fd_ptr, (struct sockaddr*)(&server_address), sizeof(server_address));
+    if(connection_status == -1){
+        perror("connect()");
+        *connect_info->socket_fd_ptr = -1;
+    }
 }
 
 void async_tcp_socket_write(async_tcp_socket* writing_tcp_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_tcp_socket*, void*)){

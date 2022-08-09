@@ -10,7 +10,7 @@
 
 #include <stdio.h>
 
-void after_http_listen(void* cb_arg);
+void after_http_listen(async_tcp_server* http_server, void* cb_arg);
 void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* arg);
 void http_parse_task(void* http_info);
 void http_parser_interm(event_node* http_parser_node);
@@ -102,6 +102,7 @@ async_http_outgoing_response* create_http_response(){
     return new_http_response;
 }
 
+//TODO: add async_http_server* and void* arg in listen callback
 void async_http_server_listen(async_http_server* listening_server, int port, char* ip_address, void(*http_listen_callback)()){
     if(http_listen_callback != NULL){
         //TODO: add new listen struct item into listen vector here
@@ -116,7 +117,7 @@ void async_http_server_listen(async_http_server* listening_server, int port, cha
     );
 }
 
-void after_http_listen(void* cb_arg){
+void after_http_listen(async_tcp_server* server, void* cb_arg){
     async_http_server* listening_server = (async_http_server*)cb_arg;
     
     async_container_vector* http_listen_vector = listening_server->listen_handler_vector;

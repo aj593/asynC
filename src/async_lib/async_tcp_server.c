@@ -10,14 +10,30 @@
 
 async_tcp_server* async_tcp_server_create(void){
     //TODO: specify protocol or just leave as 0?
-    return async_create_server(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    return async_create_server();
 }
 
-void tcp_server_listen(void* listen_task){
+void tcp_server_listen_task(void* listen_task);
+
+void async_tcp_server_listen(async_tcp_server* listening_tcp_server, int port, char* ip_address, void(*listen_callback)(async_tcp_server*, void*), void* arg){
+    async_listen_info listen_info;
+    strncpy(listen_info.ip_address, ip_address, LONGEST_SOCKET_NAME_LEN);
+    listen_info.port = port;
+    
+    async_server_listen(
+        listening_tcp_server,
+        &listen_info,
+        tcp_server_listen_task,
+        listen_callback,
+        arg
+    );
+}
+
+void tcp_server_listen_task(void* listen_task){
     async_listen_info* curr_listen_info = (async_listen_info*)listen_task;
     async_server* new_listening_server = curr_listen_info->listening_server;
     
-    new_listening_server->listening_socket = socket(AF_INET, SOCK_STREAM, 0);
+    new_listening_server->listening_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if(new_listening_server->listening_socket == -1){
         perror("socket()");
     }
@@ -65,21 +81,7 @@ void tcp_server_listen(void* listen_task){
         NULL
     );
 
-    new_listening_server->is_listening = 1;
-}
-
-void async_tcp_server_listen(async_tcp_server* listening_tcp_server, int port, char* ip_address, void(*listen_callback)(void*), void* arg){
-    async_listen_info listen_info;
-    strncpy(listen_info.ip_address, ip_address, LONGEST_SOCKET_NAME_LEN);
-    listen_info.port = port;
-    
-    async_server_listen(
-        listening_tcp_server,
-        &listen_info,
-        tcp_server_listen,
-        listen_callback,
-        arg
-    );
+    //new_listening_server->is_listening = 1;
 }
 
 void async_tcp_server_on_connection(async_tcp_server* listening_tcp_server, void(*connection_handler)(async_tcp_socket*, void*), void* arg){

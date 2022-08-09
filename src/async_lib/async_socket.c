@@ -22,12 +22,6 @@ typedef struct socket_send_buffer {
     void(*send_callback)(async_socket*, void*);
 } socket_buffer_info;
 
-typedef struct buffer_data_callback {
-    int is_temp_subscriber;
-    void(*curr_data_handler)(async_socket*, buffer*, void*);
-    void* arg;
-} buffer_callback_t;
-
 typedef struct connection_handler_callback {
     void(*connection_handler)(async_socket*, void*);
     void* arg;
