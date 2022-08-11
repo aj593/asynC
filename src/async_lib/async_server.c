@@ -56,8 +56,10 @@ typedef struct connection_handler_cb {
     void* arg;
 } connection_callback_t;
 
-async_server* async_create_server(void){
+async_server* async_create_server(void(*listen_task_handler)(void*), void(*accept_task_handler)(void*)){
     async_server* new_server = (async_server*)calloc(1, sizeof(async_server));
+    new_server->listen_task = listen_task_handler;
+    new_server->accept_task = accept_task_handler;
     //new_server->domain = domain;
     //new_server->type = type;
     //new_server->protocol = protocol;
@@ -107,6 +109,13 @@ int server_accept_connections(event_node* server_event_node){
 void listen_cb_interm(event_node* listen_node){
     thread_task_info* listen_node_info = (thread_task_info*)listen_node->data_ptr;
     listen_node_info->listening_server->is_listening = 1;
+
+    epoll_add(
+        listen_node_info->listening_server->listening_socket,
+        &listen_node_info->listening_server->has_connection_waiting,
+        NULL
+    );
+
     async_container_vector* listening_vector = listen_node_info->listening_server->listeners_vector;
 
     listen_callback_t listen_cb_item;
@@ -125,7 +134,7 @@ void listen_cb_interm(event_node* listen_node){
     enqueue_event(server_node);
 }
 
-void async_server_listen(async_server* listening_server, async_listen_info* curr_listen_info, void(*listen_task_handler)(void*), void(*listen_callback)(async_server*, void*), void* arg){
+void async_server_listen(async_server* listening_server, async_listen_info* curr_listen_info, void(*listen_callback)(async_server*, void*), void* arg){
     //TODO: make case or rearrange code in this function for if listen_callback arg is NULL
     if(listen_callback != NULL){
         listen_callback_t listener_callback_holder;
@@ -135,7 +144,7 @@ void async_server_listen(async_server* listening_server, async_listen_info* curr
     }
 
     new_task_node_info server_listen_info;
-    create_thread_task(sizeof(async_listen_info), listen_task_handler, listen_cb_interm, &server_listen_info);
+    create_thread_task(sizeof(async_listen_info), listening_server->listen_task, listen_cb_interm, &server_listen_info);
     thread_task_info* new_task = server_listen_info.new_thread_task_info;
     new_task->is_done = 0;
     new_task->listening_server = listening_server;
@@ -148,29 +157,27 @@ void async_server_listen(async_server* listening_server, async_listen_info* curr
     //TODO: assign success_ptr?
 }
 
-//TODO: make function to add server listen event listener
+//TODO: make function to add server listen event listener?
 
-void uring_accept_interm(event_node* accept_node){
-    uring_stats* accept_info = (uring_stats*)accept_node->data_ptr;
-    async_server* listening_server = accept_info->listening_server;
-    listening_server->is_currently_accepting = 0;
-    listening_server->has_connection_waiting = 0;
-    
-    int new_socket_fd = accept_info->return_val;
+void post_accept_interm(event_node* accept_node){
+    thread_task_info* thread_accept_info_ptr = (thread_task_info*)accept_node->data_ptr;
+    async_server* accepting_server = thread_accept_info_ptr->listening_server;
 
-    if(new_socket_fd < 0){
+    accepting_server->is_currently_accepting = 0;
+    accepting_server->has_connection_waiting = 0;
+
+    if(thread_accept_info_ptr->fd == -1){
         return;
     }
 
-    //TODO: create socket to put in here for event loop here
-    event_node* socket_event_node = create_socket_node(new_socket_fd);
+    event_node* socket_event_node = create_socket_node(thread_accept_info_ptr->fd);
     socket_info* new_socket_info = (socket_info*)socket_event_node->data_ptr;
     async_socket* new_socket_ptr = new_socket_info->socket;
 
-    listening_server->num_connections++;
-    new_socket_ptr->server_ptr = listening_server;
+    accepting_server->num_connections++;
+    new_socket_ptr->server_ptr = accepting_server;
 
-    async_container_vector* connection_handler_vector = listening_server->connection_vector;
+    async_container_vector* connection_handler_vector = accepting_server->connection_vector;
     connection_callback_t connection_block;
     for(int i = 0; i < async_container_vector_size(connection_handler_vector); i++){
         //TODO: continue from here
@@ -180,44 +187,19 @@ void uring_accept_interm(event_node* accept_node){
         connection_handler(new_socket_ptr, curr_arg);
     }
 
-    enqueue_event(socket_event_node);
+    enqueue_event(socket_event_node); //TODO: put defer enqueue event in create_socket_node() function instead?
 }
 
 //TODO: make extra param for accept() callback?
 void async_accept(async_server* accepting_server){
-    uring_lock();
-
-    struct io_uring_sqe* accept_sqe = get_sqe();
-
-    if(accept_sqe != NULL){
-        event_node* accept_node = create_event_node(sizeof(uring_stats), uring_accept_interm, is_uring_done);
-        accept_node->callback_handler = uring_accept_interm;
-        accept_node->event_checker = is_uring_done;
-
-        uring_stats* accept_uring_data = (uring_stats*)accept_node->data_ptr;
-        accept_uring_data->listening_server = accepting_server;
-        accept_uring_data->is_done = 0;
-        defer_enqueue_event(accept_node);
-
-        socklen_t client_addr = sizeof(accept_uring_data->client_addr);
-
-        io_uring_prep_accept(
-            accept_sqe, 
-            accepting_server->listening_socket,
-            &accept_uring_data->client_addr, 
-            &client_addr,
-            0
-        );
-        set_sqe_data(accept_sqe, accept_node);
-        increment_sqe_counter();
-
-        uring_unlock();
-    } 
-    else {
-        uring_unlock();
-
-        //TODO: make thread pooled task?
-    }
+    new_task_node_info server_accept_info;
+    create_thread_task(sizeof(async_accept_info), accepting_server->accept_task, post_accept_interm, &server_accept_info);
+    thread_task_info* new_task = server_accept_info.new_thread_task_info;
+    new_task->listening_server = accepting_server;
+    
+    async_accept_info* accept_info_ptr = (async_accept_info*)server_accept_info.async_task_info;
+    accept_info_ptr->new_fd_ptr = &new_task->fd;
+    accept_info_ptr->accepting_server = accepting_server;
 }
 
 void async_server_on_connection(async_server* listening_server, void(*connection_handler)(async_socket*, void*), void* arg){

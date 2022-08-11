@@ -93,7 +93,8 @@ void asynC_cleanup(){
 void asynC_wait(){
     pthread_mutex_lock(&event_queue_mutex);
 
-    while(!is_event_queue_empty()){
+    //TODO: need defer queue size check here when event loop goes into separate thread?
+    while(event_queue.size > 0 || defer_queue.size > 0){
         uring_check();
         epoll_check();
 
@@ -141,6 +142,7 @@ void enqueue_event(event_node* event_node){
     pthread_mutex_unlock(&event_queue_mutex);
 }
 
+//TODO: mutex locks for defer event queue?
 void defer_enqueue_event(event_node* event_node){
     append(&defer_queue, event_node);
 }

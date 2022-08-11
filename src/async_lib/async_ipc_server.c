@@ -10,11 +10,12 @@
 
 #include <stdio.h>
 
-async_ipc_server* async_ipc_server_create(void){
-    return async_create_server();
-}
-
 void ipc_server_listen(void* ipc_listen_task);
+void ipc_server_accept(void* ipc_accept_task);
+
+async_ipc_server* async_ipc_server_create(void){
+    return async_create_server(ipc_server_listen, ipc_server_accept);
+}
 
 void async_ipc_server_listen(async_ipc_server* listening_ipc_server, char* socket_server_path, void(*listen_callback)(async_ipc_server*, void*), void* arg){
     async_listen_info ipc_listen_info;
@@ -23,7 +24,6 @@ void async_ipc_server_listen(async_ipc_server* listening_ipc_server, char* socke
     async_server_listen(
         listening_ipc_server,
         &ipc_listen_info,
-        ipc_server_listen,
         listen_callback,
         arg
     );
@@ -57,6 +57,21 @@ void ipc_server_listen(void* ipc_listen_task){
     }
 
     //new_listening_server->is_listening = 1;
+}
+
+void ipc_server_accept(void* ipc_accept_task){
+    async_accept_info* ipc_accept_info_ptr = (async_accept_info*)ipc_accept_task;
+    
+    struct sockaddr_un client_sockaddr;
+    socklen_t sock_info_len = sizeof(client_sockaddr);
+
+    *ipc_accept_info_ptr->new_fd_ptr = accept(
+        ipc_accept_info_ptr->accepting_server->listening_socket,
+        (struct sockaddr*)&client_sockaddr,
+        &sock_info_len
+    );
+
+    //TODO: use getpeername()?
 }
 
 void async_ipc_server_on_connection(async_ipc_server* listening_ipc_server, void(*connection_handler)(async_ipc_socket*, void*), void* arg){

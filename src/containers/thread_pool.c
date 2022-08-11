@@ -100,7 +100,8 @@ void create_thread_task(size_t thread_task_size, void(*thread_task_func)(void*),
     task_info_struct_ptr->async_task_info = curr_task_block->async_task_info;
 
     //TODO: use defer enqueue event here?
-    enqueue_event(event_queue_node);
+    defer_enqueue_event(event_queue_node);
+    //enqueue_event(event_queue_node);
     defer_enqueue_task(thread_task_node);
 }
 

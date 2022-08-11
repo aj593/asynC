@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 
 #include "../src/asynC.h"
 
@@ -31,7 +32,14 @@ void response_handler(async_http_incoming_response* response, void* arg){
 }
 
 void data_handler(async_ipc_socket* ipc_socket, buffer* buffer, void* arg){
-    printf("i got this data with %ld num bytes: %s", get_buffer_capacity(buffer), (char*)get_internal_buffer(buffer));
+    char* internal_buffer = get_internal_buffer(buffer);
+    write(
+        STDOUT_FILENO,
+        internal_buffer,
+        get_buffer_capacity(buffer)
+    );
+
+    destroy_buffer(buffer);
 }
 
 int main(){
@@ -45,9 +53,12 @@ int main(){
     //async_http_request_options_set_header(&options, "spaghetti", "meatball");
     async_outgoing_http_request* new_request = async_http_request("example.com", "GET", &options, response_handler, NULL);
     */
-    char* array[] = {"/bin/netstat", "-l", NULL};
-    async_child_process* new_process = async_child_process_exec("/bin/netstat", array);
+    char* array[] = {"/bin/dls", "-l", NULL};
+    async_child_process* new_process = async_child_process_exec("/bin/dls", array);
     async_child_process_stdout_on_data(new_process, data_handler, NULL);
+    async_child_process_stdin_on_data(new_process, data_handler, NULL);
+    async_child_process_stderr_on_data(new_process, data_handler, NULL);
+
     //call_async_open();
     //callchmod();
     /*

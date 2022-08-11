@@ -30,6 +30,8 @@ typedef struct async_server {
     async_container_vector* listeners_vector;
     async_container_vector* connection_vector;
     char* name;
+    void(*listen_task)(void*);
+    void(*accept_task)(void*);
 } async_server;
 
 #endif
@@ -46,9 +48,14 @@ typedef struct listen_task {
     void* custom_data;
 } async_listen_info;
 
-async_server* async_create_server(void);
+typedef struct async_accept_info {
+    async_server* accepting_server;
+    int* new_fd_ptr;
+} async_accept_info;
+
+async_server* async_create_server(void(*listen_task_handler)(void*), void(*accept_task_handler)(void*));
 //void listen_task_handler(thread_async_ops listen_task);
-void async_server_listen(async_server* listening_server, async_listen_info* curr_listen_info, void(*listen_task_handler)(void*), void(*listen_cb)(async_server*, void*), void* arg);
+void async_server_listen(async_server* listening_server, async_listen_info* curr_listen_info, void(*listen_cb)(async_server*, void*), void* arg);
 void async_server_on_connection(async_server* listening_server, void(*connection_handler)(async_socket*, void*), void* arg);
 void async_server_close(async_server* closing_server);
 

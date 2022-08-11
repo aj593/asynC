@@ -8,12 +8,13 @@
 #include <string.h>
 #include <stdio.h>
 
+void tcp_server_listen_task(void* listen_task);
+void tcp_server_accept_task(void* accept_task);
+
 async_tcp_server* async_tcp_server_create(void){
     //TODO: specify protocol or just leave as 0?
-    return async_create_server();
+    return async_create_server(tcp_server_listen_task, tcp_server_accept_task);
 }
-
-void tcp_server_listen_task(void* listen_task);
 
 void async_tcp_server_listen(async_tcp_server* listening_tcp_server, int port, char* ip_address, void(*listen_callback)(async_tcp_server*, void*), void* arg){
     async_listen_info listen_info;
@@ -23,7 +24,6 @@ void async_tcp_server_listen(async_tcp_server* listening_tcp_server, int port, c
     async_server_listen(
         listening_tcp_server,
         &listen_info,
-        tcp_server_listen_task,
         listen_callback,
         arg
     );
@@ -74,14 +74,20 @@ void tcp_server_listen_task(void* listen_task){
     if(return_val == -1){
         perror("listen()");
     }
+}
 
-    epoll_add(
-        new_listening_server->listening_socket,
-        &new_listening_server->has_connection_waiting,
-        NULL
+void tcp_server_accept_task(void* accept_task){
+    async_accept_info* accept_info_ptr = (async_accept_info*)accept_task;
+
+    //TODO: get these structs and info from async_accept_info pointer instead of having local variables? 
+    struct sockaddr_in client_addr;
+    socklen_t peer_addr_len = sizeof(client_addr);
+
+    *accept_info_ptr->new_fd_ptr = accept(
+        accept_info_ptr->accepting_server->listening_socket,
+        (struct sockaddr*)&client_addr,
+        &peer_addr_len
     );
-
-    //new_listening_server->is_listening = 1;
 }
 
 void async_tcp_server_on_connection(async_tcp_server* listening_tcp_server, void(*connection_handler)(async_tcp_socket*, void*), void* arg){

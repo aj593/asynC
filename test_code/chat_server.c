@@ -77,7 +77,7 @@ void write_callback(async_socket* written_socket, int num){
 
 int port = 3000;
 
-void listen_callback(){
+void listen_callback(async_tcp_server* tcp_server, void* arg){
     printf("listening on port %d\n", port);
 }
 
