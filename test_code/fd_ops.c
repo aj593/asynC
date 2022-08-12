@@ -33,13 +33,30 @@ void response_handler(async_http_incoming_response* response, void* arg){
 
 void data_handler(async_ipc_socket* ipc_socket, buffer* buffer, void* arg){
     char* internal_buffer = get_internal_buffer(buffer);
+    printf("data from child is %s\n", internal_buffer);
+    /*
     write(
         STDOUT_FILENO,
         internal_buffer,
         get_buffer_capacity(buffer)
     );
+    */
 
     destroy_buffer(buffer);
+}
+
+void child_func_example(async_ipc_socket* socket){
+    char array[] = "hello world\n";
+    buffer* write_buffer = buffer_from_array(array, sizeof(array));
+    async_ipc_socket_write(
+        socket, 
+        write_buffer, 
+        sizeof(array), 
+        NULL
+    );
+
+    free(write_buffer);
+    async_ipc_socket_end(socket);
 }
 
 int main(){
@@ -53,11 +70,20 @@ int main(){
     //async_http_request_options_set_header(&options, "spaghetti", "meatball");
     async_outgoing_http_request* new_request = async_http_request("example.com", "GET", &options, response_handler, NULL);
     */
+    
+    /*
     char* array[] = {"/bin/ls", "-l", NULL};
     async_child_process* new_process = async_child_process_exec("/bin/ls", array);
     async_child_process_stdout_on_data(new_process, data_handler, NULL);
     async_child_process_stdin_on_data(new_process, data_handler, NULL);
     async_child_process_stderr_on_data(new_process, data_handler, NULL);
+    */
+
+    async_child_process* new_process = async_child_process_fork(child_func_example);
+    async_child_process_stdout_on_data(new_process, data_handler, NULL);
+    async_child_process_stdin_on_data(new_process, data_handler, NULL);
+    async_child_process_stderr_on_data(new_process, data_handler, NULL);
+    async_child_process_ipc_socket_on_data(new_process, data_handler, NULL);
 
     //call_async_open();
     //callchmod();

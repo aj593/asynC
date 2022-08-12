@@ -12,9 +12,11 @@
 #include "../io_uring_ops.h"
 #include "../containers/thread_pool.h"
 
+/*
 typedef struct socket_info {
     async_socket* socket;
 } socket_info;
+*/
 
 typedef struct socket_send_buffer {
     buffer* buffer_data;
@@ -126,6 +128,7 @@ async_socket* async_connect(async_connect_info* connect_info_ptr, void(*connect_
 
 event_node* create_socket_node(int new_socket_fd){
     event_node* socket_event_node = create_event_node(sizeof(socket_info), destroy_socket, socket_event_checker);
+    enqueue_event(socket_event_node); //TODO: make defer enqueue event?
 
     socket_info* new_socket_info = (socket_info*)socket_event_node->data_ptr;
     async_socket* new_socket = async_socket_create();

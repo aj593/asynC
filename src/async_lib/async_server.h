@@ -53,6 +53,16 @@ typedef struct async_accept_info {
     int* new_fd_ptr;
 } async_accept_info;
 
+#ifndef SOCKET_INFO
+#define SOCKET_INFO
+
+//TODO: use this instead?
+typedef struct socket_info {
+    async_socket* socket;
+} socket_info;
+
+#endif
+
 async_server* async_create_server(void(*listen_task_handler)(void*), void(*accept_task_handler)(void*));
 //void listen_task_handler(thread_async_ops listen_task);
 void async_server_listen(async_server* listening_server, async_listen_info* curr_listen_info, void(*listen_cb)(async_server*, void*), void* arg);

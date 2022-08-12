@@ -26,16 +26,6 @@ typedef struct server_info {
 
 #endif
 
-#ifndef SOCKET_INFO
-#define SOCKET_INFO
-
-//TODO: use this instead?
-typedef struct socket_info {
-    async_socket* socket;
-} socket_info;
-
-#endif
-
 #ifndef SOCKET_BUFFER_INFO
 #define SOCKET_BUFFER_INFO
 
@@ -186,8 +176,6 @@ void post_accept_interm(event_node* accept_node){
         void* curr_arg = connection_block.arg;
         connection_handler(new_socket_ptr, curr_arg);
     }
-
-    enqueue_event(socket_event_node); //TODO: put defer enqueue event in create_socket_node() function instead?
 }
 
 //TODO: make extra param for accept() callback?

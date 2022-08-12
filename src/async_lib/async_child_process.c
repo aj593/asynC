@@ -1,13 +1,14 @@
 #include "async_child_process.h"
 
 #include "async_ipc_server.h"
+#include "async_fs.h"
+#include "../async_epoll_ops.h"
+#include "../containers/thread_pool.h"
+#include "../io_uring_ops.h"
 
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
-#include "async_fs.h"
-
-//#include <mqueue.h>
 
 #include <stdio.h>
 #include <sys/un.h>
@@ -15,14 +16,14 @@
 //TODO: make event queue node for this type and put in event queue with event checker and event cleaner up handler
 typedef struct async_child_process {
     pid_t subprocess_pid;
+    async_ipc_server* ipc_server;
     buffer* child_info_buffer;
+    int curr_max_connections;
 
     async_container_vector* interm_stdin_handler_vector;
     async_container_vector* interm_stdout_handler_vector;
     async_container_vector* interm_stderr_handler_vector;
     async_container_vector* interm_custom_handler_vector;
-
-    async_ipc_server* ipc_server;
 
     async_ipc_socket* stdin_socket;
     async_ipc_socket* stdout_socket;
@@ -35,8 +36,8 @@ char* client_socket_template_name = "ASYNC_CLIENT_SOCKET_NAME";
 unsigned long curr_num_server_name = 0;
 unsigned long curr_num_client_name = 0;
 
-char* default_message_queue_name = "ASYNC_SPAWNER_MESSAGE_QUEUE_NAME";
-//mqd_t child_process_msg_queue;
+pid_t curr_process_pid;
+
 pid_t forker_pid;
 int forker_pipe[2];
 #define PIPE_READ_END  0
@@ -46,32 +47,33 @@ int forker_pipe[2];
 #define FORK_CHAR '1'
 
 char* period_delimiter = ".";
-
-#define MAX_MSG_QUEUE_LEN 200
-#define MAX_NAME_LENGTH 200
+char* space_delimiter  = " ";
 
 #define DEFAULT_NUM_ARGS 5
-#define MAX_NUM_CHILD_PROCESS_CONNECTIONS 3
+#define MAX_NUM_CHILD_EXEC_CONNECTIONS 3
+#define MAX_NUM_CHILD_FORK_CONNECTIONS 4
+#define CUSTOM_IPC_SOCKET_FLAG -1
 
 typedef struct func_ptr_holder {
     void(*child_func_ptr)(async_ipc_socket*);
 } func_ptr_holder;
 
-void sync_connect_ipc_socket(char* server_name, int duping_fd, pid_t child_pid){
+int sync_connect_ipc_socket(char* server_name, int duping_fd, pid_t child_pid){
     char client_name[LONGEST_SOCKET_NAME_LEN];
     /*int client_name_num_bytes_formatted = */snprintf(
         client_name, 
         LONGEST_SOCKET_NAME_LEN, 
-        "%s%ld",
+        "%s_%d_%ld",
         client_socket_template_name,
+        curr_process_pid,
         curr_num_client_name++
     );
 
     int new_ipc_socket_fd = async_ipc_connect_template(client_name, server_name);
 
     int connect_init_buffer_size = sizeof(child_pid) + 1;
-    char char_buffer[connect_init_buffer_size];
-    char_buffer[0] = (char)duping_fd;
+    signed char char_buffer[connect_init_buffer_size];
+    char_buffer[0] = (signed char)duping_fd;
     memcpy(char_buffer + 1, &child_pid, sizeof(child_pid));
     int num_bytes = send(new_ipc_socket_fd, char_buffer, connect_init_buffer_size, 0);
     if(num_bytes < 0){
@@ -79,17 +81,21 @@ void sync_connect_ipc_socket(char* server_name, int duping_fd, pid_t child_pid){
     }
 
     //TODO: need if-statement checking for -1?
-    
-    int new_fd = dup2(new_ipc_socket_fd, duping_fd);
-    if(new_fd < 0){
-        perror("dup2()");
+    if(duping_fd >= 0){
+        int new_fd = dup2(new_ipc_socket_fd, duping_fd);
+        if(new_fd < 0){
+            perror("dup2()");
+        }
     }
+    
+    return new_ipc_socket_fd;
 }
 
 void exec_task(void);
-void fork_task(void);
+void fork_task(char* server_name);
 
 int child_process_creator_init(void){
+    curr_process_pid = getpid();
     //TODO: create message passing queue here
     //child_process_msg_queue = mq_open(default_message_queue_name, O_CREAT | O_RDWR);
     int ret = pipe(forker_pipe);
@@ -103,14 +109,16 @@ int child_process_creator_init(void){
         return -1;
     }
     else if(forker_pid == 0){
+        curr_process_pid = getpid();
+
+        //char read_buffer[1];
+        //read(STDIN_FILENO, read_buffer, 1);
+
         close(forker_pipe[PIPE_WRITE_END]);
-        //char curr_queue_msg[MAX_MSG_QUEUE_LEN];
-        //TODO: put condition for when to terminate in while-loop?
+        //TODO: put condition for when to terminate in following while-loop?
         int msg_num_bytes = 0;
         while(1){
-            //size_t num_bytes_read = mq_receive(child_process_msg_queue, curr_queue_msg, MAX_MSG_QUEUE_LEN, NULL);
             int curr_num_bytes_read = read(forker_pipe[PIPE_READ_END], &msg_num_bytes, sizeof(msg_num_bytes));
-            //printf("msg_num_bytes = %d\n", msg_num_bytes);
             msg_num_bytes -= sizeof(msg_num_bytes) - 1;
             if(curr_num_bytes_read < 0){
                 break;
@@ -129,29 +137,36 @@ int child_process_creator_init(void){
 
             pid_t grand_child_pid = fork();
             if(grand_child_pid == -1){
-                //TODO: error handle here?
+                //TODO: error handle here, call sync_connect_ipc_socket() to notify parent's server of failure?
             }
             else if(grand_child_pid == 0){
+                curr_process_pid = getpid();
+
                 //char buf[1];
                 //read(STDIN_FILENO, buf, 1);
 
                 //TODO: use strtok or strtok_r?
                 char* child_process_task_flag = strtok(pipe_msg, period_delimiter);
+                char* server_name = strtok(NULL, period_delimiter);
+
+                pid_t curr_pid = getpid();
+                sync_connect_ipc_socket(server_name, STDIN_FILENO,  curr_pid);
+                sync_connect_ipc_socket(server_name, STDOUT_FILENO, curr_pid);
+                sync_connect_ipc_socket(server_name, STDERR_FILENO, curr_pid);
+
                 char first_char_msg_flag = child_process_task_flag[0];
-                
                 switch(first_char_msg_flag){
                     case EXEC_CHAR:
                         exec_task();
                         break;
                     case FORK_CHAR:
-                        fork_task();
+                        fork_task(server_name);
                         break;
-
                     default:
-
                         printf("unknown pipe msg??\n");
                 }
-                
+
+                exit(0);
             }
         }
         
@@ -174,32 +189,19 @@ int child_process_creator_destroy(void){
 
     close(forker_pipe[PIPE_WRITE_END]);
 
-    pid_t pid = waitpid(forker_pid, NULL, 0);
-    printf("%d\n", pid);
+    /*pid_t pid = */waitpid(forker_pid, NULL, 0);
+    //printf("%d\n", pid);
 
     return 0;
 }
 
 //TODO: use strtok_r?
 void exec_task(void){
-    char* server_name = strtok(NULL, period_delimiter);
     char* command_name = strtok(NULL, period_delimiter);
     char* command_args = strtok(NULL, period_delimiter); 
 
-    //printf("child task flag is %s\n", child_process_task_flag);
-    //printf("server name is %s\n", server_name);
-    //printf("command name is %s\n", command_name);
-    //printf("command args is %s\n", command_args);
-    pid_t curr_pid = getpid();
-    //printf("curr pid is %d\n", curr_pid);
-
-    sync_connect_ipc_socket(server_name, STDIN_FILENO,  curr_pid);
-    sync_connect_ipc_socket(server_name, STDOUT_FILENO, curr_pid);
-    sync_connect_ipc_socket(server_name, STDERR_FILENO, curr_pid);
-    //connect_ipc_socket(server_name, -1);
-
     async_container_vector* arg_vector = async_container_vector_create(DEFAULT_NUM_ARGS, 2, sizeof(char*));
-    char* curr_token = strtok(command_args, " ");
+    char* curr_token = strtok(command_args, space_delimiter);
     while(curr_token != NULL){
         int curr_token_len = strlen(curr_token) + 1;
         char* new_cmd_arg = malloc(curr_token_len * sizeof(char));
@@ -207,7 +209,7 @@ void exec_task(void){
 
         async_container_vector_add_last(&arg_vector, &new_cmd_arg);
 
-        curr_token = strtok(NULL, " ");
+        curr_token = strtok(NULL, space_delimiter);
     }
 
     int num_args = async_container_vector_size(arg_vector) + 1;
@@ -230,8 +232,31 @@ void exec_task(void){
     exit(0);
 }
 
-void fork_task(void){
-    
+void fork_task(char* server_name){
+    char* child_func_holder = strtok(NULL, period_delimiter);
+    func_ptr_holder* child_func = (func_ptr_holder*)child_func_holder;
+    //child_func->child_func_ptr
+    int child_socket_fd = sync_connect_ipc_socket(server_name, CUSTOM_IPC_SOCKET_FLAG, curr_process_pid);
+
+    async_epoll_init();
+    thread_pool_init();
+    io_uring_init();
+
+    event_node* socket_event_node = create_socket_node(child_socket_fd);
+    socket_info* socket_info_ptr = (socket_info*)socket_event_node->data_ptr;
+    async_ipc_socket* custom_data_socket = (async_ipc_socket*)socket_info_ptr->socket;
+
+    child_func->child_func_ptr(custom_data_socket);
+
+    //asynC_cleanup(); //TODO: use this instead of functions below, but must specify in child_process_creator_destroy() that it should only work in main process based on pid
+
+    asynC_wait();
+
+    async_epoll_destroy();
+    thread_pool_destroy();
+    io_uring_exit();
+
+    exit(0);
 }
 
 void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg);
@@ -239,8 +264,9 @@ void async_ipc_socket_connection_handler(async_ipc_socket*, void* arg);
 void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_buffer, void* arg);
 void after_fork_pipe_write(int pipe_fd, buffer* child_info_buffer, int num_bytes_written, void* arg);
 
-async_child_process* create_new_child_process(char server_name[]){
+async_child_process* create_new_child_process(char server_name[], int max_num_connections){
     async_child_process* new_child_process = (async_child_process*)calloc(1, sizeof(async_child_process));
+    new_child_process->curr_max_connections = max_num_connections;
 
     new_child_process->interm_stdin_handler_vector  = async_container_vector_create(2, 2, sizeof(buffer_callback_t));
     new_child_process->interm_stdout_handler_vector = async_container_vector_create(2, 2, sizeof(buffer_callback_t));
@@ -258,8 +284,9 @@ int format_server_name(char ipc_server_name[]){
     return snprintf(
         ipc_server_name, 
         LONGEST_SOCKET_NAME_LEN, 
-        "%s%ld", 
+        "%s_%d_%ld", 
         server_socket_template_name, 
+        curr_process_pid,
         curr_num_server_name++
     );
 }
@@ -267,7 +294,7 @@ int format_server_name(char ipc_server_name[]){
 async_child_process* async_child_process_fork(void(*child_func)(async_ipc_socket*)){
     char server_name[LONGEST_SOCKET_NAME_LEN];
     int server_name_num_bytes_formatted = format_server_name(server_name);
-    async_child_process* new_child_process = create_new_child_process(server_name);
+    async_child_process* new_child_process = create_new_child_process(server_name, MAX_NUM_CHILD_FORK_CONNECTIONS);
 
     int total_buffer_length = 0;
     //adding 3 because of the 2 period ('.') characters and starting single flag character
@@ -278,8 +305,12 @@ async_child_process* async_child_process_fork(void(*child_func)(async_ipc_socket
 
     new_child_process->child_info_buffer = create_buffer(total_buffer_length, 1);
     char* internal_msg_buffer = get_internal_buffer(new_child_process->child_info_buffer);
+    char* curr_buffer_offset = internal_msg_buffer;
+    memcpy(curr_buffer_offset, &total_buffer_length, sizeof(total_buffer_length));
+    curr_buffer_offset += sizeof(total_buffer_length);
+
     int num_bytes_formatted_without_func_ptr = snprintf(
-        internal_msg_buffer,
+        curr_buffer_offset,
         total_buffer_length,
         "%c.%s.",
         FORK_CHAR,
@@ -288,7 +319,10 @@ async_child_process* async_child_process_fork(void(*child_func)(async_ipc_socket
 
     //memcpy(internal_msg_buffer + num_bytes_formatted_without_func_ptr, child_func, sizeof(&child_func));
     func_ptr_holder child_func_holder = { .child_func_ptr = child_func };
-    memcpy(internal_msg_buffer + num_bytes_formatted_without_func_ptr, &child_func_holder, sizeof(child_func_holder));
+    memcpy(curr_buffer_offset + num_bytes_formatted_without_func_ptr, &child_func_holder, sizeof(child_func_holder));
+
+    //func_ptr_holder* ptr = (func_ptr_holder*)(curr_buffer_offset + num_bytes_formatted_without_func_ptr);
+    //printf("%p\n", (void*)ptr);
 
     return new_child_process;
 }
@@ -296,7 +330,7 @@ async_child_process* async_child_process_fork(void(*child_func)(async_ipc_socket
 async_child_process* async_child_process_exec(char* executable_name, char* args[]){
     char server_name[LONGEST_SOCKET_NAME_LEN];
     int server_name_num_bytes_formatted = format_server_name(server_name);
-    async_child_process* new_child_process = create_new_child_process(server_name);
+    async_child_process* new_child_process = create_new_child_process(server_name, MAX_NUM_CHILD_EXEC_CONNECTIONS);
 
     int total_buffer_length = 0;
     //adding 4 because of the 3 period ('.') characters and starting single flag character
@@ -317,7 +351,7 @@ async_child_process* async_child_process_exec(char* executable_name, char* args[
         strncpy(args_buffer + curr_offset, args[i], curr_len);
         curr_offset += curr_len;
         
-        memcpy(args_buffer + curr_offset, " ", 1);
+        memcpy(args_buffer + curr_offset, space_delimiter, 1);
         curr_offset++;
     }
     args_buffer[args_len - 1] = '\0';
@@ -367,9 +401,9 @@ void async_ipc_socket_connection_handler(async_ipc_socket* ipc_socket, void* arg
     async_child_process* new_child_process = (async_child_process*)arg;
     async_ipc_socket_once_data(ipc_socket, async_ipc_socket_data_handler, new_child_process);
 
-    //if we have 3 connections, then we have all sockets ready for data sending between processes
+    //if we have the current subprocess' object's max connections, then we have all sockets ready for data sending between processes
     //TODO: put this if-statement check in async_ipc_socket_connection_handler() instead?
-    if(new_child_process->ipc_server->num_connections == MAX_NUM_CHILD_PROCESS_CONNECTIONS){
+    if(new_child_process->ipc_server->num_connections == new_child_process->curr_max_connections){
         async_ipc_server_close(new_child_process->ipc_server);
     }
 }
@@ -415,9 +449,12 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
             );
 
             break;
-        case 3:
+        case CUSTOM_IPC_SOCKET_FLAG:
             new_child_process->custom_socket = ipc_socket;
-
+            transfer_data_handlers(
+                new_child_process->interm_custom_handler_vector,
+                &new_child_process->custom_socket->data_handler_vector
+            );
 
             break;
         default:
@@ -426,7 +463,7 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
     }
 
     if(new_child_process->ipc_server->num_connections == 1){
-        //TODO: emit child spawn event here? (if got success msg)
+        //TODO: emit child spawn event here? (if we got success msg)
     }
 }
 
@@ -469,5 +506,14 @@ void async_child_process_stderr_on_data(async_child_process* child_for_stderr, v
         arg,
         child_for_stderr->stderr_socket,
         &child_for_stderr->interm_stderr_handler_vector
+    );
+}
+
+void async_child_process_ipc_socket_on_data(async_child_process* child_for_ipc, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg){
+    async_child_process_stream_on_data(
+        data_handler,
+        arg,
+        child_for_ipc->custom_socket,
+        &child_for_ipc->interm_custom_handler_vector
     );
 }

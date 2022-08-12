@@ -76,6 +76,10 @@ void async_ipc_socket_once_data(async_ipc_socket* reading_socket, void(*new_data
     async_socket_once_data(reading_socket, new_data_handler, arg);
 }
 
+void async_ipc_socket_end(async_ipc_socket* ending_socket){
+    async_socket_end(ending_socket);
+}
+
 void async_ipc_socket_on_end(async_ipc_socket* ending_socket, void(*socket_end_callback)(async_ipc_socket*, int)){
     async_socket_on_end(ending_socket, socket_end_callback);
 }
