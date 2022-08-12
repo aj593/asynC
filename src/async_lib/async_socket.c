@@ -248,35 +248,38 @@ void destroy_socket(event_node* socket_node){
     async_shutdown(socket_ptr);
 }
 
-void add_data_listener(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, buffer_callback_t* data_callback_item){
+buffer_callback_t make_new_data_handler_item(void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber){
+    buffer_callback_t new_data_handler_item = {
+        .curr_data_handler = new_data_handler,
+        .arg = arg,
+        .is_new_subscriber = 1,
+        .is_temp_subscriber = is_temp_subscriber
+    };
+
+    return new_data_handler_item;
+}
+
+void add_socket_data_listener(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber){
+    buffer_callback_t new_data_handler_item = make_new_data_handler_item(new_data_handler, arg, is_temp_subscriber);
+
     pthread_mutex_lock(&reading_socket->data_handler_vector_mutex);
+    
     async_container_vector** data_handler_vector_ptr = &reading_socket->data_handler_vector;
-    async_container_vector_add_last(data_handler_vector_ptr, data_callback_item);
+    async_container_vector_add_last(data_handler_vector_ptr, &new_data_handler_item);
     reading_socket->is_flowing = 1;
+    
     pthread_mutex_unlock(&reading_socket->data_handler_vector_mutex);
 }
 
 //TODO: find way to condense following 2 functions
 //TODO: error handle if fcn ptr in second param is NULL?
 void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
-    buffer_callback_t new_data_handler_item = {
-        .curr_data_handler = new_data_handler,
-        .arg = arg,
-        .is_temp_subscriber = 0
-    };
-
-    add_data_listener(reading_socket, new_data_handler, arg, &new_data_handler_item);
+    add_socket_data_listener(reading_socket, new_data_handler, arg, 0);
 }
 
 //TODO: error handle if fcn ptr in second param is NULL?
 void async_socket_once_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg){
-    buffer_callback_t new_data_handler_item = {
-        .curr_data_handler = new_data_handler,
-        .arg = arg,
-        .is_temp_subscriber = 1
-    };
-
-    add_data_listener(reading_socket, new_data_handler, arg, &new_data_handler_item);
+    add_socket_data_listener(reading_socket, new_data_handler, arg, 1);
 }
 
 void uring_recv_interm(event_node* uring_recv_node){
@@ -299,10 +302,21 @@ void uring_recv_interm(event_node* uring_recv_node){
     pthread_mutex_lock(&reading_socket->data_handler_vector_mutex);
     async_container_vector* data_handler_vector_ptr = reading_socket->data_handler_vector;
     buffer_callback_t curr_buffer_cb_data_item;
+    
     for(int i = 0; i < async_container_vector_size(data_handler_vector_ptr); i++){
-        buffer* new_buffer_copy = buffer_copy_num_bytes(reading_socket->receive_buffer, recv_uring_info->return_val); 
-
         async_container_vector_get(data_handler_vector_ptr, i, &curr_buffer_cb_data_item);
+        //TODO set is_new_subscriber to 0 here
+        curr_buffer_cb_data_item.is_new_subscriber = 0;
+        async_container_vector_set(data_handler_vector_ptr, i, &curr_buffer_cb_data_item);
+    }
+
+    for(int i = 0; i < async_container_vector_size(data_handler_vector_ptr); i++){
+        async_container_vector_get(data_handler_vector_ptr, i, &curr_buffer_cb_data_item);
+        if(curr_buffer_cb_data_item.is_new_subscriber){
+            continue;
+        }
+
+        buffer* new_buffer_copy = buffer_copy_num_bytes(reading_socket->receive_buffer, recv_uring_info->return_val); 
         void(*curr_data_handler)(async_socket*, buffer*, void*) = curr_buffer_cb_data_item.curr_data_handler;
         void* curr_arg = curr_buffer_cb_data_item.arg;
         curr_data_handler(reading_socket, new_buffer_copy, curr_arg);

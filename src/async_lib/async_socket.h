@@ -58,6 +58,7 @@ typedef struct connect_info {
 
 typedef struct buffer_data_callback {
     int is_temp_subscriber;
+    int is_new_subscriber;
     void(*curr_data_handler)(async_socket*, buffer*, void*);
     void* arg;
 } buffer_callback_t;
@@ -72,5 +73,7 @@ async_socket* async_connect(async_connect_info* connect_info, void(*connect_task
 
 void async_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int));
 void async_socket_end(async_socket* ending_socket);
+
+buffer_callback_t make_new_data_handler_item(void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber);
 
 #endif

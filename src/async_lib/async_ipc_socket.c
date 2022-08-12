@@ -19,37 +19,49 @@ async_ipc_socket* async_ipc_connect(char* server_socket_path, char* client_socke
     return async_connect(&curr_ipc_connect_info, ipc_connect_task_handler, connection_handler, arg);
 }
 
-void ipc_connect_task_handler(void* connect_task_info){
-    async_connect_info* connect_info = (async_connect_info*)connect_task_info;
-    *connect_info->socket_fd_ptr = socket(AF_UNIX, SOCK_STREAM, 0);
-    if(*connect_info->socket_fd_ptr == -1){
+
+int async_ipc_connect_template(char client_path[], char server_path[]){
+    //printf("in async ipc template\n");
+    int ipc_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if(ipc_socket_fd == -1){
         perror("socket()");
-        return;
+        return -1;
     }
 
     //TODO: zero out bytes for this struct?
     struct sockaddr_un client_sockaddr; 
     client_sockaddr.sun_family = AF_UNIX;   
-    strncpy(client_sockaddr.sun_path, connect_info->ipc_client_path, LONGEST_SOCKET_NAME_LEN); 
+    strncpy(client_sockaddr.sun_path, client_path, LONGEST_SOCKET_NAME_LEN); 
     socklen_t len = sizeof(client_sockaddr);
     
     unlink(client_sockaddr.sun_path);
-    int ret = bind(*connect_info->socket_fd_ptr, (struct sockaddr*)&client_sockaddr, len);
+    int ret = bind(ipc_socket_fd, (struct sockaddr*)&client_sockaddr, len);
     if(ret == -1){
         perror("bind()");
-        close(*connect_info->socket_fd_ptr);
-        return;
+        close(ipc_socket_fd);
+        return -1;
     }
 
     struct sockaddr_un server_sockaddr;
     server_sockaddr.sun_family = AF_UNIX;
-    strncpy(server_sockaddr.sun_path, connect_info->ipc_server_path, LONGEST_SOCKET_NAME_LEN);
-    ret = connect(*connect_info->socket_fd_ptr, (struct sockaddr*)&server_sockaddr, len);
+    strncpy(server_sockaddr.sun_path, server_path, LONGEST_SOCKET_NAME_LEN);
+    ret = connect(ipc_socket_fd, (struct sockaddr*)&server_sockaddr, len);
     if(ret == -1){
         perror("connect()");
-        close(*connect_info->socket_fd_ptr);
-        return;
+        close(ipc_socket_fd);
+        return -1;
     }
+
+    return ipc_socket_fd;
+}
+
+
+void ipc_connect_task_handler(void* connect_task_info){
+    async_connect_info* connect_info = (async_connect_info*)connect_task_info;
+    *connect_info->socket_fd_ptr = async_ipc_connect_template(
+        connect_info->ipc_client_path, 
+        connect_info->ipc_server_path
+    );
 }
 
 void async_ipc_socket_write(async_ipc_socket* writing_ipc_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_ipc_socket*, void*)){

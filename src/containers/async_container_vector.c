@@ -117,6 +117,15 @@ size_t async_container_vector_size(async_container_vector* vector){
     return vector->size;
 }
 
+void async_container_vector_set(async_container_vector* vector, size_t index, void* item_to_set){
+    if(item_to_set == NULL){
+        return;
+    }
+
+    void* destination_mem_ptr = ((char*)vector->array) + (index * vector->element_size);
+    memcpy(destination_mem_ptr, item_to_set, vector->element_size);
+}
+
 void async_container_vector_get(async_container_vector* vector, size_t index, void* obtained_item){
     if(obtained_item == NULL){
         return;
