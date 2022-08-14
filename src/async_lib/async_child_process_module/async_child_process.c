@@ -5,6 +5,7 @@
 #include "../../async_runtime/async_epoll_ops.h"
 #include "../../async_runtime/thread_pool.h"
 #include "../../async_runtime/io_uring_ops.h"
+#include "../event_emitter_module/async_event_emitter.h"
 
 #include <unistd.h>
 #include <string.h>
@@ -297,10 +298,10 @@ async_child_process* create_new_child_process(char server_name[], int max_num_co
     async_child_process* new_child_process = (async_child_process*)calloc(1, sizeof(async_child_process));
     new_child_process->curr_max_connections = max_num_connections;
 
-    new_child_process->interm_stdin_handler_vector  = async_container_vector_create(2, 2, sizeof(buffer_callback_t));
-    new_child_process->interm_stdout_handler_vector = async_container_vector_create(2, 2, sizeof(buffer_callback_t));
-    new_child_process->interm_stderr_handler_vector = async_container_vector_create(2, 2, sizeof(buffer_callback_t));
-    new_child_process->interm_custom_handler_vector = async_container_vector_create(2, 2, sizeof(buffer_callback_t));
+    new_child_process->interm_stdin_handler_vector  = create_event_listener_vector();
+    new_child_process->interm_stdout_handler_vector = create_event_listener_vector();
+    new_child_process->interm_stderr_handler_vector = create_event_listener_vector();
+    new_child_process->interm_custom_handler_vector = create_event_listener_vector();
 
     new_child_process->ipc_server = async_ipc_server_create();
     async_ipc_server_listen(new_child_process->ipc_server, server_name, after_child_process_server_listen, new_child_process);
@@ -438,7 +439,7 @@ void after_fork_pipe_write(int pipe_fd, buffer* child_info_buffer, int num_bytes
 
 void async_ipc_socket_connection_handler(async_ipc_socket* ipc_socket, void* arg){
     async_child_process* new_child_process = (async_child_process*)arg;
-    async_ipc_socket_once_data(ipc_socket, async_ipc_socket_data_handler, new_child_process);
+    async_socket_on_data(ipc_socket, async_ipc_socket_data_handler, new_child_process, 1, 1);
 
     //if we have the current subprocess' object's max connections, then we have all sockets ready for data sending between processes
     //TODO: put this if-statement check in async_ipc_socket_connection_handler() instead?
@@ -468,7 +469,7 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
             new_child_process->stdin_socket = ipc_socket;
             transfer_data_handlers(
                 new_child_process->interm_stdin_handler_vector,
-                &new_child_process->stdin_socket->data_handler_vector
+                &new_child_process->stdin_socket->event_listener_vector
             );
 
             break;
@@ -476,7 +477,7 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
             new_child_process->stdout_socket = ipc_socket;
             transfer_data_handlers(
                 new_child_process->interm_stdout_handler_vector,
-                &new_child_process->stdout_socket->data_handler_vector
+                &new_child_process->stdout_socket->event_listener_vector
             );
 
             break;
@@ -484,7 +485,7 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
             new_child_process->stderr_socket = ipc_socket;
             transfer_data_handlers(
                 new_child_process->interm_stderr_handler_vector,
-                &new_child_process->stderr_socket->data_handler_vector
+                &new_child_process->stderr_socket->event_listener_vector
             );
 
             break;
@@ -492,7 +493,7 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
             new_child_process->custom_socket = ipc_socket;
             transfer_data_handlers(
                 new_child_process->interm_custom_handler_vector,
-                &new_child_process->custom_socket->data_handler_vector
+                &new_child_process->custom_socket->event_listener_vector
             );
 
             break;
@@ -517,7 +518,7 @@ void async_child_process_stream_on_data(
         async_container_vector_add_last(curr_interm_vector, &new_data_handler_item);
     }
     else{
-        async_ipc_socket_on_data(curr_stream_socket, data_handler, arg);
+        async_socket_on_data(curr_stream_socket, data_handler, arg, 0, 0);
     }
 }
 

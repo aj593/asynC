@@ -287,7 +287,7 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     http_client_transaction_ptr->request_info->http_msg_socket = newly_connected_socket;
     enqueue_event(http_request_transaction_tracker_node);
     
-    async_socket_once_data(newly_connected_socket, socket_data_handler, http_client_transaction_ptr);
+    async_socket_on_data(newly_connected_socket, socket_data_handler, http_client_transaction_ptr, 1, 1);
 }
 
 int client_http_request_event_checker(event_node* client_http_transaction_node){
@@ -331,6 +331,7 @@ void client_http_request_finish_handler(event_node* finished_http_request_node){
 
 void http_parse_response_task(void* arg);
 void http_response_parser_interm(event_node* http_parse_node);
+void response_data_enqueuer(async_socket*, buffer*, void*);
 
 void socket_data_handler(async_socket* socket, buffer* initial_response_buffer, void* arg){
     client_side_http_transaction_info* client_http_info = (client_side_http_transaction_info*)arg;
@@ -346,20 +347,28 @@ void socket_data_handler(async_socket* socket, buffer* initial_response_buffer, 
     new_response_item->socket_ptr = socket;
 
     curr_thread_info->custom_data_ptr = new_response_item;
-}
 
-void response_data_enqueuer(async_socket*, buffer*, void*);
+    async_socket_on_data(
+        new_response_item->socket_ptr,
+        response_data_enqueuer,
+        new_response_item->transaction_info->response_info,
+        0,
+        0
+    );
+}
 
 void http_parse_response_task(void* response_item_ptr){
     response_buffer_info* curr_response_item = (response_buffer_info*)response_item_ptr;
     curr_response_item->transaction_info->response_info = create_incoming_response();
     async_http_incoming_response* new_incoming_http_response = curr_response_item->transaction_info->response_info;
 
+    /*
     async_socket_on_data(
         curr_response_item->socket_ptr,
         response_data_enqueuer,
         curr_response_item->transaction_info->response_info
     );
+    */
 
     parse_http(
         curr_response_item->response_buffer,

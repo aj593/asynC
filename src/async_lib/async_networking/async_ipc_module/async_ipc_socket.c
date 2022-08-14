@@ -64,6 +64,7 @@ void ipc_connect_task_handler(void* connect_task_info){
     );
 }
 
+/*
 void async_ipc_socket_write(async_ipc_socket* writing_ipc_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_ipc_socket*, void*)){
     async_socket_write(writing_ipc_socket, buffer_to_write, num_bytes_to_write, send_callback);
 }
@@ -83,3 +84,4 @@ void async_ipc_socket_end(async_ipc_socket* ending_socket){
 void async_ipc_socket_on_end(async_ipc_socket* ending_socket, void(*socket_end_callback)(async_ipc_socket*, int)){
     async_socket_on_end(ending_socket, socket_end_callback);
 }
+*/

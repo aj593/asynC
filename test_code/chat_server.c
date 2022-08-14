@@ -50,7 +50,7 @@ void connection_handler(async_socket* new_socket){
     memcpy(char_buffer, hello_str, hello_str_len);
 
     async_socket_write(new_socket, file_copied_buffer, get_buffer_capacity(file_copied_buffer), send_cb);
-    async_socket_on_data(new_socket, data_handler, NULL);
+    async_socket_on_data(new_socket, data_handler, NULL, 0, 0);
 }
 
 #define MAX_BYTES_TO_READ 10000
@@ -66,7 +66,7 @@ void connection_done_handler(async_socket* socket, void* arg){
         buffer* new_buffer = create_buffer(item_size, sizeof(char));
         char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
         memcpy(str_internal_buffer, item, item_size);
-        async_socket_on_data(socket, data_handler, NULL);
+        async_socket_on_data(socket, data_handler, NULL, 0, 0);
         async_socket_write(socket, new_buffer, item_size, NULL);
     }
 }
@@ -87,7 +87,7 @@ void chat_data_handler(async_socket*, buffer* chat_data, void* arg);
 async_socket* socket_array[max_num_sockets];
 int curr_num_sockets = 0;
 
-void socket_end_callback(async_socket* closed_socket, int shutdown_return_val){
+void socket_end_callback(async_socket* closed_socket, int shutdown_return_val, void* arg){
     for(int i = 0; i < curr_num_sockets; i++){
         if(socket_array[i] == closed_socket){
             for(int j = i; j < curr_num_sockets - 1; j++){
@@ -107,8 +107,8 @@ async_tcp_server* new_server;
 void chat_connection_handler(async_socket* new_socket, void* arg){
     printf("got new connection!\n");
     socket_array[curr_num_sockets++] = new_socket;
-    async_socket_on_data(new_socket, chat_data_handler, NULL);
-    async_tcp_socket_on_end(new_socket, socket_end_callback);
+    async_socket_on_data(new_socket, chat_data_handler, NULL, 0 , 0);
+    async_socket_on_end(new_socket, socket_end_callback, NULL, 0, 0);
     /*
     if(new_server->num_connections == 3){
         printf("closing server!\n");

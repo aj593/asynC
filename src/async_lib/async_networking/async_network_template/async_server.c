@@ -57,7 +57,7 @@ async_server* async_create_server(void(*listen_task_handler)(void*), void(*accep
     async_server* new_server = (async_server*)calloc(1, sizeof(async_server));
     new_server->listen_task = listen_task_handler;
     new_server->accept_task = accept_task_handler;
-    new_server->event_listeners_vector = async_container_vector_create(5, 2, sizeof(event_emitter_handler));
+    new_server->event_listeners_vector = create_event_listener_vector();
     
     //new_server->domain = domain;
     //new_server->type = type;

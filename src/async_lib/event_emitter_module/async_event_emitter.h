@@ -14,7 +14,12 @@ enum emitter_events {
 
     //async_server events
     async_server_connection_event,
-    async_server_listen_event
+    async_server_listen_event,
+
+    //async_socket events
+    async_socket_connect_event,
+    async_socket_data_event,
+    async_socket_end_event
 };
 
 union event_emitter_callbacks {
@@ -25,6 +30,11 @@ union event_emitter_callbacks {
     //async_server event handlers
     void(*async_server_connection_handler)(async_socket*, void*);
     void(*async_server_listen_handler)(async_server*, void*);
+
+    //async_socket event handlers
+    void(*async_socket_connection_handler)(async_socket*, void*);
+    void(*async_socket_data_handler)(async_socket*, buffer*, void*);
+    void(*async_socket_end_handler)(async_socket*, int, void*);
 };
 
 typedef struct event_emitter_handler {
@@ -37,6 +47,8 @@ typedef struct event_emitter_handler {
     unsigned int num_listens_left;
     unsigned int* num_listeners_ptr;
 } event_emitter_handler;
+
+async_container_vector* create_event_listener_vector(void);
 
 void async_event_emitter_on_event(
     async_container_vector** event_listener_vector,

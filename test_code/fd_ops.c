@@ -48,7 +48,7 @@ void data_handler(async_ipc_socket* ipc_socket, buffer* buffer, void* arg){
 void child_func_example(async_ipc_socket* socket){
     char array_msg[] = "hello world\n";
     buffer* write_buffer = buffer_from_array(array_msg, sizeof(array_msg));
-    async_ipc_socket_write(
+    async_socket_write(
         socket, 
         write_buffer, 
         sizeof(array_msg), 
@@ -56,7 +56,7 @@ void child_func_example(async_ipc_socket* socket){
     );
 
     free(write_buffer);
-    async_ipc_socket_end(socket);
+    async_socket_end(socket);
 
     //char* array[] = {"/bin/ls", "-l", NULL};
     //async_child_process* new_process = async_child_process_exec("/bin/ls", array);

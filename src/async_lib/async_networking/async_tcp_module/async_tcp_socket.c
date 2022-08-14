@@ -37,6 +37,7 @@ void tcp_connect_task_handler(void* connect_task_info){
     }
 }
 
+/*
 void async_tcp_socket_write(async_tcp_socket* writing_tcp_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_tcp_socket*, void*)){
     async_socket_write(writing_tcp_socket, buffer_to_write, num_bytes_to_write, send_callback);
 }
@@ -56,3 +57,4 @@ void async_tcp_socket_on_end(async_tcp_socket* ending_socket, void(*socket_end_c
 void async_tcp_socket_end(async_tcp_socket* ending_socket){
     async_socket_end(ending_socket);
 }
+*/

@@ -21,6 +21,7 @@ void http_request_emit_end(async_incoming_http_request* http_request);
 
 typedef struct async_http_server {
     async_tcp_server* wrapped_tcp_server;
+    //TODO: make vector to listen to general events
     async_container_vector* request_handler_vector;
     async_container_vector* listen_handler_vector;
 } async_http_server;
@@ -135,7 +136,7 @@ void after_http_listen(async_tcp_server* server, void* cb_arg){
 }
 
 void http_connection_handler(async_socket* new_http_socket, void* arg){
-    async_socket_once_data(new_http_socket, handle_request_data, arg);
+    async_socket_on_data(new_http_socket, handle_request_data, arg, 1, 1);
 }
 
 typedef struct http_parser_info {
@@ -180,7 +181,9 @@ void http_parse_task(void* http_info){
     async_socket_on_data(
         curr_request_info->tcp_socket_ptr,
         http_request_socket_data_handler,
-        curr_request_info
+        curr_request_info,
+        0,
+        0
     );
     
     (*info_to_parse)->http_response_info = create_http_response();
@@ -502,5 +505,5 @@ void async_http_response_end(async_http_outgoing_response* curr_http_response){
         async_http_response_write_head(curr_http_response);
     }
 
-    async_tcp_socket_end(curr_http_response->tcp_socket_ptr);
+    async_socket_end(curr_http_response->tcp_socket_ptr);
 }

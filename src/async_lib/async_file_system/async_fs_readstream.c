@@ -52,7 +52,7 @@ async_fs_readstream* create_async_fs_readstream(char* filename){
     async_fs_readstream* new_readstream_ptr = calloc(1, sizeof(async_fs_readstream));
     new_readstream_ptr->read_chunk_size = DEFAULT_READSTREAM_CHUNK_SIZE;
     new_readstream_ptr->read_buffer = create_buffer(DEFAULT_READSTREAM_CHUNK_SIZE, 1);
-    new_readstream_ptr->event_listener_vector = async_container_vector_create(5, 2, sizeof(event_emitter_handler));
+    new_readstream_ptr->event_listener_vector = create_event_listener_vector();
 
     async_open(filename, O_RDONLY, 0644, after_readstream_open, new_readstream_ptr);
 

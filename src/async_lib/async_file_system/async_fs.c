@@ -55,7 +55,21 @@ void open_task_handler(void* open_task){
 
 void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg){
     size_t filename_length = strnlen(filename, FILENAME_MAX) + 1;
+
+    new_task_node_info open_ptr_info;
+    create_thread_task(sizeof(async_open_info) + filename_length, open_task_handler, fs_open_interm, &open_ptr_info);
+    thread_task_info* new_task = open_ptr_info.new_thread_task_info;
+    new_task->fs_cb.open_callback = open_callback;
+    new_task->cb_arg = cb_arg;
+
+    async_open_info* open_task_params = (async_open_info*)open_ptr_info.async_task_info;
+    open_task_params->filename = (char*)(open_task_params + 1);
+    strncpy(open_task_params->filename, filename, filename_length);
+    open_task_params->fd_ptr = &new_task->fd;
+    open_task_params->flags = flags;
+    open_task_params->mode = mode;
     
+    /*
     uring_lock();
     struct io_uring_sqe* open_sqe = get_sqe();
     if(open_sqe != NULL){
@@ -76,20 +90,7 @@ void async_open(char* filename, int flags, int mode, void(*open_callback)(int, v
     }
     else{
         uring_unlock();
-
-        new_task_node_info open_ptr_info;
-        create_thread_task(sizeof(async_open_info) + filename_length, open_task_handler, fs_open_interm, &open_ptr_info);
-        thread_task_info* new_task = open_ptr_info.new_thread_task_info;
-        new_task->fs_cb.open_callback = open_callback;
-        new_task->cb_arg = cb_arg;
-
-        async_open_info* open_task_params = (async_open_info*)open_ptr_info.async_task_info;
-        open_task_params->filename = (char*)(open_task_params + 1);
-        strncpy(open_task_params->filename, filename, filename_length);
-        open_task_params->fd_ptr = &new_task->fd;
-        open_task_params->flags = flags;
-        open_task_params->mode = mode;
-    }
+    }*/
 }
 
 void uring_read_interm(event_node* read_event_node){

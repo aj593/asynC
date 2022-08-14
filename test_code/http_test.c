@@ -7,16 +7,22 @@
 void http_server_on_request(async_incoming_http_request*, async_http_outgoing_response*);
 int total_num_requests = 0;
 
+void listen_callback(void);
+
 int main(){
     asynC_init();
 
     async_http_server* new_http_server = async_create_http_server();
-    async_http_server_listen(new_http_server, 3000, "192.168.1.195", NULL);
+    async_http_server_listen(new_http_server, 3000, "127.0.0.1", listen_callback);
     async_http_server_on_request(new_http_server, http_server_on_request);
 
     asynC_cleanup();
 
     return 0;
+}
+
+void listen_callback(void){
+    printf("http server listening\n");
 }
 
 /*
@@ -66,12 +72,14 @@ void http_server_on_request(async_incoming_http_request* req, async_http_outgoin
     //char* trimmed_str = strtok(async_incoming_http_request_url(req), "/");
     printf("url is %s\n", async_incoming_http_request_url(req));
 
+    async_fs_readstream* curr_readstream;
+
     if(strncmp(async_incoming_http_request_url(req), "/", 20) == 0){
         async_http_response_set_header(res, "Content-Type", "text/html");
         async_http_response_set_header(res, "foo", "bar");
-        async_fs_readstream* root_readstream = create_async_fs_readstream("../test_files/basic.html");
-        async_fs_readstream_on_data(root_readstream, response_writer, res, 0, 0);
-        async_fs_readstream_on_end(root_readstream, response_stream_ender, res, 0, 0);
+        curr_readstream = create_async_fs_readstream("../test_files/basic.html");
+        async_fs_readstream_on_data(curr_readstream, response_writer, res, 0, 0);
+        async_fs_readstream_on_end(curr_readstream, response_stream_ender, res, 0, 0);
     }
     else{
         int max_bytes = 100;
@@ -86,10 +94,12 @@ void http_server_on_request(async_incoming_http_request* req, async_http_outgoin
         async_http_response_set_header(res, "Content-Type", format_str);
         //async_http_response_set_header(res, "Content-Length", "6696058");
         //async_http_response_set_header(res, "Content-Length", "1530825");
-        async_fs_readstream* quasar_readstream = create_async_fs_readstream(req_str);
-        async_fs_readstream_on_data(quasar_readstream, response_writer, res, 0, 0);
-        async_fs_readstream_on_end(quasar_readstream, response_stream_ender, res, 0, 0);
+        curr_readstream = create_async_fs_readstream(req_str);
+        async_fs_readstream_on_data(curr_readstream, response_writer, res, 0, 0);
+        async_fs_readstream_on_end(curr_readstream, response_stream_ender, res, 0, 0);
     }
+
+    printf("took request\n");
     
     //async_http_response_write_head(res);
     //char html_string[] = "<!DOCTYPE html><html>hello world!</html>";

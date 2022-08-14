@@ -1,5 +1,9 @@
 #include "async_event_emitter.h"
 
+async_container_vector* create_event_listener_vector(void){
+    return async_container_vector_create(5, 2, sizeof(event_emitter_handler));
+}
+
 void async_event_emitter_on_event(
     async_container_vector** event_listener_vector,
     enum emitter_events curr_event,

@@ -37,10 +37,14 @@ typedef struct async_socket {
     async_server* server_ptr;
     //pthread_mutex_t receive_lock;
     //int able_to_write;
-    async_container_vector* data_handler_vector; //TODO: make other vectors for other event handlers
     pthread_mutex_t data_handler_vector_mutex;
-    async_container_vector* connection_handler_vector;
-    async_container_vector* shutdown_vector;
+    async_container_vector* event_listener_vector;
+    //async_container_vector* connection_handler_vector;
+    //async_container_vector* shutdown_vector;
+    //async_container_vector* data_handler_vector; //TODO: make other vectors for other event handlers
+    unsigned int num_data_listeners;
+    unsigned int num_connection_listeners;
+    unsigned int num_end_listeners;
 } async_socket;
 
 #endif
@@ -66,11 +70,10 @@ typedef struct buffer_data_callback {
 //async_socket* async_socket_create(int domain, int type, int protocol);
 event_node* create_socket_node(int new_socket_fd);
 void async_socket_write(async_socket* writing_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_socket*, void*));
-void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg);
-void async_socket_once_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg);
+void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_times_listen);
 async_socket* async_connect(async_connect_info* connect_info, void(*connect_task_handler)(void*), void(*connection_handler)(async_socket*, void*), void* connection_arg);
 
-void async_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int));
+void async_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int, void*), void* arg, int is_temp_subscriber, int num_times_listen);
 void async_socket_end(async_socket* ending_socket);
 
 buffer_callback_t make_new_data_handler_item(void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber);
