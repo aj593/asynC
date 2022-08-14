@@ -90,6 +90,7 @@ void tcp_server_accept_task(void* accept_task){
     );
 }
 
+/*
 void async_tcp_server_on_connection(async_tcp_server* listening_tcp_server, void(*connection_handler)(async_tcp_socket*, void*), void* arg){
     async_server_on_connection(listening_tcp_server, connection_handler, arg);
 }
@@ -97,3 +98,4 @@ void async_tcp_server_on_connection(async_tcp_server* listening_tcp_server, void
 void async_tcp_server_close(async_tcp_server* closing_tcp_server){
     async_server_close(closing_tcp_server);
 }
+*/

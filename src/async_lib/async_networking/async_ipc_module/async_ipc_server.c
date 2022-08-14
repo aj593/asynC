@@ -74,6 +74,7 @@ void ipc_server_accept(void* ipc_accept_task){
     //TODO: use getpeername()?
 }
 
+/*
 void async_ipc_server_on_connection(async_ipc_server* listening_ipc_server, void(*connection_handler)(async_ipc_socket*, void*), void* arg){
     async_server_on_connection(listening_ipc_server, connection_handler, arg);
 }
@@ -81,3 +82,4 @@ void async_ipc_server_on_connection(async_ipc_server* listening_ipc_server, void
 void async_ipc_server_close(async_ipc_server* closing_ipc_server){
     async_server_close(closing_ipc_server);
 }
+*/

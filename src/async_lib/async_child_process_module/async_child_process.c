@@ -417,7 +417,7 @@ async_child_process* async_child_process_exec(char* executable_name, char* args[
 
 void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg){
     async_child_process* new_child_process = (async_child_process*)arg;
-    async_ipc_server_on_connection(ipc_server, async_ipc_socket_connection_handler, new_child_process);
+    async_server_on_connection(ipc_server, async_ipc_socket_connection_handler, new_child_process, 0, 0);
     
     async_write(
         forker_pipe[PIPE_WRITE_END],
@@ -443,7 +443,7 @@ void async_ipc_socket_connection_handler(async_ipc_socket* ipc_socket, void* arg
     //if we have the current subprocess' object's max connections, then we have all sockets ready for data sending between processes
     //TODO: put this if-statement check in async_ipc_socket_connection_handler() instead?
     if(new_child_process->ipc_server->num_connections == new_child_process->curr_max_connections){
-        async_ipc_server_close(new_child_process->ipc_server);
+        async_server_close(new_child_process->ipc_server);
     }
 }
 

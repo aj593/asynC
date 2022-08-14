@@ -125,10 +125,12 @@ void after_http_listen(async_tcp_server* server, void* cb_arg){
         //TODO: execute all listeners callbacks here
     }
 
-    async_tcp_server_on_connection(
+    async_server_on_connection(
         listening_server->wrapped_tcp_server,
         http_connection_handler,
-        listening_server
+        listening_server,
+        0,
+        0
     );
 }
 

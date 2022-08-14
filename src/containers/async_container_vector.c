@@ -134,3 +134,7 @@ void async_container_vector_get(async_container_vector* vector, size_t index, vo
     void* source_mem_ptr = ((char*)vector->array) + (index * vector->element_size);
     memcpy(obtained_item, source_mem_ptr, vector->element_size);
 }
+
+void* async_container_vector_internal_array(async_container_vector* vector){
+    return vector->array;
+}

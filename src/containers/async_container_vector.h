@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 //#include "../async_types/event_emitter.h"
-#include "../containers/buffer.h"
+//#include "../containers/buffer.h"
 //#include "../async_lib/async_socket.h"
 
 typedef struct async_container_vector async_container_vector;
@@ -49,5 +49,7 @@ size_t async_container_vector_size(async_container_vector* vector);
 void async_container_vector_get(async_container_vector* vector, size_t index, void* obtained_item);
 
 void async_container_vector_set(async_container_vector* vector, size_t index, void* item_to_set);
+
+void* async_container_vector_internal_array(async_container_vector* vector);
 
 #endif

@@ -139,7 +139,7 @@ int main(int argc, char* argv[]){
 
     new_server = async_tcp_server_create();
     async_tcp_server_listen(new_server, port, "192.168.1.195", listen_callback, NULL);
-    async_tcp_server_on_connection(new_server, chat_connection_handler, NULL);
+    async_server_on_connection(new_server, chat_connection_handler, NULL, 0, 0);
 
     asynC_cleanup();
 

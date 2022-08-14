@@ -63,7 +63,6 @@ void epoll_check(void){
     int max_str_len = 20;
     char fd_str[max_str_len];
     
-
     for(int i = 0; i < num_fds; i++){
         if(events[i].events & EPOLLIN){
             snprintf(fd_str, max_str_len, "%dR", events[i].data.fd);

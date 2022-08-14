@@ -77,3 +77,68 @@ void resume_readstream(readstream* rs){
 int is_readstream_paused(readstream* rs){
     return rs->is_paused;
 }
+
+/*
+void open_stat_task_handler(void* open_stat_info){
+    async_open_stat_info* open_stat_params = (async_open_stat_info*)open_stat_info;
+
+    *open_stat_params->fd_ptr = open(
+        open_stat_params->filename,
+        O_RDONLY,
+        0644
+    );
+    
+    free(open_stat_params->filename);
+
+    if(*open_stat_params->fd_ptr == -1){
+        return;
+    }
+
+    struct stat file_stat_block;
+    //TODO: use return value for fstat?
+    *open_stat_params->fstat_ret_ptr = fstat(
+        *open_stat_params->fd_ptr,
+        &file_stat_block
+    );
+    if(*open_stat_params->fstat_ret_ptr == -1){
+        return;
+    }
+
+    *open_stat_params->file_size_ptr = file_stat_block.st_size;
+}
+
+void open_stat_interm(event_node* open_stat_node){
+    thread_task_info* completed_open_stat_task = (thread_task_info*)open_stat_node->data_ptr;
+    async_fs_readstream* readstream_ptr = (async_fs_readstream*)completed_open_stat_task->cb_arg;
+    if(readstream_ptr->read_fd == -1 || readstream_ptr->fstat_result == -1){
+        printf("readstream error\n");
+    }
+    else{
+        readstream_ptr->is_open = 1;
+        readstream_ptr->is_readable = 1;
+
+        //TODO: decide whether or not to put readstream into event queue based on return values from open() and stat()
+        event_node* readstream_node = create_event_node(sizeof(fs_readstream_info), readstream_finish_handler, readstream_checker);
+        fs_readstream_info* readstream_info = (fs_readstream_info*)readstream_node->data_ptr;
+        readstream_info->readstream_ptr = readstream_ptr;
+        enqueue_event(readstream_node);
+    }
+}
+*/
+
+/*
+    new_task_node_info open_stat_ptr_info;
+    create_thread_task(sizeof(async_open_stat_info), open_stat_task_handler, open_stat_interm, &open_stat_ptr_info);
+    async_open_stat_info* open_stat_info = (async_open_stat_info*)open_stat_ptr_info.async_task_info;
+    open_stat_info->fd_ptr = &new_readstream_ptr->read_fd;
+    open_stat_info->file_size_ptr = &new_readstream_ptr->total_file_size;
+    open_stat_info->fstat_ret_ptr = &new_readstream_ptr->fstat_result;
+    
+    size_t filename_length = strnlen(filename, 2048);
+    open_stat_info->filename = malloc(filename_length + 1);
+    strncpy(open_stat_info->filename, filename, filename_length);
+    open_stat_info->filename[filename_length] = '\0';
+
+    thread_task_info* open_stat_task_info_ptr = open_stat_ptr_info.new_thread_task_info;
+    open_stat_task_info_ptr->cb_arg = new_readstream_ptr;
+    */

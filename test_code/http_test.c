@@ -39,7 +39,7 @@ void end_handler(void* arg){
 
 //int total_num_bytes_read = 0;
 
-void response_writer(buffer* html_buffer, void* res_arg){
+void response_writer(async_fs_readstream* readstream, buffer* html_buffer, void* res_arg){
     async_http_outgoing_response* res = (async_http_outgoing_response*)res_arg;
     async_http_response_write(res, html_buffer);
     //total_num_bytes_read += get_buffer_capacity(html_buffer);
@@ -47,7 +47,7 @@ void response_writer(buffer* html_buffer, void* res_arg){
     destroy_buffer(html_buffer);
 }
 
-void response_stream_ender(void* arg){
+void response_stream_ender(async_fs_readstream* readstream, void* arg){
     //printf("i read %d bytes\n", total_num_bytes_read);
     //total_num_bytes_read = 0;
     async_http_outgoing_response* res = (async_http_outgoing_response*)arg;
@@ -70,8 +70,8 @@ void http_server_on_request(async_incoming_http_request* req, async_http_outgoin
         async_http_response_set_header(res, "Content-Type", "text/html");
         async_http_response_set_header(res, "foo", "bar");
         async_fs_readstream* root_readstream = create_async_fs_readstream("../test_files/basic.html");
-        fs_readstream_on_data(root_readstream, response_writer, res);
-        async_fs_readstream_on_end(root_readstream, response_stream_ender, res);
+        async_fs_readstream_on_data(root_readstream, response_writer, res, 0, 0);
+        async_fs_readstream_on_end(root_readstream, response_stream_ender, res, 0, 0);
     }
     else{
         int max_bytes = 100;
@@ -87,8 +87,8 @@ void http_server_on_request(async_incoming_http_request* req, async_http_outgoin
         //async_http_response_set_header(res, "Content-Length", "6696058");
         //async_http_response_set_header(res, "Content-Length", "1530825");
         async_fs_readstream* quasar_readstream = create_async_fs_readstream(req_str);
-        fs_readstream_on_data(quasar_readstream, response_writer, res);
-        async_fs_readstream_on_end(quasar_readstream, response_stream_ender, res);
+        async_fs_readstream_on_data(quasar_readstream, response_writer, res, 0, 0);
+        async_fs_readstream_on_end(quasar_readstream, response_stream_ender, res, 0, 0);
     }
     
     //async_http_response_write_head(res);
