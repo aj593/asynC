@@ -43,6 +43,7 @@ void data_handler(async_ipc_socket* ipc_socket, buffer* buffer, void* arg){
     */
 
     destroy_buffer(buffer);
+    //async_socket_end(ipc_socket);
 }
 
 void child_func_example(async_ipc_socket* socket){
@@ -60,10 +61,16 @@ void child_func_example(async_ipc_socket* socket){
 
     //char* array[] = {"/bin/ls", "-l", NULL};
     //async_child_process* new_process = async_child_process_exec("/bin/ls", array);
-    async_child_process* new_process = async_child_process_fork(child_func_example);
-    async_child_process_stdout_on_data(new_process, data_handler, NULL);
-    async_child_process_stdin_on_data(new_process, data_handler, NULL);
-    async_child_process_stderr_on_data(new_process, data_handler, NULL);
+    //async_child_process* new_process = async_child_process_fork(child_func_example);
+    /*
+    async_child_process_stdout_on_data(new_process, data_handler, NULL, 0, 0);
+    async_child_process_stdin_on_data(new_process, data_handler, NULL, 0, 0);
+    async_child_process_stderr_on_data(new_process, data_handler, NULL, 0, 0);
+    */
+}
+
+void ipc_connection_handler(async_ipc_socket* socket, void* arg){
+    async_socket_on_data(socket, data_handler, NULL, 0, 0);
 }
 
 int main(){
@@ -79,12 +86,19 @@ int main(){
     */
     
     ///*
-    char* array[] = {"/bin/ls", "-l", NULL};
+    char* array[] = {"/bin/ls", NULL};
     async_child_process* new_process = async_child_process_exec("/bin/ls", array);
-    async_child_process_stdout_on_data(new_process, data_handler, NULL);
-    async_child_process_stdin_on_data(new_process, data_handler, NULL);
-    async_child_process_stderr_on_data(new_process, data_handler, NULL);
-    //*/
+    async_child_process_on_stdin_connection(new_process, ipc_connection_handler, NULL);
+    async_child_process_on_stdout_connection(new_process, ipc_connection_handler, NULL);
+    async_child_process_on_stderr_connection(new_process, ipc_connection_handler, NULL);
+    //async_child_process_on_stdin_connection(new_process, ipc_connection_handler, NULL);
+
+
+    /*
+    async_child_process_stdout_on_data(new_process, data_handler, NULL, 0, 0);
+    async_child_process_stdin_on_data(new_process, data_handler, NULL, 0, 0);
+    async_child_process_stderr_on_data(new_process, data_handler, NULL, 0, 0);
+    */
     
     /*
     async_child_process* new_process = async_child_process_fork(child_func_example);

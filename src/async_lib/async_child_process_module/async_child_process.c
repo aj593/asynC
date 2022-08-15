@@ -21,10 +21,14 @@ typedef struct async_child_process {
     buffer* child_info_buffer;
     int curr_max_connections;
 
-    async_container_vector* interm_stdin_handler_vector;
-    async_container_vector* interm_stdout_handler_vector;
-    async_container_vector* interm_stderr_handler_vector;
-    async_container_vector* interm_custom_handler_vector;
+    void(*ipc_socket_stdin_connection_handler)(async_ipc_socket*, void*);
+    void(*ipc_socket_stdout_connection_handler)(async_ipc_socket*, void*);
+    void(*ipc_socket_stderr_connection_handler)(async_ipc_socket*, void*);
+    void(*ipc_socket_custom_connection_handler)(async_ipc_socket*, void*);
+    void* extra_stdin_arg;
+    void* extra_stdout_arg;
+    void* extra_stderr_arg;
+    void* extra_custom_arg;
 
     async_ipc_socket* stdin_socket;
     async_ipc_socket* stdout_socket;
@@ -56,7 +60,8 @@ char* space_delimiter  = " ";
 #define DEFAULT_NUM_ARGS 5
 #define MAX_NUM_CHILD_EXEC_CONNECTIONS 3
 #define MAX_NUM_CHILD_FORK_CONNECTIONS 4
-#define CUSTOM_IPC_SOCKET_FLAG -1
+#define CUSTOM_IPC_SOCKET_FLAG 3
+#define CHILD_FORK_FAILURE_FLAG 4
 
 typedef struct func_ptr_holder {
     void(*child_func_ptr)(async_ipc_socket*);
@@ -84,8 +89,12 @@ int sync_connect_ipc_socket(char* server_name, int duping_fd, pid_t child_pid){
         perror("send()");
     }
 
+    char wait_recv_buffer[1];
+    recv(new_ipc_socket_fd, wait_recv_buffer, 1, 0);
+    //printf("received data for %d fd\n", duping_fd); 
+
     //TODO: need if-statement checking for -1?
-    if(duping_fd >= 0){
+    if(duping_fd == STDIN_FILENO || duping_fd == STDOUT_FILENO || duping_fd == STDERR_FILENO){
         int new_fd = dup2(new_ipc_socket_fd, duping_fd);
         if(new_fd < 0){
             perror("dup2()");
@@ -298,11 +307,6 @@ async_child_process* create_new_child_process(char server_name[], int max_num_co
     async_child_process* new_child_process = (async_child_process*)calloc(1, sizeof(async_child_process));
     new_child_process->curr_max_connections = max_num_connections;
 
-    new_child_process->interm_stdin_handler_vector  = create_event_listener_vector();
-    new_child_process->interm_stdout_handler_vector = create_event_listener_vector();
-    new_child_process->interm_stderr_handler_vector = create_event_listener_vector();
-    new_child_process->interm_custom_handler_vector = create_event_listener_vector();
-
     new_child_process->ipc_server = async_ipc_server_create();
     async_ipc_server_listen(new_child_process->ipc_server, server_name, after_child_process_server_listen, new_child_process);
 
@@ -398,7 +402,7 @@ async_child_process* async_child_process_exec(char* executable_name, char* args[
 
     total_buffer_length += args_len;
 
-    new_child_process->child_info_buffer = create_buffer(total_buffer_length + 1, sizeof(char));
+    new_child_process->child_info_buffer = create_buffer(total_buffer_length, sizeof(char));
     char* child_internal_buffer = get_internal_buffer(new_child_process->child_info_buffer);
     char* curr_child_buffer_offset = child_internal_buffer;
     memcpy(curr_child_buffer_offset, &total_buffer_length, sizeof(total_buffer_length));
@@ -448,12 +452,24 @@ void async_ipc_socket_connection_handler(async_ipc_socket* ipc_socket, void* arg
     }
 }
 
-void transfer_data_handlers(async_container_vector* source_vector, async_container_vector** destination_vector){
-    for(int i = 0; i < async_container_vector_size(source_vector); i++){
-        buffer_callback_t curr_callback_item;
-        async_container_vector_get(source_vector, i, &curr_callback_item);
-        async_container_vector_add_last(destination_vector, &curr_callback_item);
-    }
+void async_child_process_on_stdin_connection(async_child_process* child_process, void(*ipc_socket_stdin_connection_handler)(async_ipc_socket*, void*), void* stdin_arg){
+    child_process->ipc_socket_stdin_connection_handler = ipc_socket_stdin_connection_handler;
+    child_process->extra_stdin_arg = stdin_arg;
+}
+
+void async_child_process_on_stdout_connection(async_child_process* child_process, void(*ipc_socket_stdout_connection_handler)(async_ipc_socket*, void*), void* stdout_arg){
+    child_process->ipc_socket_stdout_connection_handler = ipc_socket_stdout_connection_handler;
+    child_process->extra_stdout_arg = stdout_arg;
+}
+
+void async_child_process_on_stderr_connection(async_child_process* child_process, void(*ipc_socket_stderr_connection_handler)(async_ipc_socket*, void*), void* stderr_arg){
+    child_process->ipc_socket_stderr_connection_handler = ipc_socket_stderr_connection_handler;
+    child_process->extra_stderr_arg = stderr_arg;
+}
+
+void async_child_process_on_custom_connection(async_child_process* child_process, void(*ipc_socket_custom_connection_handler)(async_ipc_socket*, void*), void* custom_arg){
+    child_process->ipc_socket_custom_connection_handler = ipc_socket_custom_connection_handler;
+    child_process->extra_custom_arg = custom_arg;
 }
 
 void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_buffer, void* arg){
@@ -464,37 +480,60 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
     memcpy(&new_child_process->subprocess_pid, internal_socket_buffer + 1, sizeof(new_child_process->subprocess_pid));
     //printf("im main and i received pid of %d\n", new_child_process->subprocess_pid);
     char buffer_first_char = internal_socket_buffer[0];
+    char array[] = { buffer_first_char };
+    buffer* resume_signal_buffer = buffer_from_array(array, 1);
+
     switch(buffer_first_char){
         case STDIN_FILENO:
             new_child_process->stdin_socket = ipc_socket;
-            transfer_data_handlers(
-                new_child_process->interm_stdin_handler_vector,
-                &new_child_process->stdin_socket->event_listener_vector
-            );
+            
+            async_socket_write(ipc_socket, resume_signal_buffer, 1, NULL);
+
+            if(new_child_process->ipc_socket_stdin_connection_handler != NULL){
+                new_child_process->ipc_socket_stdin_connection_handler(
+                    new_child_process->stdin_socket,
+                    new_child_process->extra_stdin_arg
+                );
+            }
 
             break;
         case STDOUT_FILENO:
             new_child_process->stdout_socket = ipc_socket;
-            transfer_data_handlers(
-                new_child_process->interm_stdout_handler_vector,
-                &new_child_process->stdout_socket->event_listener_vector
-            );
-
+            
+            async_socket_write(ipc_socket, resume_signal_buffer, 1, NULL);
+            
+            if(new_child_process->ipc_socket_stdout_connection_handler != NULL){
+                new_child_process->ipc_socket_stdout_connection_handler(
+                    new_child_process->stdout_socket,
+                    new_child_process->extra_stdout_arg
+                );
+            }
+            
             break;
         case STDERR_FILENO:
             new_child_process->stderr_socket = ipc_socket;
-            transfer_data_handlers(
-                new_child_process->interm_stderr_handler_vector,
-                &new_child_process->stderr_socket->event_listener_vector
-            );
+
+            async_socket_write(ipc_socket, resume_signal_buffer, 1, NULL);
+
+            if(new_child_process->ipc_socket_stderr_connection_handler != NULL){
+                new_child_process->ipc_socket_stderr_connection_handler(
+                    new_child_process->stderr_socket,
+                    new_child_process->extra_stderr_arg
+                );
+            }
 
             break;
         case CUSTOM_IPC_SOCKET_FLAG:
             new_child_process->custom_socket = ipc_socket;
-            transfer_data_handlers(
-                new_child_process->interm_custom_handler_vector,
-                &new_child_process->custom_socket->event_listener_vector
-            );
+
+            async_socket_write(ipc_socket, resume_signal_buffer, 1, NULL);
+
+            if(new_child_process->ipc_socket_custom_connection_handler != NULL){
+                new_child_process->ipc_socket_custom_connection_handler(
+                    new_child_process->custom_socket,
+                    new_child_process->extra_custom_arg
+                );
+            }
 
             break;
         default:
@@ -502,58 +541,9 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
             break;
     }
 
+    destroy_buffer(resume_signal_buffer);
+
     if(new_child_process->ipc_server->num_connections == 1){
         //TODO: emit child spawn event here? (if we got success msg)
     }
-}
-
-void async_child_process_stream_on_data(
-    void(*data_handler)(async_ipc_socket*, buffer*, void*), 
-    void* arg,
-    async_ipc_socket* curr_stream_socket,
-    async_container_vector** curr_interm_vector
-){
-    if(curr_stream_socket == NULL){
-        buffer_callback_t new_data_handler_item = make_new_data_handler_item(data_handler, arg, 0);
-        async_container_vector_add_last(curr_interm_vector, &new_data_handler_item);
-    }
-    else{
-        async_socket_on_data(curr_stream_socket, data_handler, arg, 0, 0);
-    }
-}
-
-void async_child_process_stdin_on_data(async_child_process* child_for_stdin, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg){
-    async_child_process_stream_on_data(
-        data_handler,
-        arg,
-        child_for_stdin->stdin_socket,
-        &child_for_stdin->interm_stdin_handler_vector
-    );
-}
-
-void async_child_process_stdout_on_data(async_child_process* child_for_stdout, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg){
-    async_child_process_stream_on_data(
-        data_handler,
-        arg,
-        child_for_stdout->stdout_socket,
-        &child_for_stdout->interm_stdout_handler_vector
-    );
-}
-
-void async_child_process_stderr_on_data(async_child_process* child_for_stderr, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg){
-    async_child_process_stream_on_data(
-        data_handler,
-        arg,
-        child_for_stderr->stderr_socket,
-        &child_for_stderr->interm_stderr_handler_vector
-    );
-}
-
-void async_child_process_ipc_socket_on_data(async_child_process* child_for_ipc, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg){
-    async_child_process_stream_on_data(
-        data_handler,
-        arg,
-        child_for_ipc->custom_socket,
-        &child_for_ipc->interm_custom_handler_vector
-    );
 }

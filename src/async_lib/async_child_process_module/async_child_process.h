@@ -11,9 +11,16 @@ int child_process_creator_destroy(void);
 async_child_process* async_child_process_exec(char* executable_name, char* args[]);
 async_child_process* async_child_process_fork(void(*child_func)(async_ipc_socket*));
 
-void async_child_process_stdin_on_data(async_child_process* child_for_stdin, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg);
-void async_child_process_stdout_on_data(async_child_process* child_for_stdout, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg);
-void async_child_process_stderr_on_data(async_child_process* child_for_stderr, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg);
-void async_child_process_ipc_socket_on_data(async_child_process* child_for_ipc, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg);
+void async_child_process_on_stdin_connection(async_child_process* child_process, void(*ipc_socket_stdin_connection_handler)(async_ipc_socket*, void*), void* stdin_arg);
+void async_child_process_on_stdout_connection(async_child_process* child_process, void(*ipc_socket_stdout_connection_handler)(async_ipc_socket*, void*), void* stdout_arg);
+void async_child_process_on_stderr_connection(async_child_process* child_process, void(*ipc_socket_stderr_connection_handler)(async_ipc_socket*, void*), void* stderr_arg);
+void async_child_process_on_custom_connection(async_child_process* child_process, void(*ipc_socket_custom_connection_handler)(async_ipc_socket*, void*), void* custom_arg);
+
+/*
+void async_child_process_stdin_on_data(async_child_process* child_for_stdin, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_listens_left);
+void async_child_process_stdout_on_data(async_child_process* child_for_stdout, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_listens_left);
+void async_child_process_stderr_on_data(async_child_process* child_for_stderr, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_listens_left);
+void async_child_process_ipc_socket_on_data(async_child_process* child_for_ipc, void(*data_handler)(async_ipc_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_listens_left);
+*/
 
 #endif
