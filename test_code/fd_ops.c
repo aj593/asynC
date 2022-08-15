@@ -58,15 +58,6 @@ void child_func_example(async_ipc_socket* socket){
 
     free(write_buffer);
     async_socket_end(socket);
-
-    //char* array[] = {"/bin/ls", "-l", NULL};
-    //async_child_process* new_process = async_child_process_exec("/bin/ls", array);
-    //async_child_process* new_process = async_child_process_fork(child_func_example);
-    /*
-    async_child_process_stdout_on_data(new_process, data_handler, NULL, 0, 0);
-    async_child_process_stdin_on_data(new_process, data_handler, NULL, 0, 0);
-    async_child_process_stderr_on_data(new_process, data_handler, NULL, 0, 0);
-    */
 }
 
 void ipc_connection_handler(async_ipc_socket* socket, void* arg){
@@ -85,28 +76,14 @@ int main(){
     async_outgoing_http_request* new_request = async_http_request("example.com", "GET", &options, response_handler, NULL);
     */
     
-    ///*
-    char* array[] = {"/bin/ls", NULL};
-    async_child_process* new_process = async_child_process_exec("/bin/ls", array);
+    //char* array[] = {"/bin/ls", NULL};
+    //async_child_process* new_process = async_child_process_exec("/bin/ls", array);
+    async_child_process* new_process = async_child_process_fork(child_func_example);
+
     async_child_process_on_stdin_connection(new_process, ipc_connection_handler, NULL);
     async_child_process_on_stdout_connection(new_process, ipc_connection_handler, NULL);
     async_child_process_on_stderr_connection(new_process, ipc_connection_handler, NULL);
-    //async_child_process_on_stdin_connection(new_process, ipc_connection_handler, NULL);
-
-
-    /*
-    async_child_process_stdout_on_data(new_process, data_handler, NULL, 0, 0);
-    async_child_process_stdin_on_data(new_process, data_handler, NULL, 0, 0);
-    async_child_process_stderr_on_data(new_process, data_handler, NULL, 0, 0);
-    */
-    
-    /*
-    async_child_process* new_process = async_child_process_fork(child_func_example);
-    async_child_process_stdout_on_data(new_process, data_handler, NULL);
-    async_child_process_stdin_on_data(new_process, data_handler, NULL);
-    async_child_process_stderr_on_data(new_process, data_handler, NULL);
-    async_child_process_ipc_socket_on_data(new_process, data_handler, NULL);
-    */
+    async_child_process_on_custom_connection(new_process, ipc_connection_handler, NULL);
 
     //call_async_open();
     //callchmod();
