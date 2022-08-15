@@ -14,6 +14,8 @@
 #include <stdio.h>
 #include <sys/un.h>
 
+#define MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS 5
+
 //TODO: make event queue node for this type and put in event queue with event checker and event cleaner up handler
 typedef struct async_child_process {
     pid_t subprocess_pid;
@@ -22,23 +24,9 @@ typedef struct async_child_process {
     int curr_max_connections;
 
     //TODO: put all these fields into arrays?
-    void(*ipc_socket_stdin_connection_handler)(async_ipc_socket*, void*);
-    void(*ipc_socket_stdout_connection_handler)(async_ipc_socket*, void*);
-    void(*ipc_socket_stderr_connection_handler)(async_ipc_socket*, void*);
-    void(*ipc_socket_custom_connection_handler)(async_ipc_socket*, void*);
-    void(*ipc_socket_error_connection_handler)(async_ipc_socket*, void*);
-    
-    void* extra_stdin_arg;
-    void* extra_stdout_arg;
-    void* extra_stderr_arg;
-    void* extra_custom_arg;
-    void* extra_error_arg;
-
-    async_ipc_socket* stdin_socket;
-    async_ipc_socket* stdout_socket;
-    async_ipc_socket* stderr_socket;
-    async_ipc_socket* custom_socket;
-    async_ipc_socket* error_socket;
+    void(*ipc_socket_connection_handlers[MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS])(async_ipc_socket*, void*);
+    async_ipc_socket* async_ipc_sockets[MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS];
+    void* extra_args[MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS];
 } async_child_process;
 
 char* server_socket_template_name = "ASYNC_SERVER_SOCKET_NAME";
@@ -461,24 +449,26 @@ void async_ipc_socket_connection_handler(async_ipc_socket* ipc_socket, void* arg
     }
 }
 
+void async_child_process_on_socket_connection(async_child_process* child_process, void(*ipc_socket_connection_handler)(async_ipc_socket*, void*), void* extra_arg, int curr_file_no){
+    child_process->ipc_socket_connection_handlers[curr_file_no] = ipc_socket_connection_handler;
+    child_process->extra_args[curr_file_no] = extra_arg;
+}
+
+//TODO: generalize following 4 functions
 void async_child_process_on_stdin_connection(async_child_process* child_process, void(*ipc_socket_stdin_connection_handler)(async_ipc_socket*, void*), void* stdin_arg){
-    child_process->ipc_socket_stdin_connection_handler = ipc_socket_stdin_connection_handler;
-    child_process->extra_stdin_arg = stdin_arg;
+    async_child_process_on_socket_connection(child_process, ipc_socket_stdin_connection_handler, stdin_arg, STDIN_FILENO);
 }
 
 void async_child_process_on_stdout_connection(async_child_process* child_process, void(*ipc_socket_stdout_connection_handler)(async_ipc_socket*, void*), void* stdout_arg){
-    child_process->ipc_socket_stdout_connection_handler = ipc_socket_stdout_connection_handler;
-    child_process->extra_stdout_arg = stdout_arg;
+    async_child_process_on_socket_connection(child_process, ipc_socket_stdout_connection_handler, stdout_arg, STDOUT_FILENO);
 }
 
 void async_child_process_on_stderr_connection(async_child_process* child_process, void(*ipc_socket_stderr_connection_handler)(async_ipc_socket*, void*), void* stderr_arg){
-    child_process->ipc_socket_stderr_connection_handler = ipc_socket_stderr_connection_handler;
-    child_process->extra_stderr_arg = stderr_arg;
+    async_child_process_on_socket_connection(child_process, ipc_socket_stderr_connection_handler, stderr_arg, STDERR_FILENO);
 }
 
 void async_child_process_on_custom_connection(async_child_process* child_process, void(*ipc_socket_custom_connection_handler)(async_ipc_socket*, void*), void* custom_arg){
-    child_process->ipc_socket_custom_connection_handler = ipc_socket_custom_connection_handler;
-    child_process->extra_custom_arg = custom_arg;
+    async_child_process_on_socket_connection(child_process, ipc_socket_custom_connection_handler, custom_arg, CUSTOM_IPC_SOCKET_FLAG);
 }
 
 void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_buffer, void* arg){
@@ -489,45 +479,21 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
     memcpy(&new_child_process->subprocess_pid, internal_socket_buffer + 1, sizeof(new_child_process->subprocess_pid));
     //printf("im main and i received pid of %d\n", new_child_process->subprocess_pid);
 
-    async_ipc_socket** ipc_socket_array[] = {
-        &new_child_process->stdin_socket,
-        &new_child_process->stdout_socket,
-        &new_child_process->stderr_socket,
-        &new_child_process->custom_socket,
-        &new_child_process->error_socket
-    };
-
-    void(*ipc_socket_stdin_connection_handler[])(async_ipc_socket*, void*) = {
-        new_child_process->ipc_socket_stdin_connection_handler,
-        new_child_process->ipc_socket_stdout_connection_handler,
-        new_child_process->ipc_socket_stderr_connection_handler,
-        new_child_process->ipc_socket_custom_connection_handler,
-        new_child_process->ipc_socket_error_connection_handler
-    };
-
-    void* extra_args[] = {
-        new_child_process->extra_stdin_arg,
-        new_child_process->extra_stdout_arg,
-        new_child_process->extra_stderr_arg,
-        new_child_process->extra_custom_arg,
-        new_child_process->extra_error_arg,
-    };
-
     int buffer_first_char_index = internal_socket_buffer[0];
     char array[] = { buffer_first_char_index };
     buffer* resume_signal_buffer = buffer_from_array(array, 1);
-
-    *ipc_socket_array[buffer_first_char_index] = ipc_socket;
     async_socket_write(ipc_socket, resume_signal_buffer, 1, NULL);
-    if(ipc_socket_stdin_connection_handler[buffer_first_char_index] != NULL){
-        void (*ipc_socket_curr_connection_handler)(async_ipc_socket*, void*) = ipc_socket_stdin_connection_handler[buffer_first_char_index];
-        ipc_socket_curr_connection_handler(
+    destroy_buffer(resume_signal_buffer);
+
+    new_child_process->async_ipc_sockets[buffer_first_char_index] = ipc_socket;
+    void(*curr_ipc_socket_connection_handler)(async_ipc_socket*, void*) = new_child_process->ipc_socket_connection_handlers[buffer_first_char_index];
+    if(curr_ipc_socket_connection_handler != NULL){
+        void* curr_arg = new_child_process->extra_args[buffer_first_char_index];
+        curr_ipc_socket_connection_handler(
             ipc_socket,
-            extra_args[buffer_first_char_index]
+            curr_arg
         );
     }
-
-    destroy_buffer(resume_signal_buffer);
 
     if(buffer_first_char_index == CHILD_FORK_FAILURE_FLAG){
         //TODO: emit error and close server? though peer socket shutdown and called close() what do we do on this end?
