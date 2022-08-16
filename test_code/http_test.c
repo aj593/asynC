@@ -1,4 +1,4 @@
-#include "../src/asynC.h"
+#include <asynC/asynC.h>
 
 #include <stdio.h>
 #include <unistd.h>

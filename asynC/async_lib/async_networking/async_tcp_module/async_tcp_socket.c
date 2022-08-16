@@ -36,25 +36,3 @@ void tcp_connect_task_handler(void* connect_task_info){
         *connect_info->socket_fd_ptr = -1;
     }
 }
-
-/*
-void async_tcp_socket_write(async_tcp_socket* writing_tcp_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_tcp_socket*, void*)){
-    async_socket_write(writing_tcp_socket, buffer_to_write, num_bytes_to_write, send_callback);
-}
-
-void async_tcp_socket_on_data(async_tcp_socket* reading_socket, void(*new_data_handler)(async_tcp_socket*, buffer*, void*), void* arg){
-    async_socket_on_data(reading_socket, new_data_handler, arg);
-}
-
-void async_tcp_socket_once_data(async_tcp_socket* reading_socket, void(*new_data_handler)(async_tcp_socket*, buffer*, void*), void* arg){
-    async_socket_once_data(reading_socket, new_data_handler, arg);
-}
-
-void async_tcp_socket_on_end(async_tcp_socket* ending_socket, void(*socket_end_callback)(async_tcp_socket*, int)){
-    async_socket_on_end(ending_socket, socket_end_callback);
-}
-
-void async_tcp_socket_end(async_tcp_socket* ending_socket){
-    async_socket_end(ending_socket);
-}
-*/

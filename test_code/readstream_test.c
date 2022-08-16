@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 
-#include "../src/asynC.h"
+#include <asynC/asynC.h>
 
 async_fs_writestream* output_file;
 

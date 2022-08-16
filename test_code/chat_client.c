@@ -9,7 +9,7 @@
 #include <netdb.h>
 #include <pthread.h>
 
-#include "../src/asynC.h"
+#include <asynC/asynC.h>
 
 //void hi_handler(event_emitter* emitter, )
 
@@ -168,7 +168,7 @@ void* chat_input(void* arg){
 int main(int argc, char* argv[]){
     asynC_init();
 
-    async_socket* new_socket = async_tcp_connect("192.168.1.195", 3000, chat_connection_handler, NULL);
+    async_socket* new_socket = async_tcp_connect("127.0.0.1", 3000, chat_connection_handler, NULL);
     
     pthread_t thread_id;
     pthread_create(&thread_id, NULL, chat_input, new_socket);

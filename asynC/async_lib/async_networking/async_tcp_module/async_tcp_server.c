@@ -18,7 +18,7 @@ async_tcp_server* async_tcp_server_create(void){
 
 void async_tcp_server_listen(async_tcp_server* listening_tcp_server, int port, char* ip_address, void(*listen_callback)(async_tcp_server*, void*), void* arg){
     async_listen_info listen_info;
-    strncpy(listen_info.ip_address, ip_address, LONGEST_SOCKET_NAME_LEN);
+    strncpy(listen_info.ip_address, ip_address, MAX_SOCKET_NAME_LEN);
     listen_info.port = port;
     
     async_server_listen(
@@ -89,13 +89,3 @@ void tcp_server_accept_task(void* accept_task){
         &peer_addr_len
     );
 }
-
-/*
-void async_tcp_server_on_connection(async_tcp_server* listening_tcp_server, void(*connection_handler)(async_tcp_socket*, void*), void* arg){
-    async_server_on_connection(listening_tcp_server, connection_handler, arg);
-}
-
-void async_tcp_server_close(async_tcp_server* closing_tcp_server){
-    async_server_close(closing_tcp_server);
-}
-*/

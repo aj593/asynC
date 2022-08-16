@@ -6,6 +6,8 @@
 //#include "../containers/async_types.h"
 
 #define MAX_BACKLOG_COUNT 32767
+#define MAX_IP_STR_LEN 50
+#define MAX_SOCKET_NAME_LEN 108
 
 //typedef struct server_type async_server;
 //typedef struct socket_channel async_socket;
@@ -30,7 +32,7 @@ typedef struct async_server {
     async_container_vector* event_listeners_vector;
     //async_container_vector* listeners_vector;
     //async_container_vector* connection_vector;
-    char* name;
+    char name[MAX_SOCKET_NAME_LEN];
     void(*listen_task)(void*);
     void(*accept_task)(void*);
     unsigned int num_listen_event_listeners;
@@ -39,14 +41,11 @@ typedef struct async_server {
 
 #endif
 
-#define MAX_IP_STR_LEN 50
-#define LONGEST_SOCKET_NAME_LEN 108
-
 typedef struct listen_task {
     async_server* listening_server;
     int port;
     char ip_address[MAX_IP_STR_LEN];
-    char socket_path[LONGEST_SOCKET_NAME_LEN];
+    char socket_path[MAX_SOCKET_NAME_LEN];
     int* success_ptr;
     void* custom_data;
 } async_listen_info;

@@ -19,7 +19,7 @@ async_ipc_server* async_ipc_server_create(void){
 
 void async_ipc_server_listen(async_ipc_server* listening_ipc_server, char* socket_server_path, void(*listen_callback)(async_ipc_server*, void*), void* arg){
     async_listen_info ipc_listen_info;
-    strncpy(ipc_listen_info.socket_path, socket_server_path, LONGEST_SOCKET_NAME_LEN);
+    strncpy(ipc_listen_info.socket_path, socket_server_path, MAX_SOCKET_NAME_LEN);
 
     async_server_listen(
         listening_ipc_server,
@@ -40,7 +40,7 @@ void ipc_server_listen(void* ipc_listen_task){
     
     struct sockaddr_un server_sockaddr;
     server_sockaddr.sun_family = AF_UNIX;   
-    strncpy(server_sockaddr.sun_path, ipc_listen_info->socket_path, LONGEST_SOCKET_NAME_LEN); 
+    strncpy(server_sockaddr.sun_path, ipc_listen_info->socket_path, MAX_SOCKET_NAME_LEN); 
     socklen_t struct_len = sizeof(server_sockaddr);
     
     unlink(server_sockaddr.sun_path);
@@ -73,13 +73,3 @@ void ipc_server_accept(void* ipc_accept_task){
 
     //TODO: use getpeername()?
 }
-
-/*
-void async_ipc_server_on_connection(async_ipc_server* listening_ipc_server, void(*connection_handler)(async_ipc_socket*, void*), void* arg){
-    async_server_on_connection(listening_ipc_server, connection_handler, arg);
-}
-
-void async_ipc_server_close(async_ipc_server* closing_ipc_server){
-    async_server_close(closing_ipc_server);
-}
-*/

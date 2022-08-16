@@ -52,19 +52,12 @@ typedef struct async_socket {
 typedef struct connect_info {
     async_socket* connecting_socket;
     char ip_address[MAX_IP_STR_LEN];
-    char ipc_client_path[LONGEST_SOCKET_NAME_LEN];
-    char ipc_server_path[LONGEST_SOCKET_NAME_LEN];
+    char ipc_client_path[MAX_SOCKET_NAME_LEN];
+    char ipc_server_path[MAX_SOCKET_NAME_LEN];
     int port;
     int* socket_fd_ptr;
     void* custom_data;
 } async_connect_info;
-
-typedef struct buffer_data_callback {
-    int is_temp_subscriber;
-    int is_new_subscriber;
-    void(*curr_data_handler)(async_socket*, buffer*, void*);
-    void* arg;
-} buffer_callback_t;
 
 //typedef struct socket_channel async_socket;
 //async_socket* async_socket_create(int domain, int type, int protocol);

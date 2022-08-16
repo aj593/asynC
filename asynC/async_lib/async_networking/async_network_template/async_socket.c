@@ -13,11 +13,12 @@
 #include "../../../async_runtime/thread_pool.h"
 #include "../../event_emitter_module/async_event_emitter.h"
 
-/*
-typedef struct socket_info {
-    async_socket* socket;
-} socket_info;
-*/
+typedef struct buffer_data_callback {
+    int is_temp_subscriber;
+    int is_new_subscriber;
+    void(*curr_data_handler)(async_socket*, buffer*, void*);
+    void* arg;
+} buffer_callback_t;
 
 typedef struct socket_send_buffer {
     buffer* buffer_data;

@@ -7,7 +7,6 @@
 
 #include <string.h>
 #include <unistd.h>
-
 #include <stdio.h>
 
 void after_http_listen(async_tcp_server* http_server, void* cb_arg);
@@ -24,6 +23,7 @@ typedef struct async_http_server {
     //TODO: make vector to listen to general events
     async_container_vector* request_handler_vector;
     async_container_vector* listen_handler_vector;
+    async_container_vector* event_listener_vector;
 } async_http_server;
 
 typedef struct async_incoming_http_request {

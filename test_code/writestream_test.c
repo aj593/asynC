@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "../src/asynC.h"
+#include <asynC/asynC.h>
 
 int main(int argc, char* argv[]){
     if(argc != 2){
