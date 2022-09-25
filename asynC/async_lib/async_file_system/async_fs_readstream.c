@@ -74,7 +74,7 @@ void after_readstream_open(int readstream_fd, void* arg){
     event_node* readstream_node = create_event_node(sizeof(fs_readstream_info), readstream_finish_handler, readstream_checker);
     fs_readstream_info* readstream_info = (fs_readstream_info*)readstream_node->data_ptr;
     readstream_info->readstream_ptr = readstream_ptr;
-    enqueue_event(readstream_node);
+    enqueue_polling_event(readstream_node);
 }
 
 int readstream_checker(event_node* readstream_node){
@@ -100,11 +100,22 @@ int readstream_checker(event_node* readstream_node){
     return readstream->reached_EOF; /*&& !readstream->is_currently_reading*/
 }
 
+void after_readstream_close(int success, void* arg){
+    async_fs_readstream* closed_readstream = (async_fs_readstream*)arg;
+    //TODO: emit close event here on this line
+
+    free(closed_readstream->event_listener_vector);
+    free(closed_readstream->read_buffer);
+    free(closed_readstream);
+}
+
 void readstream_finish_handler(event_node* readstream_node){
     //TODO: destroy readstreams fields here (or after async_close call), make async_close call here
     fs_readstream_info* readstream_info_ptr = (fs_readstream_info*)readstream_node->data_ptr;
     async_fs_readstream* ending_readstream_ptr = readstream_info_ptr->readstream_ptr;
     async_fs_readstream_emit_end(ending_readstream_ptr);
+
+    async_close(ending_readstream_ptr->read_fd, after_readstream_close, ending_readstream_ptr);
 }
 
 void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, int num_bytes_read, void* buffer_cb_arg){

@@ -14,6 +14,7 @@
 #define TASK_THREAD_BLOCK
 
 typedef struct task_handler_block {
+    event_node* event_node_ptr;
     void(*task_handler)(void*);
     void* async_task_info;
     int task_type;
@@ -51,8 +52,8 @@ typedef struct new_task_node_info {
     void* async_task_info;
 } new_task_node_info;
 
-void thread_pool_init();
-void thread_pool_destroy();
+void thread_pool_init(void);
+void thread_pool_destroy(void);
 
 //int is_defer_queue_empty();
 void submit_thread_tasks(void);

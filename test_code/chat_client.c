@@ -10,6 +10,7 @@
 #include <pthread.h>
 
 #include <asynC/asynC.h>
+//#include "../asynC/asynC.h"
 
 //void hi_handler(event_emitter* emitter, )
 
@@ -116,7 +117,14 @@ void chat_connection_handler(async_socket* socket, void* arg){
     printf("client connected!\n");
     async_socket_on_data(socket, chat_data_handler, NULL, 0, 0);
 
-    //read_chat_input(socket);
+    /*
+    char mary[] = "mary had a little lamb as white as snow\n";
+    buffer* mary_buffer = buffer_from_array(mary, sizeof(mary));
+    async_socket_write(socket, mary_buffer, get_buffer_capacity(mary_buffer), NULL);
+    //async_socket_end(socket);
+    async_socket_destroy(socket);
+    destroy_buffer(mary_buffer);
+    */
 }
 
 buffer* read_and_make_buffer(){
@@ -141,13 +149,16 @@ void* chat_input(void* arg){
         int num_bytes_read = read(STDIN_FILENO, stdin_buffer, max_num_bytes);
         
         if(strncmp(stdin_buffer, "exit", num_bytes_read - 1) == 0){
+            char mary[] = "mary had a little lamb as white as snow\n";
+            buffer* mary_buffer = buffer_from_array(mary, sizeof(mary));
+            async_socket_write(new_socket, mary_buffer, get_buffer_capacity(mary_buffer), NULL);
             async_socket_end(new_socket);
+            //destroy_buffer(mary_buffer);
+
             break;
         }
 
-        buffer* send_buffer = create_buffer(num_bytes_read, sizeof(char));
-        char* internal_dest_buffer = (char*)get_internal_buffer(send_buffer);
-        memcpy(internal_dest_buffer, stdin_buffer, num_bytes_read);
+        buffer* send_buffer = buffer_from_array(stdin_buffer, num_bytes_read);
 
         async_socket_write(
             new_socket, 

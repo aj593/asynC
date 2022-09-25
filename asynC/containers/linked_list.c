@@ -55,6 +55,8 @@ void destroy_event_node(event_node* node_to_destroy){
     free(node_to_destroy);
 }
 
+//TODO: return early in add_next and add_prev if new_node already has linked_list_ptr?
+
 //TODO: require that added event_node be not NULL?
 //TODO: make it so ppl can't add next node to dummy tail node?
 void add_next(linked_list* list, event_node* curr, event_node* new_node){
@@ -65,6 +67,8 @@ void add_next(linked_list* list, event_node* curr, event_node* new_node){
 
     after_curr->prev = new_node;
     new_node->prev = curr;
+
+    new_node->linked_list_ptr = list;
 
     list->size++;
 }
@@ -82,6 +86,8 @@ void add_prev(linked_list* list, event_node* curr, event_node* new_node){
 
     before_curr->next = new_node;
     new_node->next = curr;
+
+    new_node->linked_list_ptr = list;
     
     list->size++;
 }
@@ -92,8 +98,8 @@ void append(linked_list* list, event_node* new_last){
 
 //TODO: change names of following functions to include "list_" in their names
 //TODO: make it so ppl can't remove head and tail node?
-event_node* remove_curr(linked_list* list, event_node* curr_removed_node){
-    if(list->size == 0){
+event_node* remove_curr(event_node* curr_removed_node){
+    if(curr_removed_node->linked_list_ptr == NULL){
         return NULL;
     }
 
@@ -106,15 +112,36 @@ event_node* remove_curr(linked_list* list, event_node* curr_removed_node){
     curr_removed_node->prev = NULL;
     curr_removed_node->next = NULL;
 
-    list->size--;
+    curr_removed_node->linked_list_ptr->size--;
+    curr_removed_node->linked_list_ptr = NULL;
 
     return curr_removed_node;
 }
 
 event_node* remove_first(linked_list* list){
-    return remove_curr(list, list->head.next);
+    if(list->size == 0){
+        return NULL;
+    }
+
+    return remove_curr(list->head.next);
 }
 
 event_node* remove_last(linked_list* list){
-    return remove_curr(list, list->tail.prev);
+    if(list->size == 0){
+        return NULL;
+    }
+
+    return remove_curr(list->tail.prev);
 }
+
+/*
+void migrate_event_node(event_node* node_to_move, linked_list* destination_list){
+    //no need to remove node just to put it back to same list
+    if(node_to_move->linked_list_ptr == destination_list){
+        return;
+    }
+
+    remove_curr(node_to_move);
+    append(destination_list, node_to_move);
+}
+*/

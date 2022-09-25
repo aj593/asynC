@@ -1,27 +1,28 @@
 #include <asynC/asynC.h>
+//#include "../asynC/asynC.h"
 
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
 
-void http_server_on_request(async_incoming_http_request*, async_http_outgoing_response*);
+void http_server_on_request(async_http_server*, async_incoming_http_request*, async_http_outgoing_response*, void*);
 int total_num_requests = 0;
 
-void listen_callback(void);
+void listen_callback(async_http_server* http_server, void* arg);
 
 int main(){
     asynC_init();
 
     async_http_server* new_http_server = async_create_http_server();
-    async_http_server_listen(new_http_server, 3000, "127.0.0.1", listen_callback);
-    async_http_server_on_request(new_http_server, http_server_on_request);
+    async_http_server_listen(new_http_server, 3000, "127.0.0.1", listen_callback, NULL);
+    async_http_server_on_request(new_http_server, http_server_on_request, NULL, 0, 0);
 
     asynC_cleanup();
 
     return 0;
 }
 
-void listen_callback(void){
+void listen_callback(async_http_server* http_server, void* arg){
     printf("http server listening\n");
 }
 
@@ -61,7 +62,7 @@ void response_stream_ender(async_fs_readstream* readstream, void* arg){
     async_http_response_end(res);
 }
 
-void http_server_on_request(async_incoming_http_request* req, async_http_outgoing_response* res){
+void http_server_on_request(async_http_server* http_server, async_incoming_http_request* req, async_http_outgoing_response* res, void* arg){
     //vector* req_data_vector = create_vector(5, 2);
     //async_incoming_http_request_on_data(req, data_handler, req_data_vector);
     //async_incoming_http_request_on_end(req, end_handler, req_data_vector);

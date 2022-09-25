@@ -16,6 +16,7 @@ copy_shared:
 	sudo cp $(ASYNC_SHARED_LIB_NAME) /usr/lib
 
 move_shared:
+	sudo cp $(ASYNC_SHARED_LIB_NAME) /usr/local/lib
 	sudo mv $(ASYNC_SHARED_LIB_NAME) /usr/lib
 
 #compile library code into shared library and put it into directory where shared libs go
@@ -23,6 +24,7 @@ deliver_shared:
 	make lib_obj_files
 	make shared_lib
 	make move_shared
+	make copy_headers
 
 #move source and header files (only headers need to be moved) into include directory so they can be used in different projects (with angle brackets (<>))
 copy_headers:
@@ -39,10 +41,16 @@ chat_server:
 	gcc test_code/chat_server.c -o exec/chat_server -lasynC
 
 chat_client:
-	gcc test_code/chat_client.c -o exec/chat_client -lasynC -lpthread
+	gcc test_code/chat_client.c -o exec/chat_client -lasynC
+
+chat_client_raw: $(LIBRARY_OBJS) chat_client.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/chat_client.o -o exec/chat_client $(CFLAGS)
 
 http_test:
 	gcc test_code/http_test.c -o exec/http_test -lasynC
+
+http_test_raw: $(LIBRARY_OBJS) http_test.o
+	gcc $(LIBRARY_OBJ_FOLDER) obj/http_test.o -o exec/http_test $(CFLAGS)
 
 upload_server: 
 	gcc test_code/upload_server.c -o exec/upload_server -lasynC

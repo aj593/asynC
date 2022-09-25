@@ -24,7 +24,7 @@ int is_defer_queue_empty(){
 */
 
 //TODO: also make thread_pool_destroy() function to terminate all threads
-void thread_pool_init(){
+void thread_pool_init(void){
     linked_list_init(&task_queue);
     linked_list_init(&defer_task_queue);
 
@@ -35,7 +35,7 @@ void thread_pool_init(){
 }
 
 //TODO: is this best way to destroy threads?
-void thread_pool_destroy(){
+void thread_pool_destroy(void){
     for(int i = 0; i < NUM_THREADS; i++){
         event_node* thread_term_node = create_event_node(sizeof(task_block), NULL, NULL); //TODO: use create_task_node instead eventually?
         task_block* destroy_task = (task_block*)thread_term_node->data_ptr;
@@ -97,11 +97,12 @@ void create_thread_task(size_t thread_task_size, void(*thread_task_func)(void*),
     curr_task_block->is_done_ptr = &new_thread_task_info->is_done;
     curr_task_block->task_handler = thread_task_func;
     curr_task_block->async_task_info = (void*)(curr_task_block + 1);
+    curr_task_block->event_node_ptr = event_queue_node;
     task_info_struct_ptr->async_task_info = curr_task_block->async_task_info;
 
     //TODO: use defer enqueue event here?
-    defer_enqueue_event(event_queue_node);
-    //enqueue_event(event_queue_node);
+    enqueue_deferred_event(event_queue_node);
+    //enqueue_idle_event(event_queue_node);
     defer_enqueue_task(thread_task_node);
 }
 
@@ -169,13 +170,12 @@ void* task_waiter(void* arg){
 
         //TODO: make it take pointer to task block instead of actual struct?
         exec_task_block->task_handler(exec_task_block->async_task_info);
-        //TODO: dont do this change it, dont do non-null check before
+        //TODO: dont do this, change it, dont do non-null check before
         if(exec_task_block->is_done_ptr != NULL){
             *exec_task_block->is_done_ptr = 1;
         }
-        
 
-        //destroy_task_node(curr_task);
+        //migrate_idle_to_execute_queue(exec_task_block->event_node_ptr);
     }
 
     pthread_exit(NULL);

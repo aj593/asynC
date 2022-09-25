@@ -285,7 +285,7 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     client_side_http_transaction_info* http_client_transaction_ptr = (client_side_http_transaction_info*)http_request_transaction_tracker_node->data_ptr;
     http_client_transaction_ptr->request_info = request_info;
     http_client_transaction_ptr->request_info->http_msg_socket = newly_connected_socket;
-    enqueue_event(http_request_transaction_tracker_node);
+    enqueue_polling_event(http_request_transaction_tracker_node);
     
     async_socket_on_data(newly_connected_socket, socket_data_handler, http_client_transaction_ptr, 1, 1);
 }
@@ -322,7 +322,7 @@ int client_http_request_event_checker(event_node* client_http_transaction_node){
         destroy_event_node(response_node);
     }
 
-    return 0; //TODO: make request exit when underlying tcp socket is closed?
+    return !http_info->request_info->http_msg_socket->is_open; //TODO: make better to condition for when to close request
 }
 
 void client_http_request_finish_handler(event_node* finished_http_request_node){
@@ -343,6 +343,7 @@ void socket_data_handler(async_socket* socket, buffer* initial_response_buffer, 
 
     response_buffer_info* new_response_item = (response_buffer_info*)http_response_parser_task.async_task_info;
     new_response_item->transaction_info = client_http_info;
+    new_response_item->transaction_info->response_info = create_incoming_response();
     new_response_item->response_buffer = initial_response_buffer;
     new_response_item->socket_ptr = socket;
 
@@ -359,7 +360,7 @@ void socket_data_handler(async_socket* socket, buffer* initial_response_buffer, 
 
 void http_parse_response_task(void* response_item_ptr){
     response_buffer_info* curr_response_item = (response_buffer_info*)response_item_ptr;
-    curr_response_item->transaction_info->response_info = create_incoming_response();
+    //curr_response_item->transaction_info->response_info = create_incoming_response();
     async_http_incoming_response* new_incoming_http_response = curr_response_item->transaction_info->response_info;
 
     /*

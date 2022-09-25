@@ -139,6 +139,21 @@ void read_task_handler(void* read_task){
 
 //TODO: reimplement this with system calls?
 void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, void(*read_callback)(int, buffer*, int, void*), void* cb_arg){
+    new_task_node_info read_ptr_info;
+    create_thread_task(sizeof(async_read_info), read_task_handler, read_cb_interm, &read_ptr_info);
+    thread_task_info* read_task_info = read_ptr_info.new_thread_task_info;
+    read_task_info->fd = read_fd;
+    read_task_info->buffer = read_buff_ptr;
+    read_task_info->fs_cb.read_callback = read_callback;
+    read_task_info->cb_arg = cb_arg;
+    
+    async_read_info* read_info = (async_read_info*)read_ptr_info.async_task_info;
+    read_info->read_fd = read_fd;
+    read_info->buffer = read_buff_ptr;
+    read_info->max_num_bytes_to_read = num_bytes_to_read;
+    read_info->num_bytes_read_ptr = &read_task_info->num_bytes;
+
+    /*
     uring_lock();
 
     struct io_uring_sqe* read_sqe = get_sqe();
@@ -168,21 +183,8 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, void(
     }
     else{
         uring_unlock();
-
-        new_task_node_info read_ptr_info;
-        create_thread_task(sizeof(async_read_info), read_task_handler, read_cb_interm, &read_ptr_info);
-        thread_task_info* read_task_info = read_ptr_info.new_thread_task_info;
-        read_task_info->fd = read_fd;
-        read_task_info->buffer = read_buff_ptr;
-        read_task_info->fs_cb.read_callback = read_callback;
-        read_task_info->cb_arg = cb_arg;
-        
-        async_read_info* read_info = (async_read_info*)read_ptr_info.async_task_info;
-        read_info->read_fd = read_fd;
-        read_info->buffer = read_buff_ptr;
-        read_info->max_num_bytes_to_read = num_bytes_to_read;
-        read_info->num_bytes_read_ptr = &read_task_info->num_bytes;
     }
+    */
 }
 
 void pread_task_handler(void* async_pread_task_info){
@@ -197,6 +199,22 @@ void pread_task_handler(void* async_pread_task_info){
 }
 
 void async_pread(int pread_fd, buffer* pread_buffer_ptr, int num_bytes_to_read, int offset, void(*read_callback)(int, buffer*, int, void*), void* cb_arg){
+    new_task_node_info pread_ptr_info;
+    create_thread_task(sizeof(async_read_info), pread_task_handler, read_cb_interm, &pread_ptr_info);
+    thread_task_info* pread_task_info = pread_ptr_info.new_thread_task_info;
+    pread_task_info->fd = pread_fd;
+    pread_task_info->buffer = pread_buffer_ptr;
+    pread_task_info->fs_cb.read_callback = read_callback;
+    pread_task_info->cb_arg = cb_arg;
+
+    async_read_info* pread_info = (async_read_info*)pread_ptr_info.async_task_info;
+    pread_info->read_fd = pread_fd;
+    pread_info->buffer = pread_buffer_ptr;
+    pread_info->max_num_bytes_to_read = num_bytes_to_read;
+    pread_info->offset = offset;
+    pread_info->num_bytes_read_ptr = &pread_task_info->num_bytes;
+
+    /*
     uring_lock();
 
     struct io_uring_sqe* pread_sqe = get_sqe();
@@ -225,22 +243,8 @@ void async_pread(int pread_fd, buffer* pread_buffer_ptr, int num_bytes_to_read, 
     }
     else{
         uring_unlock();
-
-        new_task_node_info pread_ptr_info;
-        create_thread_task(sizeof(async_read_info), pread_task_handler, read_cb_interm, &pread_ptr_info);
-        thread_task_info* pread_task_info = pread_ptr_info.new_thread_task_info;
-        pread_task_info->fd = pread_fd;
-        pread_task_info->buffer = pread_buffer_ptr;
-        pread_task_info->fs_cb.read_callback = read_callback;
-        pread_task_info->cb_arg = cb_arg;
-
-        async_read_info* pread_info = (async_read_info*)pread_ptr_info.async_task_info;
-        pread_info->read_fd = pread_fd;
-        pread_info->buffer = pread_buffer_ptr;
-        pread_info->max_num_bytes_to_read = num_bytes_to_read;
-        pread_info->offset = offset;
-        pread_info->num_bytes_read_ptr = &pread_task_info->num_bytes;
     }
+    */
 }
 
 typedef struct write_task {
@@ -458,6 +462,17 @@ void close_task_handler(void* close_task){
 }
 
 void async_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg){
+    new_task_node_info close_ptr_info;
+    create_thread_task(sizeof(async_close_info), close_task_handler, close_cb_interm, &close_ptr_info);
+    thread_task_info* close_task_info = close_ptr_info.new_thread_task_info;
+    close_task_info->fs_cb.close_callback = close_callback;
+    close_task_info->cb_arg = cb_arg;
+
+    async_close_info* close_params = (async_close_info*)close_ptr_info.async_task_info;
+    close_params->fd = close_fd;
+    close_params->success_ptr = &close_task_info->success;
+
+    /*
     uring_lock();
 
     struct io_uring_sqe* close_sqe = get_sqe();
@@ -482,15 +497,6 @@ void async_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg){
     }
     else{
         uring_unlock();
-
-        new_task_node_info close_ptr_info;
-        create_thread_task(sizeof(async_close_info), close_task_handler, close_cb_interm, &close_ptr_info);
-        thread_task_info* close_task_info = close_ptr_info.new_thread_task_info;
-        close_task_info->fs_cb.close_callback = close_callback;
-        close_task_info->cb_arg = cb_arg;
-
-        async_close_info* close_params = (async_close_info*)close_ptr_info.async_task_info;
-        close_params->fd = close_fd;
-        close_params->success_ptr = &close_task_info->success;
     }
+    */
 }

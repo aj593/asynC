@@ -13,6 +13,7 @@
 //typedef struct socket_channel async_socket;
 typedef struct async_container_vector async_container_vector;
 typedef struct async_socket async_socket;
+typedef struct event_node event_node;
 
 #ifndef ASYNC_SERVER_TYPE
 #define ASYNC_SERVER_TYPE
@@ -37,6 +38,7 @@ typedef struct async_server {
     void(*accept_task)(void*);
     unsigned int num_listen_event_listeners;
     unsigned int num_connection_event_listeners;
+    event_node* event_node_ptr;
 } async_server;
 
 #endif

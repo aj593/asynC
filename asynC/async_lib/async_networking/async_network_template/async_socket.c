@@ -5,12 +5,16 @@
 
 #include <pthread.h>
 #include <string.h>
-#include <stdio.h>
 #include <unistd.h>
+#include <sys/epoll.h>
+
+#include <stdio.h>
+#include <stdio.h>
 
 #include "../../../async_runtime/event_loop.h"
 #include "../../../async_runtime/io_uring_ops.h"
 #include "../../../async_runtime/thread_pool.h"
+#include "../../../async_runtime/async_epoll_ops.h"
 #include "../../event_emitter_module/async_event_emitter.h"
 
 typedef struct buffer_data_callback {
@@ -38,6 +42,7 @@ typedef struct socket_shutdown_cb_holder {
 int socket_event_checker(event_node* socket_event_node);
 void destroy_socket(event_node* socket_node);
 void async_send(async_socket* sending_socket);
+void async_recv(async_socket* receiving_socket);
 
 //#define MAX_IP_ADDR_LEN 50
 //TODO: change these values back later
@@ -93,32 +98,52 @@ void async_socket_emit_connection(async_socket* connected_socket){
     );
 }
 
+void socket_event_handler(event_node* curr_socket_node, uint32_t events){
+    socket_info* new_socket_info = (socket_info*)curr_socket_node->data_ptr;
+    async_socket* curr_socket = new_socket_info->socket;
+
+    if(events & EPOLLIN){
+        curr_socket->data_available_to_read = 1;
+
+        if(
+            curr_socket->is_readable &&
+            !curr_socket->is_reading &&
+            curr_socket->is_open &&
+            curr_socket->is_flowing &&
+            !curr_socket->set_to_destroy
+            //!curr_socket->peer_closed
+        ){
+            async_recv(curr_socket);
+        }
+    }
+    if(events & EPOLLRDHUP){
+        //TODO: emit peer-closed event here?
+        curr_socket->peer_closed = 1;
+        curr_socket->is_writable = 0;
+
+        //TODO: need this here?, add condition in case socket allows or doesn't allow half-closure?
+        if(!curr_socket->data_available_to_read){
+            curr_socket->is_open = 0;
+
+            migrate_idle_to_polling_queue(curr_socket_node);
+        }
+
+        //epoll_mod(curr_socket->socket_fd, curr_socket_node, EPOLLIN);
+    }
+}
+
 void thread_connect_interm(event_node* connect_task_node){
     thread_task_info* connect_data = (thread_task_info*)connect_task_node->data_ptr;
     async_socket* connected_socket = connect_data->rw_socket;
-    //TODO: move value assignments further down?
-    connected_socket->socket_fd = connect_data->fd;
-    connected_socket->is_open = 1;
-    connected_socket->is_readable = 1;
-    connected_socket->is_writable = 1;
-    connected_socket->closed_self = 0;
 
-    //TODO: move this call elsewhere?
-    async_socket_emit_connection(connected_socket);
-
-    if(connected_socket->socket_fd != -1){
-        event_node* new_socket_node = create_event_node(sizeof(socket_info), destroy_socket, socket_event_checker);
-        socket_info* new_socket_info = (socket_info*)new_socket_node->data_ptr;
-        new_socket_info->socket = connected_socket;
-
-        epoll_add(
-            connected_socket->socket_fd, 
-            &connected_socket->data_available_to_read,
-            &connected_socket->peer_closed
-        );
-
-        enqueue_event(new_socket_node);
+    if(connected_socket->socket_fd == -1){
+        //TODO: emit error for connection here?
+        return;
     }
+
+    create_socket_node(&connected_socket, connect_data->fd);
+
+    async_socket_emit_connection(connected_socket);
 }
 
 async_socket* async_connect(async_connect_info* connect_info_ptr, void(*connect_task_handler)(void*), void(*connection_handler)(async_socket*, void*), void* connection_arg){
@@ -144,28 +169,34 @@ async_socket* async_connect(async_connect_info* connect_info_ptr, void(*connect_
     return new_socket;
 }
 
-event_node* create_socket_node(int new_socket_fd){
+event_node* create_socket_node(async_socket** new_socket_dbl_ptr, int new_socket_fd){
+    if(*new_socket_dbl_ptr == NULL){
+        *new_socket_dbl_ptr = async_socket_create();
+    }
+    async_socket* new_socket = *new_socket_dbl_ptr;
+
     event_node* socket_event_node = create_event_node(sizeof(socket_info), destroy_socket, socket_event_checker);
-    enqueue_event(socket_event_node); //TODO: make defer enqueue event?
+    
+    //TODO: is this valid and right place to set socket event node ptr?
+    new_socket->socket_event_node_ptr = socket_event_node;
+    
+    socket_event_node->event_handler = socket_event_handler;
+    enqueue_idle_event(socket_event_node);
 
     socket_info* new_socket_info = (socket_info*)socket_event_node->data_ptr;
-    async_socket* new_socket = async_socket_create();
     new_socket_info->socket = new_socket;
+
+    epoll_add(new_socket_fd, socket_event_node, EPOLLIN | EPOLLRDHUP);
 
     new_socket->socket_fd = new_socket_fd;
     new_socket->is_open = 1;
     new_socket->is_readable = 1;
     new_socket->is_writable = 1;
 
-    epoll_add(
-        new_socket_fd, 
-        &new_socket->data_available_to_read,
-        &new_socket->peer_closed
-    );
-
     return socket_event_node;
 }
 
+//this struct is used for both end and close events for async sockets
 typedef struct socket_end_info {
     async_socket* socket_ptr;
     int end_return_val;
@@ -211,20 +242,67 @@ void async_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)
     );
 }
 
+void socket_close_routine(union event_emitter_callbacks socket_close_cb, void* data, void* arg){
+    void(*socket_close_callback)(async_socket*, int, void*) = socket_close_cb.async_socket_close_handler;
+
+    socket_end_info* curr_socket_end_info = (socket_end_info*)data;
+    socket_close_callback(
+        curr_socket_end_info->socket_ptr,
+        curr_socket_end_info->end_return_val,
+        arg
+    );
+}
+
+void async_socket_emit_close(async_socket* closed_socket, int close_return_val){
+    socket_end_info new_socket_close_info = {
+        .socket_ptr = closed_socket,
+        .end_return_val = close_return_val
+    };
+
+    async_event_emitter_emit_event(
+        closed_socket->event_listener_vector,
+        async_socket_close_event,
+        &new_socket_close_info
+    );
+}
+
+void async_socket_on_close(async_socket* closing_socket, void(*socket_close_callback)(async_socket*, int, void*), void* arg, int is_temp_subscriber, int num_times_listen){
+    union event_emitter_callbacks new_socket_close_callback = { .async_socket_close_handler = socket_close_callback };
+
+    async_event_emitter_on_event(
+        &closing_socket->event_listener_vector,
+        async_socket_close_event,
+        new_socket_close_callback,
+        socket_close_routine,
+        &closing_socket->num_close_listeners,
+        arg,
+        is_temp_subscriber,
+        num_times_listen
+    );
+}
+
 void async_socket_end(async_socket* ending_socket){
     ending_socket->is_writable = 0;
     ending_socket->closed_self = 1;
+
+    if(!ending_socket->is_writing){
+        migrate_idle_to_polling_queue(ending_socket->socket_event_node_ptr);
+    }
 }
 
 void async_socket_destroy(async_socket* socket_to_destroy){
-    socket_to_destroy->is_open = 0;
+    socket_to_destroy->set_to_destroy = 1;
+    socket_to_destroy->is_readable = 0;
+    socket_to_destroy->is_writable = 0;
+    //TODO: add if-statement here to set is_open = 0 if not currently reading or writing?
+
+    migrate_idle_to_polling_queue(socket_to_destroy->socket_event_node_ptr);
 }
 
-void uring_shutdown_interm(event_node* shutdown_uring_node){
-    uring_stats* shutdown_uring_info = (uring_stats*)shutdown_uring_node->data_ptr;
-    async_socket* closed_socket = shutdown_uring_info->rw_socket;
+void after_socket_close(int success, void* arg){
+    async_socket* closed_socket = (async_socket*)arg;
 
-    async_socket_emit_end(closed_socket, shutdown_uring_info->return_val);
+    async_socket_emit_close(closed_socket, success);
 
     destroy_buffer(closed_socket->receive_buffer);
     
@@ -239,15 +317,28 @@ void uring_shutdown_interm(event_node* shutdown_uring_node){
 
     pthread_mutex_destroy(&closed_socket->send_stream_lock);
 
-    //free(shutdown_vector);
     free(closed_socket->event_listener_vector);
 
-    if(closed_socket->server_ptr != NULL){
-        closed_socket->server_ptr->num_connections--;
+    async_server* server_ptr = closed_socket->server_ptr;
+    if(server_ptr != NULL){
+        server_ptr->num_connections--;
+
+        if(!server_ptr->is_listening && server_ptr->num_connections == 0){
+            migrate_idle_to_polling_queue(server_ptr->event_node_ptr);
+        }
     }
 
-    //TODO: add async_close call here?
     free(closed_socket);
+}
+
+void uring_shutdown_interm(event_node* shutdown_uring_node){
+    uring_stats* shutdown_uring_info = (uring_stats*)shutdown_uring_node->data_ptr;
+    async_socket* closed_socket = shutdown_uring_info->rw_socket;
+
+    async_socket_emit_end(closed_socket, shutdown_uring_info->return_val);
+
+    //TODO: add async_close call here?
+    async_close(closed_socket->socket_fd, after_socket_close, closed_socket);
 }
 
 void async_shutdown(async_socket* closing_socket){
@@ -262,7 +353,7 @@ void async_shutdown(async_socket* closing_socket){
         shutdown_uring_data->is_done = 0;
         //shutdown_uring_data->fd = closing_socket->socket_fd;
         shutdown_uring_data->rw_socket = closing_socket;
-        defer_enqueue_event(shutdown_uring_node);
+        enqueue_deferred_event(shutdown_uring_node);
 
         io_uring_prep_shutdown(
             socket_shutdown_sqe, 
@@ -279,11 +370,11 @@ void async_shutdown(async_socket* closing_socket){
     }
 }
 
-#include <stdio.h>
-
+/*
 void close_cb(int result, void* arg){
 
 }
+*/
 
 void destroy_socket(event_node* socket_node){
     socket_info* destroyed_socket_info = (socket_info*)socket_node->data_ptr;
@@ -294,6 +385,7 @@ void destroy_socket(event_node* socket_node){
     async_shutdown(socket_ptr);
 }
 
+/*
 buffer_callback_t make_new_data_handler_item(void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber){
     buffer_callback_t new_data_handler_item = {
         .curr_data_handler = new_data_handler,
@@ -304,6 +396,7 @@ buffer_callback_t make_new_data_handler_item(void(*new_data_handler)(async_socke
 
     return new_data_handler_item;
 }
+*/
 
 typedef struct socket_data_info {
     async_socket* curr_socket_ptr;
@@ -368,9 +461,12 @@ void uring_recv_interm(event_node* uring_recv_node){
 
     //in case nonblocking recv() call did not read anything
     if(recv_uring_info->return_val == 0){
-        //TODO: don't need this if-statement here because socket event checker takes care of this case?
+        //TODO: may not need this if-statement here because socket event checker takes care of this case?
         if(reading_socket->peer_closed){
+            reading_socket->is_readable = 0;
             reading_socket->is_open = 0; //TODO: make extra field member in async_socket struct "is_no_longer_reading" instead of this?
+
+            migrate_idle_to_polling_queue(reading_socket->socket_event_node_ptr);
         }
 
         return;
@@ -400,7 +496,7 @@ void async_recv(async_socket* receiving_socket){
         recv_uring_data->is_done = 0;
         recv_uring_data->fd = receiving_socket->socket_fd;
         recv_uring_data->buffer = receiving_socket->receive_buffer;
-        defer_enqueue_event(recv_uring_node);
+        enqueue_deferred_event(recv_uring_node);
 
         io_uring_prep_recv(
             recv_sqe, 
@@ -425,39 +521,25 @@ int socket_event_checker(event_node* socket_event_node){
     socket_info* checked_socket_info = (socket_info*)socket_event_node->data_ptr;
     async_socket* checked_socket = checked_socket_info->socket;
 
-    //TODO: use this to check if peer is closed, set socket to no longer be writable?
-    if(checked_socket->peer_closed){
-        checked_socket->is_writable = 0;
-
-        //TODO: need this here?, add condition in case socket allows or doesn't allow half-closure?
-        if(!checked_socket->data_available_to_read){
-            checked_socket->is_open = 0;
-        }
-    }
-
     if(
-        !checked_socket->is_writable
-        && !checked_socket->is_writing
-        && checked_socket->send_stream.size == 0
-        && checked_socket->closed_self
+        //case for when socket calls socket_destroy()
+        (
+            checked_socket->set_to_destroy &&
+            !checked_socket->is_reading &&
+            !checked_socket->is_writing
+        )
+            ||
+        //case for when socket calls socket_end()
+        (
+            !checked_socket->is_writable &&
+            checked_socket->closed_self &&
+            !checked_socket->is_reading &&
+            !checked_socket->is_writing &&
+            checked_socket->send_stream.size == 0
+        )
     ){
         checked_socket->is_open = 0;
     }
-
-    if(
-        checked_socket->data_available_to_read
-        && !checked_socket->is_reading 
-        && checked_socket->is_open
-        && checked_socket->is_flowing
-    ){
-        async_recv(checked_socket);
-    }
-
-    pthread_mutex_lock(&checked_socket->send_stream_lock);
-    if(checked_socket->send_stream.size > 0 && !checked_socket->is_writing && checked_socket->is_open){
-        async_send(checked_socket);
-    }
-    pthread_mutex_unlock(&checked_socket->send_stream_lock);
 
     return !checked_socket->is_open;
 }
@@ -465,7 +547,6 @@ int socket_event_checker(event_node* socket_event_node){
 void uring_send_interm(event_node* send_event_node){
     uring_stats* uring_info = (uring_stats*)send_event_node->data_ptr;
     async_socket* written_socket = uring_info->rw_socket;
-    written_socket->is_writing = 0;
     destroy_buffer(uring_info->buffer);
 
     void (*send_callback)(async_socket*, void*) = uring_info->fs_cb.send_callback;
@@ -473,11 +554,32 @@ void uring_send_interm(event_node* send_event_node){
         //int success = uring_info->return_val;
         send_callback(uring_info->rw_socket, uring_info->cb_arg);
     }
+
+    //TODO: make these if-else statements neater?
+    if(
+        written_socket->send_stream.size > 0 && 
+        written_socket->is_open &&
+        !written_socket->set_to_destroy
+    ){
+        async_send(written_socket);
+    }
+    else{
+        written_socket->is_writing = 0;
+        if(written_socket->send_stream.size == 0){
+            //TODO: emit drain event here?
+
+            //TODO: check if written_socket not writable also?
+            if(written_socket->closed_self){
+                //move socket event node to polling queue
+                migrate_idle_to_polling_queue(written_socket->socket_event_node_ptr);
+            }
+        }
+    }
 }
 
 //TODO: take away cb_arg param from async_send() call???
 void async_send(async_socket* sending_socket){
-    sending_socket->is_writing = 1; //TODO: move this inside async_send instead?
+    sending_socket->is_writing = 1;
         
     //TODO: move this code inside async_send()?
     event_node* send_buffer_node = remove_first(&sending_socket->send_stream); 
@@ -497,7 +599,7 @@ void async_send(async_socket* sending_socket){
         send_uring_data->buffer = send_buffer_info.buffer_data;
         send_uring_data->fs_cb.send_callback = send_buffer_info.send_callback;
         //send_uring_data->cb_arg = cb_arg; //TODO: need this cb arg here?
-        defer_enqueue_event(send_uring_node);
+        enqueue_deferred_event(send_uring_node);
 
         io_uring_prep_send(
             send_sqe,
@@ -565,4 +667,10 @@ void async_socket_write(async_socket* writing_socket, buffer* buffer_to_write, i
 
     socket_buffer_info* socket_buffer_node_info = (socket_buffer_info*)curr_buffer_node->data_ptr;
     socket_buffer_node_info->send_callback = send_callback;
+
+    pthread_mutex_lock(&writing_socket->send_stream_lock);
+    if(!writing_socket->is_writing && writing_socket->is_open){
+        async_send(writing_socket);
+    }
+    pthread_mutex_unlock(&writing_socket->send_stream_lock);
 }

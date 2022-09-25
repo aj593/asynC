@@ -5,6 +5,7 @@
 #include "../../../async_runtime/event_loop.h"
 #include "../../../async_runtime/io_uring_ops.h"
 #include "../../event_emitter_module/async_event_emitter.h"
+#include "../../../async_runtime/async_epoll_ops.h"
 
 #include <sys/epoll.h>
 #include <stdlib.h>
@@ -86,34 +87,45 @@ void async_server_listen(async_server* listening_server, async_listen_info* curr
     //TODO: assign success_ptr?
 }
 
+void async_server_event_handler(event_node* server_info_node, uint32_t events){
+    server_info* server_info_ptr = (server_info*)server_info_node->data_ptr;
+    async_server* curr_server = server_info_ptr->listening_server;
+
+    if(events & EPOLLIN){
+        curr_server->has_connection_waiting = 1;
+
+        if(
+            curr_server->is_listening && 
+            curr_server->has_connection_waiting && 
+            !curr_server->is_currently_accepting
+        ){
+        curr_server->is_currently_accepting = 1;
+        async_accept(curr_server);
+    }
+    }
+}
+
 void listen_cb_interm(event_node* listen_node){
     //TODO: add error checking here
     thread_task_info* listen_node_info = (thread_task_info*)listen_node->data_ptr;
     async_server* newly_listening_server = listen_node_info->listening_server;
     newly_listening_server->is_listening = 1;
 
-    epoll_add(
-        newly_listening_server->listening_socket,
-        &newly_listening_server->has_connection_waiting,
-        NULL
-    );
-
     async_server_emit_listen(newly_listening_server);
 
     event_node* server_node = create_event_node(sizeof(server_info), destroy_server, server_accept_connections);
+    newly_listening_server->event_node_ptr = server_node;
+    server_node->event_handler = async_server_event_handler;
     server_info* server_info_ptr = (server_info*)server_node->data_ptr;
     server_info_ptr->listening_server = listen_node_info->listening_server;
-    enqueue_event(server_node);
+    enqueue_idle_event(server_node);
+
+    epoll_add(server_info_ptr->listening_server->listening_socket, server_node, EPOLLIN);
 }
 
 int server_accept_connections(event_node* server_event_node){
     server_info* node_server_info = (server_info*)server_event_node->data_ptr;
     async_server* listening_server = node_server_info->listening_server;
-
-    if(listening_server->is_listening && listening_server->has_connection_waiting && !listening_server->is_currently_accepting){
-        listening_server->is_currently_accepting = 1;
-        async_accept(listening_server);
-    }
 
     return !listening_server->is_listening && listening_server->num_connections == 0;
 }
@@ -124,6 +136,7 @@ void destroy_server(event_node* server_node){
     //TODO: do other cleanups? remove items from each vector?
     
     free(destroying_server->event_listeners_vector);
+    free(destroying_server);
 }
 
 //TODO: make extra param for accept() callback?
@@ -149,9 +162,11 @@ void post_accept_interm(event_node* accept_node){
         return;
     }
 
-    event_node* socket_event_node = create_socket_node(thread_accept_info_ptr->fd);
-    socket_info* new_socket_info = (socket_info*)socket_event_node->data_ptr;
-    async_socket* new_socket_ptr = new_socket_info->socket;
+    async_socket* new_socket_ptr = NULL;
+    event_node* socket_event_node = create_socket_node(&new_socket_ptr, thread_accept_info_ptr->fd);
+    if(socket_event_node == NULL){
+        //TODO: print error and return early
+    }
 
     accepting_server->num_connections++;
     new_socket_ptr->server_ptr = accepting_server;

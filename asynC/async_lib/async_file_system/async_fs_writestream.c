@@ -180,7 +180,7 @@ async_fs_writestream* create_fs_writestream(char* filename){
     event_node* writestream_node = create_event_node(sizeof(fs_writestream_info), writestream_finish_handler, is_writestream_done);
     fs_writestream_info* writestream_ptr_info = (fs_writestream_info*)writestream_node->data_ptr;
     writestream_ptr_info->writestream_info = new_writestream;
-    enqueue_event(writestream_node);
+    enqueue_polling_event(writestream_node);
 
     return new_writestream;
 }

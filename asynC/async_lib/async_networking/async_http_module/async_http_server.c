@@ -3,6 +3,7 @@
 #include "../async_tcp_module/async_tcp_server.h"
 #include "../async_tcp_module/async_tcp_socket.h"
 #include "../../../async_runtime/thread_pool.h"
+#include "../../event_emitter_module/async_event_emitter.h"
 #include "http_utility.h"
 
 #include <string.h>
@@ -21,9 +22,11 @@ void http_request_emit_end(async_incoming_http_request* http_request);
 typedef struct async_http_server {
     async_tcp_server* wrapped_tcp_server;
     //TODO: make vector to listen to general events
-    async_container_vector* request_handler_vector;
-    async_container_vector* listen_handler_vector;
+    //async_container_vector* request_handler_vector;
+    //async_container_vector* listen_handler_vector;
     async_container_vector* event_listener_vector;
+    unsigned int num_listen_listeners;
+    unsigned int num_request_listeners;
 } async_http_server;
 
 typedef struct async_incoming_http_request {
@@ -36,6 +39,7 @@ typedef struct async_incoming_http_request {
     size_t content_length;
     size_t num_payload_bytes_read;
     int has_emitted_end;
+    int is_socket_closed;
     async_container_vector* data_handler;
     async_container_vector* end_handler;
 } async_incoming_http_request;
@@ -75,38 +79,60 @@ typedef struct listen_callback_t {
 async_http_server* async_create_http_server(){
     async_http_server* new_http_server = (async_http_server*)calloc(1, sizeof(async_http_server));
     new_http_server->wrapped_tcp_server = async_tcp_server_create();
-    new_http_server->request_handler_vector = async_container_vector_create(2, 2, sizeof(http_request_handler));
-    new_http_server->listen_handler_vector = async_container_vector_create(2, 2, sizeof(listen_callback_t));
+    new_http_server->event_listener_vector = create_event_listener_vector();
+    //new_http_server->request_handler_vector = async_container_vector_create(2, 2, sizeof(http_request_handler));
+    //new_http_server->listen_handler_vector = async_container_vector_create(2, 2, sizeof(listen_callback_t));
 
     return new_http_server;
 }
 
-async_incoming_http_request* create_http_request(){
-    async_incoming_http_request* new_http_request = (async_incoming_http_request*)calloc(1, sizeof(async_incoming_http_request));
+void http_request_init(async_incoming_http_request* new_http_request, async_socket* new_socket_ptr){
+    //async_incoming_http_request* new_http_request = (async_incoming_http_request*)calloc(1, sizeof(async_incoming_http_request));
+    new_http_request->tcp_socket_ptr = new_socket_ptr;
     new_http_request->header_map = ht_create();
     new_http_request->data_handler = async_container_vector_create(2, 2, sizeof(request_data_callback));
     new_http_request->end_handler = async_container_vector_create(2, 2, sizeof(request_end_callback));
     linked_list_init(&new_http_request->buffer_data_list);
-
-    return new_http_request;
 }
 
-async_http_outgoing_response* create_http_response(){
-    async_http_outgoing_response* new_http_response = (async_http_outgoing_response*)calloc(1, sizeof(async_http_outgoing_response));
+void http_response_init(async_http_outgoing_response* new_http_response, async_socket* new_socket_ptr){
+    //async_http_outgoing_response* new_http_response = (async_http_outgoing_response*)calloc(1, sizeof(async_http_outgoing_response));
+    new_http_response->tcp_socket_ptr = new_socket_ptr;
     new_http_response->response_header_table = ht_create();
     new_http_response->status_code = 200;
     new_http_response->status_message = "OK";
     new_http_response->header_buffer = (char*)malloc(sizeof(char) * HEADER_BUFF_SIZE);
     new_http_response->header_buff_len = 0;
     new_http_response->header_buff_capacity = HEADER_BUFF_SIZE;
+}
 
-    return new_http_response;
+void http_server_listen_routine(union event_emitter_callbacks curr_listen_callback, void* data, void* arg){
+    void(*http_listen_callback)(async_http_server*, void*) = curr_listen_callback.http_server_listen_callback;
+
+    async_http_server* listening_http_server = (async_http_server*)data;
+    http_listen_callback(listening_http_server, arg);
+}
+
+void async_http_server_on_listen(async_http_server* listening_http_server, void(*http_listen_callback)(async_http_server*, void*), void* arg, int is_temp_subscriber, int num_times_listen){
+    union event_emitter_callbacks http_server_listen_callback = { .http_server_listen_callback = http_listen_callback };
+
+    async_event_emitter_on_event(
+        &listening_http_server->event_listener_vector,
+        async_http_server_listen_event,
+        http_server_listen_callback,
+        http_server_listen_routine,
+        &listening_http_server->num_listen_listeners,
+        arg,
+        is_temp_subscriber,
+        num_times_listen
+    );
 }
 
 //TODO: add async_http_server* and void* arg in listen callback
-void async_http_server_listen(async_http_server* listening_server, int port, char* ip_address, void(*http_listen_callback)()){
+void async_http_server_listen(async_http_server* listening_server, int port, char* ip_address, void(*http_listen_callback)(async_http_server*, void*), void* arg){
     if(http_listen_callback != NULL){
         //TODO: add new listen struct item into listen vector here
+        async_http_server_on_listen(listening_server, http_listen_callback, arg, 0, 0);
     }
     
     async_tcp_server_listen(
@@ -118,13 +144,18 @@ void async_http_server_listen(async_http_server* listening_server, int port, cha
     );
 }
 
+void async_http_server_emit_listen(async_http_server* listening_server){
+    async_event_emitter_emit_event(
+        listening_server->event_listener_vector,
+        async_http_server_listen_event,
+        &listening_server
+    );
+}
+
 void after_http_listen(async_tcp_server* server, void* cb_arg){
     async_http_server* listening_server = (async_http_server*)cb_arg;
     
-    async_container_vector* http_listen_vector = listening_server->listen_handler_vector;
-    for(int i = 0; i < async_container_vector_size(http_listen_vector); i++){
-        //TODO: execute all listeners callbacks here
-    }
+    async_http_server_emit_listen(listening_server);
 
     async_server_on_connection(
         listening_server->wrapped_tcp_server,
@@ -155,7 +186,22 @@ typedef struct async_http_transaction {
 void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* arg){
     async_http_server* listening_http_server = (async_http_server*)arg;
 
+    //TODO: move some of this code further down where other fields of new_http_parser_info are also assigned?
     http_parser_info* new_http_parser_info = (http_parser_info*)malloc(sizeof(http_parser_info));
+    void* http_req_res_single_block = calloc(1, sizeof(async_incoming_http_request) + sizeof(async_http_outgoing_response));
+    new_http_parser_info->http_request_info = (async_incoming_http_request*)http_req_res_single_block;
+    new_http_parser_info->http_response_info = (async_http_outgoing_response*)(new_http_parser_info->http_request_info + 1);
+
+    http_request_init(new_http_parser_info->http_request_info, read_socket);
+    http_response_init(new_http_parser_info->http_response_info, read_socket);
+
+    async_socket_on_data(
+        read_socket,
+        http_request_socket_data_handler,
+        new_http_parser_info->http_request_info,
+        0,
+        0
+    );
 
     new_task_node_info request_handle_info;
     create_thread_task(sizeof(http_parser_info*), http_parse_task, http_parser_interm, &request_handle_info);
@@ -174,21 +220,7 @@ int http_transaction_event_checker(event_node* http_node);
 
 void http_parse_task(void* http_info){
     http_parser_info** info_to_parse = (http_parser_info**)http_info;
-    (*info_to_parse)->http_request_info = create_http_request();
     async_incoming_http_request* curr_request_info = (*info_to_parse)->http_request_info;
-    curr_request_info->tcp_socket_ptr = (*info_to_parse)->client_socket;
-    
-    async_socket_on_data(
-        curr_request_info->tcp_socket_ptr,
-        http_request_socket_data_handler,
-        curr_request_info,
-        0,
-        0
-    );
-    
-    (*info_to_parse)->http_response_info = create_http_response();
-    async_http_outgoing_response* curr_response_info = (*info_to_parse)->http_response_info;
-    curr_response_info->tcp_socket_ptr = (*info_to_parse)->client_socket;
 
     parse_http(
         (*info_to_parse)->http_header_data,
@@ -206,25 +238,36 @@ void http_parse_task(void* http_info){
     //free(*info_to_parse);
 }
 
+void after_http_request_socket_close(async_socket* underlying_tcp_socket, int close_status, void* http_req_arg){
+    async_incoming_http_request* curr_closing_request = (async_incoming_http_request*)http_req_arg;
+    curr_closing_request->is_socket_closed = 1;
+}
+
+void async_http_server_emit_request(http_parser_info* curr_http_info){
+    async_event_emitter_emit_event(
+        curr_http_info->http_server->event_listener_vector,
+        async_http_server_request_event,
+        curr_http_info
+    );
+}
+
 void http_parser_interm(event_node* http_parser_node){
     thread_task_info* http_parse_data = (thread_task_info*)http_parser_node->data_ptr;
     http_parser_info* http_parse_ptr = http_parse_data->http_parse_info;
     async_incoming_http_request* http_request = http_parse_ptr->http_request_info;
     async_http_outgoing_response* http_response = http_parse_ptr->http_response_info;
 
-    async_container_vector* request_handler_vector = http_parse_ptr->http_server->request_handler_vector;
-    http_request_handler curr_request_handler;
-    for(int i = 0; i < async_container_vector_size(request_handler_vector); i++){
-        async_container_vector_get(request_handler_vector, i, &curr_request_handler);
-        void(*request_handler_callback)(async_incoming_http_request*, async_http_outgoing_response*) = curr_request_handler.http_request_callback;
-        request_handler_callback(http_request, http_response);
-    }
+    //emitting request event
+    async_http_server_emit_request(http_parse_ptr);
 
     event_node* http_transaction_tracker_node = create_event_node(sizeof(async_http_transaction), http_transaction_handler, http_transaction_event_checker);
     async_http_transaction* http_transaction_ptr = (async_http_transaction*)http_transaction_tracker_node->data_ptr;
     http_transaction_ptr->http_request_info = http_request;
     http_transaction_ptr->http_response_info = http_response;
-    enqueue_event(http_transaction_tracker_node);
+    enqueue_polling_event(http_transaction_tracker_node);
+
+    //TODO: is this good place to register close event for underlying tcp socket of http request?
+    async_socket_on_close(http_parse_ptr->client_socket, after_http_request_socket_close, http_request, 0, 0);
 }
 
 int http_transaction_event_checker(event_node* http_node){
@@ -247,7 +290,8 @@ int http_transaction_event_checker(event_node* http_node){
         http_request_emit_end(curr_http_request_info);
     }
 
-    return 0; //TODO: return 1 (true) when underlying socket is closed?
+    //TODO: close when underlying socket is closed, or when response end is closed?
+    return curr_http_request_info->is_socket_closed;
 }
 
 void http_transaction_handler(event_node* http_node){
@@ -340,13 +384,31 @@ void async_incoming_http_request_on_end(async_incoming_http_request* http_req, v
     async_container_vector_add_last(end_handler_vector, &req_end_callback);
 }
 
-void async_http_server_on_request(async_http_server* async_http_server, void(*request_handler)(async_incoming_http_request*, async_http_outgoing_response*)){
-    http_request_handler request_handler_item = {
-        .http_request_callback = request_handler
-    };
+void async_http_server_request_routine(union event_emitter_callbacks curr_request_callback, void* data, void* arg){
+    void(*curr_request_handler)(async_http_server*, async_incoming_http_request*, async_http_outgoing_response*, void*) = curr_request_callback.request_handler;
 
-    async_container_vector** http_request_handler_vector = &async_http_server->request_handler_vector;
-    async_container_vector_add_last(http_request_handler_vector, &request_handler_item);
+    http_parser_info* curr_http_parse_info = (http_parser_info*)data;
+    curr_request_handler(
+        curr_http_parse_info->http_server,
+        curr_http_parse_info->http_request_info,
+        curr_http_parse_info->http_response_info,
+        arg
+    );
+}
+
+void async_http_server_on_request(async_http_server* http_server, void(*request_handler)(async_http_server*, async_incoming_http_request*, async_http_outgoing_response*, void*), void* arg, int is_temp_subscriber, int num_times_listen){
+    union event_emitter_callbacks http_request_callback = { .request_handler = request_handler };
+
+    async_event_emitter_on_event(
+        &http_server->event_listener_vector,
+        async_http_server_request_event,
+        http_request_callback,
+        async_http_server_request_routine,
+        &http_server->num_request_listeners,
+        arg,
+        is_temp_subscriber,
+        num_times_listen
+    );
 }
 
 void async_http_response_set_status_code(async_http_outgoing_response* curr_http_response, int status_code){
@@ -411,7 +473,7 @@ void async_http_response_set_header(async_http_outgoing_response* curr_http_resp
     );
 }
 
-void async_http_response_write_head(async_http_outgoing_response* curr_http_response){
+void async_http_response_write_head(async_http_outgoing_response* curr_http_response, int status_code, char* status_msg){
     if(curr_http_response->was_header_written){
         return;
     }
@@ -425,11 +487,13 @@ void async_http_response_write_head(async_http_outgoing_response* curr_http_resp
         total_header_len += strlen(curr_key_str) + strlen(curr_val_str) + 4;
     }
 
+    curr_http_response->status_code = status_code;
     int max_status_code_str_len = 10;
     char status_code_str[max_status_code_str_len];
     int status_code_len = snprintf(status_code_str, max_status_code_str_len, "%d", curr_http_response->status_code);
     total_header_len += status_code_len;
 
+    curr_http_response->status_message = status_msg;
     int status_msg_len = strlen(curr_http_response->status_message);
     total_header_len += status_msg_len;
 
@@ -489,7 +553,11 @@ void async_http_response_write_head(async_http_outgoing_response* curr_http_resp
 
 void async_http_response_write(async_http_outgoing_response* curr_http_response, buffer* response_data){
     if(!curr_http_response->was_header_written){
-        async_http_response_write_head(curr_http_response);
+        async_http_response_write_head(
+            curr_http_response,
+            curr_http_response->status_code,
+            curr_http_response->status_message
+        );
     }
 
     async_socket_write(
@@ -502,7 +570,11 @@ void async_http_response_write(async_http_outgoing_response* curr_http_response,
 
 void async_http_response_end(async_http_outgoing_response* curr_http_response){
     if(!curr_http_response->was_header_written){
-        async_http_response_write_head(curr_http_response);
+        async_http_response_write_head(
+            curr_http_response,
+            curr_http_response->status_code,
+            curr_http_response->status_message
+        );
     }
 
     async_socket_end(curr_http_response->tcp_socket_ptr);

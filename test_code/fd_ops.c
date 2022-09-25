@@ -34,6 +34,7 @@ void response_handler(async_http_incoming_response* response, void* arg){
 void data_handler(async_ipc_socket* ipc_socket, buffer* buffer, void* arg){
     //char* internal_buffer = get_internal_buffer(buffer);
     //printf("data from child is %s\n", internal_buffer);
+
     /*
     write(
         STDOUT_FILENO,
@@ -67,15 +68,14 @@ void ipc_connection_handler(async_ipc_socket* socket, void* arg){
 int main(){
     asynC_init();
 
-    /*
     //async_dns_lookup("www.tire.com", after_dns, NULL);
     http_request_options options;
     async_http_request_options_init(&options);
     //async_http_request_options_set_header(&options, "foo", "bar");
     //async_http_request_options_set_header(&options, "spaghetti", "meatball");
-    async_outgoing_http_request* new_request = async_http_request("example.com", "GET", &options, response_handler, NULL);
-    */
+    async_outgoing_http_request* new_request = async_http_request("youtube.com", "GET", &options, response_handler, NULL);
     
+    /*
     for(int i = 0; i < 5; i++){
         //char* array[] = {"/bin/ls", NULL};
         //async_child_process* new_process = async_child_process_exec("/bin/ls", array);
@@ -94,7 +94,7 @@ int main(){
         async_child_process_on_stderr_connection(new_cmd_process, ipc_connection_handler, NULL);
         async_child_process_on_custom_connection(new_cmd_process, ipc_connection_handler, NULL);
     }
-    
+    */
 
     //call_async_open();
     //callchmod();

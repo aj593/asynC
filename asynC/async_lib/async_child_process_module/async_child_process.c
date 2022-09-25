@@ -300,9 +300,11 @@ void fork_task(char* server_name){
     thread_pool_init();
     io_uring_init();
 
-    event_node* socket_event_node = create_socket_node(child_socket_fd);
-    socket_info* socket_info_ptr = (socket_info*)socket_event_node->data_ptr;
-    async_ipc_socket* custom_data_socket = (async_ipc_socket*)socket_info_ptr->socket;
+    async_ipc_socket* custom_data_socket = NULL;
+    event_node* socket_event_node = create_socket_node(&custom_data_socket, child_socket_fd);
+    if(socket_event_node == NULL){
+        //TODO: emit error and return early?
+    }
 
     child_func->child_func_ptr(custom_data_socket);
 
