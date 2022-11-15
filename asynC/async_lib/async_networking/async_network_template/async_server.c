@@ -99,9 +99,9 @@ void async_server_event_handler(event_node* server_info_node, uint32_t events){
             curr_server->has_connection_waiting && 
             !curr_server->is_currently_accepting
         ){
-        curr_server->is_currently_accepting = 1;
-        async_accept(curr_server);
-    }
+            curr_server->is_currently_accepting = 1;
+            async_accept(curr_server);
+        }
     }
 }
 

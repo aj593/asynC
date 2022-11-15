@@ -117,14 +117,14 @@ void chat_connection_handler(async_socket* socket, void* arg){
     printf("client connected!\n");
     async_socket_on_data(socket, chat_data_handler, NULL, 0, 0);
 
-    /*
     char mary[] = "mary had a little lamb as white as snow\n";
     buffer* mary_buffer = buffer_from_array(mary, sizeof(mary));
-    async_socket_write(socket, mary_buffer, get_buffer_capacity(mary_buffer), NULL);
+    //async_socket_write(socket, mary_buffer, get_buffer_capacity(mary_buffer), NULL);
     //async_socket_end(socket);
-    async_socket_destroy(socket);
+    //async_socket_destroy(socket);
     destroy_buffer(mary_buffer);
-    */
+
+    //async_socket* new_socket = async_tcp_connect("127.0.0.1", 3000, chat_connection_handler, NULL);
 }
 
 buffer* read_and_make_buffer(){
@@ -180,15 +180,18 @@ int main(int argc, char* argv[]){
     asynC_init();
 
     async_socket* new_socket = async_tcp_connect("127.0.0.1", 3000, chat_connection_handler, NULL);
+    int arr_len = 2;
+    buffer* hi_buf = buffer_from_array("hi", arr_len);
+    async_socket_write(new_socket, hi_buf, arr_len, NULL);
     
-    pthread_t thread_id;
-    pthread_create(&thread_id, NULL, chat_input, new_socket);
+    //pthread_t thread_id;
+    //pthread_create(&thread_id, NULL, chat_input, new_socket);
     
     //async_connect("93.184.216.34", 80, connection_done_handler, NULL);
 
     asynC_cleanup();
 
-    pthread_join(thread_id, NULL);
+    //pthread_join(thread_id, NULL);
 
     return 0;
 }

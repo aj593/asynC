@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <asynC/asynC.h>
 
@@ -71,10 +72,17 @@ int main(){
     //async_dns_lookup("www.tire.com", after_dns, NULL);
     http_request_options options;
     async_http_request_options_init(&options);
-    //async_http_request_options_set_header(&options, "foo", "bar");
-    //async_http_request_options_set_header(&options, "spaghetti", "meatball");
-    async_outgoing_http_request* new_request = async_http_request("youtube.com", "GET", &options, response_handler, NULL);
-    
+    char foo[] = "foofhfhfhjfhjfjhfhjfhjfhjfjhfhjfkjhfhjfk";
+    char bar[] = "barghjfhjkfhjkfgjhhjfjhfjhfkjhkfjhfjk";
+    async_http_request_options_set_header(&options, foo, bar);
+    async_http_request_options_set_header(&options, "spaghetti", "meatball");
+    int num_bytes = 100;
+    char custom_url[num_bytes];
+    printf("input a url:\n");
+    fgets(custom_url, num_bytes, stdin);
+    int url_len = strnlen(custom_url, num_bytes);
+    custom_url[url_len - 1] = '\0';
+    async_outgoing_http_request* new_request = async_http_request(custom_url, "GET", &options, response_handler, NULL);
     /*
     for(int i = 0; i < 5; i++){
         //char* array[] = {"/bin/ls", NULL};

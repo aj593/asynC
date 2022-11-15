@@ -36,10 +36,18 @@ void destroy_buffer(buffer* buff_ptr){
 }
 
 void* get_internal_buffer(buffer* buff_ptr){
+    if(buff_ptr == NULL){
+        return NULL;
+    }
+
     return buff_ptr->internal_buffer;
 }
 
 size_t get_buffer_capacity(buffer* buff_ptr){
+    if(buff_ptr == NULL){
+        return 0;
+    }
+
     return buff_ptr->capacity;
 }
 
@@ -74,17 +82,24 @@ buffer* buffer_copy_num_bytes(buffer* buffer_to_copy, size_t num_bytes_to_copy){
 buffer* buffer_concat(buffer* buffer_array[], int num_buffers){
     size_t total_capacity = 0;
     for(int i = 0; i < num_buffers; i++){
-        total_capacity += get_buffer_capacity(buffer_array[i]);
+        buffer* curr_buffer = buffer_array[i];
+        if(curr_buffer != NULL){
+            total_capacity += get_buffer_capacity(curr_buffer);
+        }
     }
 
     buffer* new_concat_buffer = create_buffer(total_capacity, sizeof(char));
     char* internal_concat_buffer = (char*)get_internal_buffer(new_concat_buffer);
 
     for(int i = 0; i < num_buffers; i++){
-        size_t curr_buff_capacity = get_buffer_capacity(buffer_array[i]);
-        void* source_internal_buffer = get_internal_buffer(buffer_array[i]);
-        memcpy(internal_concat_buffer, source_internal_buffer, curr_buff_capacity);
-        internal_concat_buffer += curr_buff_capacity;
+        buffer* curr_buffer = buffer_array[i];
+
+        if(curr_buffer != NULL){
+            size_t curr_buff_capacity = get_buffer_capacity(curr_buffer);
+            void* source_internal_buffer = get_internal_buffer(curr_buffer);
+            memcpy(internal_concat_buffer, source_internal_buffer, curr_buff_capacity);
+            internal_concat_buffer += curr_buff_capacity;
+        }
     }
 
     return new_concat_buffer;

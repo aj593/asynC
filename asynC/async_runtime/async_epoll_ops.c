@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #define MAX_NUM_EPOLL_EVENTS 1024
+struct epoll_event curr_events[MAX_NUM_EPOLL_EVENTS];
 int epoll_fd;
 
 void async_epoll_init(void){
@@ -40,7 +41,6 @@ void epoll_remove(int op_fd){
 
 void epoll_check(void){
     //TODO: make if-statement only if there's at least one fd being monitored?
-    struct epoll_event curr_events[MAX_NUM_EPOLL_EVENTS];
     int num_fds = epoll_wait(epoll_fd, curr_events, MAX_NUM_EPOLL_EVENTS, 0);
 
     for(int i = 0; i < num_fds; i++){

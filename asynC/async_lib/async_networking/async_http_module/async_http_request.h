@@ -8,8 +8,8 @@ typedef struct http_request_options {
     char* http_version;
     hash_table* request_header_table;
     char* header_buffer;
-    int curr_header_capacity;
-    int curr_header_len;
+    size_t curr_header_capacity;
+    size_t curr_header_len;
 } http_request_options;
 
 typedef struct async_outgoing_http_request async_outgoing_http_request;

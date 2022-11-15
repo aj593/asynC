@@ -1,7 +1,13 @@
 #include "http_utility.h"
 
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+
+#define HEADER_BUFF_SIZE 50
+
+#define CRLF_STR "\r\n"
+#define CRLF_LEN 2
 
 //TODO: use library function instead?
 int str_to_num(char* num_str){
@@ -18,7 +24,7 @@ int str_to_num(char* num_str){
 }
 
 int is_number_str(char* num_str){
-    for(int i = 0; i < 20 && num_str[i] != '\0'; i++){
+    for(int i = 0; /*i < 20 &&*/ num_str[i] != '\0'; i++){
         if(!isdigit(num_str[i])){
             return 0;
         }
@@ -83,4 +89,141 @@ void parse_http(
         //TODO: need mutex lock here?
         prepend(http_data_list_ptr, new_request_data);
     }
+}
+
+buffer* get_http_buffer(hash_table* header_table_ptr, int* request_header_length){
+    hti request_header_iterator = ht_iterator(header_table_ptr);
+    while(ht_next(&request_header_iterator)){
+        int key_len = strlen(request_header_iterator.key);
+        int val_len = strlen((char*)request_header_iterator.value);
+        *request_header_length += key_len + val_len + 4;
+    }
+
+    buffer* http_request_header_buffer = create_buffer(*request_header_length, 1);
+    return http_request_header_buffer;
+}
+
+void async_http_set_header(
+    char* header_key, 
+    char* header_val, 
+    char** string_buffer_ptr,
+    size_t* buffer_len_ptr,
+    size_t* buffer_cap_ptr,
+    hash_table* header_table
+){
+    size_t key_len = strlen(header_key);
+    size_t value_len = strlen(header_val);
+    size_t new_header_len = key_len + value_len + 2;
+    size_t new_buffer_len = *buffer_len_ptr + new_header_len;
+    //TODO: make sure indexing with capacity and lengths work?
+    if(new_buffer_len > *buffer_cap_ptr){
+        size_t new_buffer_capacity = *buffer_cap_ptr + HEADER_BUFF_SIZE;
+        while(new_buffer_len > new_buffer_capacity){
+            new_buffer_capacity += HEADER_BUFF_SIZE;
+        }
+
+        char* new_header_str = (char*)realloc(*string_buffer_ptr, *buffer_cap_ptr + HEADER_BUFF_SIZE);
+        if(new_header_str == NULL){
+            //TODO: error handling here
+            return;
+        }
+
+        *string_buffer_ptr = new_header_str;
+        *buffer_cap_ptr = new_buffer_capacity;
+    }
+
+    char* string_buffer = *string_buffer_ptr;
+
+    strncpy(
+        string_buffer + *buffer_len_ptr, 
+        header_key,
+        key_len
+    );
+
+    size_t key_offset = *buffer_len_ptr;
+
+    *buffer_len_ptr += key_len;
+
+    string_buffer[*buffer_len_ptr] = '\0';
+    *buffer_len_ptr = *buffer_len_ptr + 1;
+
+    strncpy(
+        string_buffer + *buffer_len_ptr,
+        header_val,
+        value_len
+    );
+
+    size_t val_offset = *buffer_len_ptr;
+
+    *buffer_len_ptr += value_len;
+
+    string_buffer[*buffer_len_ptr] = '\0';
+    *buffer_len_ptr = *buffer_len_ptr + 1;
+
+    ht_set(
+        header_table, 
+        string_buffer + key_offset, 
+        string_buffer + val_offset
+    );
+}
+
+void copy_start_line(
+    char** buffer_internal_array, 
+    char* first_str,
+    int first_str_len,
+    char* second_str,
+    int second_str_len,
+    char* third_str,
+    int third_str_len
+){
+    //copy start line into buffer
+    memcpy(*buffer_internal_array, first_str, first_str_len);
+    *buffer_internal_array += first_str_len;
+
+    memcpy(*buffer_internal_array, " ", 1);
+    (*buffer_internal_array)++;
+
+    memcpy(*buffer_internal_array, second_str, second_str_len);
+    *buffer_internal_array += second_str_len;
+
+    memcpy(*buffer_internal_array, " ", 1);
+    (*buffer_internal_array)++;
+
+    memcpy(*buffer_internal_array, third_str, third_str_len);
+    *buffer_internal_array += third_str_len;
+    
+    int CRLF_len = 2;
+    memcpy(*buffer_internal_array, "\r\n", CRLF_len);
+    *buffer_internal_array += CRLF_len;
+}
+
+void copy_single_header_entry(char** destination_buffer, const char* key, char* value){
+    int curr_header_key_len = strlen(key);
+    memcpy(*destination_buffer, key, curr_header_key_len);
+    *destination_buffer += curr_header_key_len;
+
+    int colon_space_len = 2;
+    memcpy(*destination_buffer, ": ", colon_space_len);
+    *destination_buffer += colon_space_len;
+
+    int curr_header_val_len = strlen(value);
+    memcpy(*destination_buffer, value, curr_header_val_len);
+    *destination_buffer += curr_header_val_len;
+
+    memcpy(*destination_buffer, CRLF_STR, CRLF_LEN);
+    *destination_buffer += CRLF_LEN;
+}
+
+void copy_all_headers(char** destination_buffer, hash_table* header_table){
+    hti header_writer_iterator = ht_iterator(header_table);
+    while(ht_next(&header_writer_iterator)){
+        copy_single_header_entry(
+            destination_buffer, 
+            header_writer_iterator.key,
+            (char*)header_writer_iterator.value
+        );
+    }
+
+    memcpy(*destination_buffer, CRLF_STR, CRLF_LEN);
+    *destination_buffer += CRLF_LEN;
 }

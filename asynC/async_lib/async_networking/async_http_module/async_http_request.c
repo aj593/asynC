@@ -9,6 +9,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include <unistd.h>
 
@@ -35,6 +36,7 @@ typedef struct async_outgoing_http_request {
     void* response_arg;
     async_socket* http_msg_socket;
     linked_list request_write_list;
+    int connecting_port;
     char* host;
     char* url;
 } async_outgoing_http_request;
@@ -53,6 +55,7 @@ typedef struct client_side_http_transaction_info {
 async_outgoing_http_request* create_outgoing_http_request(void){
     async_outgoing_http_request* new_http_request = calloc(1, sizeof(async_outgoing_http_request));
     linked_list_init(&new_http_request->request_write_list);
+    new_http_request->connecting_port = 80;
 
     return new_http_request;
 }
@@ -84,13 +87,14 @@ void async_http_request_options_set_header(http_request_options* http_options_pt
         return;
     }
 
-    ht_set(
-        http_options_ptr->request_header_table,
+    async_http_set_header(
         header_key,
-        header_val
+        header_val,
+        &http_options_ptr->header_buffer,
+        &http_options_ptr->curr_header_len,
+        &http_options_ptr->curr_header_capacity,
+        http_options_ptr->request_header_table
     );
-
-    //TODO: also set copy strings in header buffer field
 }
 
 int str_starts_with(char* whole_string, char* starting_string){
@@ -116,10 +120,14 @@ void after_request_dns_callback(char ** ip_list, int num_ips, void * arg);
     
 //TODO: also parse ports if possible
 async_outgoing_http_request* async_http_request(char* host_url, char* http_method, http_request_options* options, void(*response_handler)(async_http_incoming_response*, void*), void* arg){
+    //create new request struct
     async_outgoing_http_request* new_http_request = create_outgoing_http_request();
+    
+    //set response event handler and extra arg
     new_http_request->response_handler = response_handler;
     new_http_request->response_arg = arg;
 
+    //find length of host url string and traverse backwards to find index of last period character
     size_t host_url_length = strnlen(host_url, LONGEST_ALLOWED_URL);
     int dot_index;
     for(dot_index = host_url_length; dot_index >= 0; dot_index--){
@@ -128,6 +136,38 @@ async_outgoing_http_request* async_http_request(char* host_url, char* http_metho
         }
     }
 
+    int found_nondigit_char = 0;
+    int colon_index = dot_index + 1;
+
+    while(colon_index < host_url_length){
+        if(host_url[colon_index] == ':'){
+            int curr_number_index = colon_index + 1;
+            int new_port = 0;
+
+            while(curr_number_index < host_url_length){
+                if(!isdigit(host_url[curr_number_index])){
+                    found_nondigit_char = 1;
+                    break;
+                }
+
+                int curr_digit = host_url[curr_number_index] - '0';
+                new_port = (new_port * 10) + curr_digit;
+
+                curr_number_index++;
+            }
+
+            if(!found_nondigit_char){
+                new_http_request->connecting_port = new_port;
+            }
+
+            break;
+        }
+
+        colon_index++;
+    }
+
+    //Traverse forward from index of last dot character to find index of first slash after this
+    //This is where the URL route will be
     int start_of_url_index;
     for(start_of_url_index = dot_index; start_of_url_index < host_url_length; start_of_url_index++){
         if(host_url[start_of_url_index] == '/'){
@@ -135,101 +175,70 @@ async_outgoing_http_request* async_http_request(char* host_url, char* http_metho
         }
     }
     
+    //Set the url length to be 1 by default if it's the root (the '/' character)
     int url_length = 1;
 
+    //TODO: able to condense the following code?
+    //If the index after the start of the url index is greater than the whole length
+    //the route is the root of the site (?)
     if(start_of_url_index + 1 > host_url_length){
         new_http_request->url = "/";
     }
+    //if not, the url length is the difference between the index at the end of the
+    //string and the index where the url starts
     else{
         url_length = host_url_length - start_of_url_index;
         new_http_request->url = &host_url[start_of_url_index];
     }
 
-    int first_slash_index;
-    for(first_slash_index = dot_index; first_slash_index >= 0; first_slash_index--){
-        if(host_url[first_slash_index] == '/'){
+    //Find the index where the first slash character appearing to the left of the dot is
+    int first_slash_index_before_dot;
+    for(first_slash_index_before_dot = dot_index; first_slash_index_before_dot >= 0; first_slash_index_before_dot--){
+        if(host_url[first_slash_index_before_dot] == '/'){
             break;
         }
     }
     
-    int host_str_len = start_of_url_index - first_slash_index - 1;
-    char* host_str = &host_url[first_slash_index + 1];
+    //the host string lenght is the difference between where 
+    //the first slash after it is and where the first slash before it is - 1
+    int host_str_len = colon_index - first_slash_index_before_dot - 1;
+    
+    //ptr to host string starts right after first slash before dot
+    char* host_str = &host_url[first_slash_index_before_dot + 1];
+    
+    //TODO: edge case where host string length is negative?? explain this??
+    //host string length may be negative if no slashes were in provided string
     if(host_str_len < 0){
         host_str_len = strnlen(host_str, LONGEST_ALLOWED_URL);
     }
+
+    //put host string into own separate string so it can be properly null terminated
     char host_str_copy[host_str_len + 1];
     strncpy(host_str_copy, host_str, host_str_len);
     host_str_copy[host_str_len] = '\0';
 
-
     int request_header_length = 22;
+
     request_header_length += host_str_len;
     int http_method_len = strnlen(http_method, 20);
     request_header_length += http_method_len + host_url_length;
 
-    hti request_header_iterator = ht_iterator(options->request_header_table);
-
-    while(ht_next(&request_header_iterator)){
-        int key_len = strlen(request_header_iterator.key);
-        int val_len = strlen(request_header_iterator.value);
-        request_header_length += key_len + val_len + 4;
-    }
-
-    buffer* http_request_header_buffer = create_buffer(request_header_length, 1);
-    char* internal_req_buffer = (char*)get_internal_buffer(http_request_header_buffer);
-    char* curr_req_buffer_ptr = internal_req_buffer;
+    buffer* http_request_header_buffer = get_http_buffer(options->request_header_table, &request_header_length);
+    char* curr_req_buffer_ptr = (char*)get_internal_buffer(http_request_header_buffer);
     
-    strncpy(curr_req_buffer_ptr, http_method, http_method_len);
-    curr_req_buffer_ptr += http_method_len;
-    strncpy(curr_req_buffer_ptr, " ", 1);
-    curr_req_buffer_ptr++;
-    
-    strncpy(curr_req_buffer_ptr, new_http_request->url, url_length);
-    curr_req_buffer_ptr += url_length;
-    strncpy(curr_req_buffer_ptr, " ", 1);
-    curr_req_buffer_ptr++;
+    copy_start_line(
+        &curr_req_buffer_ptr,
+        http_method,
+        http_method_len,
+        new_http_request->url,
+        url_length,
+        options->http_version,
+        strlen(options->http_version)
+    );
 
-    int http_version_len = 8;
-    strncpy(curr_req_buffer_ptr, options->http_version, http_version_len);
-    curr_req_buffer_ptr += http_version_len;
+    copy_single_header_entry(&curr_req_buffer_ptr, "Host", host_str);
 
-    int CRLF_len = 2;
-
-    strncpy(curr_req_buffer_ptr, "\r\n", CRLF_len);
-    curr_req_buffer_ptr += CRLF_len;
-
-    int host_key_len = 6;
-    strncpy(curr_req_buffer_ptr, "Host: ", host_key_len);
-    curr_req_buffer_ptr += host_key_len;
-
-    strncpy(curr_req_buffer_ptr, host_str, host_str_len);
-    curr_req_buffer_ptr += host_str_len;
-    
-    strncpy(curr_req_buffer_ptr, "\r\n", CRLF_len);
-    curr_req_buffer_ptr += CRLF_len;
-
-    hti header_writer_iterator = ht_iterator(options->request_header_table);
-    while(ht_next(&header_writer_iterator)){
-        int curr_key_len = strlen(header_writer_iterator.key);
-        char* val_str = (char*)header_writer_iterator.value;
-        int curr_val_len = strlen(val_str);
-
-        strncpy(curr_req_buffer_ptr, header_writer_iterator.key, curr_key_len);
-        curr_req_buffer_ptr += curr_key_len;
-
-        int colon_space_len = 2;
-        strncpy(curr_req_buffer_ptr, ": ", colon_space_len);
-        curr_req_buffer_ptr += colon_space_len;
-
-        strncpy(curr_req_buffer_ptr, val_str, curr_val_len);
-        curr_req_buffer_ptr += curr_val_len;
-
-        strncpy(curr_req_buffer_ptr, "\r\n", CRLF_len);
-        curr_req_buffer_ptr += CRLF_len;
-    }
-
-    strncpy(curr_req_buffer_ptr, "\r\n", CRLF_len);
-    curr_req_buffer_ptr += CRLF_len;
+    copy_all_headers(&curr_req_buffer_ptr, options->request_header_table);
 
     async_http_request_options_destroy(options);
 
@@ -258,7 +267,7 @@ void after_request_dns_callback(char** ip_list, int num_ips, void* arg){
     //TODO: write http info here instead of in http_request_connection_handler?
     /*async_socket* new_socket = */async_tcp_connect(
         new_connect_info->ip_list[new_connect_info->curr_index++],
-        80,
+        new_connect_info->http_request_info->connecting_port,
         http_request_connection_handler,
         new_connect_info
     );
@@ -282,6 +291,7 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
         client_http_request_finish_handler,
         client_http_request_event_checker
     );
+    
     client_side_http_transaction_info* http_client_transaction_ptr = (client_side_http_transaction_info*)http_request_transaction_tracker_node->data_ptr;
     http_client_transaction_ptr->request_info = request_info;
     http_client_transaction_ptr->request_info->http_msg_socket = newly_connected_socket;
@@ -362,14 +372,6 @@ void http_parse_response_task(void* response_item_ptr){
     response_buffer_info* curr_response_item = (response_buffer_info*)response_item_ptr;
     //curr_response_item->transaction_info->response_info = create_incoming_response();
     async_http_incoming_response* new_incoming_http_response = curr_response_item->transaction_info->response_info;
-
-    /*
-    async_socket_on_data(
-        curr_response_item->socket_ptr,
-        response_data_enqueuer,
-        curr_response_item->transaction_info->response_info
-    );
-    */
 
     parse_http(
         curr_response_item->response_buffer,

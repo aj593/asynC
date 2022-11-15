@@ -22,4 +22,27 @@ void parse_http(
     linked_list* http_data_list_ptr
 );
 
+void async_http_set_header(
+    char* header_key, 
+    char* header_val, 
+    char** string_buffer,
+    size_t* buffer_len_ptr,
+    size_t* buffer_cap_ptr,
+    hash_table* header_table
+);
+
+void copy_start_line(
+    char** buffer_internal_array, 
+    char* first_str,
+    int first_str_len,
+    char* second_str,
+    int second_str_len,
+    char* third_str,
+    int third_str_len
+);
+
+buffer* get_http_buffer(hash_table* header_table_ptr, int* request_header_length);
+void copy_single_header_entry(char** destination_buffer, const char* key, char* value);
+void copy_all_headers(char** destination_buffer, hash_table* header_table);
+
 #endif

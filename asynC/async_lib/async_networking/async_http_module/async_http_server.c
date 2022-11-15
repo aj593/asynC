@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <stdio.h>
 
+//TODO: find cross-platform/standard version to do this?
+#include <sys/time.h>
+
 void after_http_listen(async_tcp_server* http_server, void* cb_arg);
 void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* arg);
 void http_parse_task(void* http_info);
@@ -27,6 +30,8 @@ typedef struct async_http_server {
     async_container_vector* event_listener_vector;
     unsigned int num_listen_listeners;
     unsigned int num_request_listeners;
+    float header_timeout;
+    float request_timeout;
 } async_http_server;
 
 typedef struct async_incoming_http_request {
@@ -42,6 +47,7 @@ typedef struct async_incoming_http_request {
     int is_socket_closed;
     async_container_vector* data_handler;
     async_container_vector* end_handler;
+    buffer* request_buffer;
 } async_incoming_http_request;
 
 typedef struct async_http_outgoing_response {
@@ -80,6 +86,8 @@ async_http_server* async_create_http_server(){
     async_http_server* new_http_server = (async_http_server*)calloc(1, sizeof(async_http_server));
     new_http_server->wrapped_tcp_server = async_tcp_server_create();
     new_http_server->event_listener_vector = create_event_listener_vector();
+    new_http_server->header_timeout = 10.0f;
+    new_http_server->request_timeout = 60.0f;
     //new_http_server->request_handler_vector = async_container_vector_create(2, 2, sizeof(http_request_handler));
     //new_http_server->listen_handler_vector = async_container_vector_create(2, 2, sizeof(listen_callback_t));
 
@@ -152,9 +160,16 @@ void async_http_server_emit_listen(async_http_server* listening_server){
     );
 }
 
+typedef struct {
+    async_http_server* listening_http_server;
+    buffer* old_buffer_data;
+    int found_double_CRLF;
+    struct timeval starting_time;
+} http_server_and_buffer;
+
 void after_http_listen(async_tcp_server* server, void* cb_arg){
     async_http_server* listening_server = (async_http_server*)cb_arg;
-    
+
     async_http_server_emit_listen(listening_server);
 
     async_server_on_connection(
@@ -167,7 +182,13 @@ void after_http_listen(async_tcp_server* server, void* cb_arg){
 }
 
 void http_connection_handler(async_socket* new_http_socket, void* arg){
-    async_socket_on_data(new_http_socket, handle_request_data, arg, 1, 1);
+    async_http_server* http_server_arg = (async_http_server*)arg;
+
+    http_server_and_buffer* new_server_and_buffer = (http_server_and_buffer*)calloc(1, sizeof(http_server_and_buffer));
+    new_server_and_buffer->listening_http_server = http_server_arg;
+    gettimeofday(&new_server_and_buffer->starting_time, NULL);
+
+    async_socket_on_data(new_http_socket, handle_request_data, new_server_and_buffer, 0, 0);
 }
 
 typedef struct http_parser_info {
@@ -183,8 +204,43 @@ typedef struct async_http_transaction {
     async_http_outgoing_response* http_response_info;
 } async_http_transaction;
 
+//TODO: remove this data handler using off_data() after implementing it?
 void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* arg){
-    async_http_server* listening_http_server = (async_http_server*)arg;
+    http_server_and_buffer* http_server_and_buffer_info = (http_server_and_buffer*)arg;
+    
+    if(http_server_and_buffer_info->found_double_CRLF){
+        return;
+    }
+
+    int old_data_capacity = get_buffer_capacity(http_server_and_buffer_info->old_buffer_data);
+    int new_data_capacity = get_buffer_capacity(data_buffer);
+
+    int char_buffer_check_length = old_data_capacity + new_data_capacity + 1;
+    
+    char* old_data_internal_buffer = get_internal_buffer(http_server_and_buffer_info->old_buffer_data);
+    char* new_data_internal_buffer = get_internal_buffer(data_buffer);
+
+    char char_buffer_check_array[char_buffer_check_length];
+    strncpy(char_buffer_check_array, old_data_internal_buffer, old_data_capacity);
+    strncpy(char_buffer_check_array + old_data_capacity, new_data_internal_buffer, new_data_capacity);
+    char_buffer_check_array[char_buffer_check_length - 1] = '\0';
+
+    int num_buffers_to_concat = 2;
+    buffer* buffer_array[] = {
+        http_server_and_buffer_info->old_buffer_data,
+        data_buffer,
+    };
+
+    buffer* new_concatted_buffer = buffer_concat(buffer_array, num_buffers_to_concat);
+    http_server_and_buffer_info->old_buffer_data = new_concatted_buffer;
+    destroy_buffer(data_buffer);
+
+    if(strstr(char_buffer_check_array, "\r\n\r\n") == NULL){
+        return;
+    }
+
+    http_server_and_buffer_info->found_double_CRLF = 1;
+    //TODO: remove data handler here
 
     //TODO: move some of this code further down where other fields of new_http_parser_info are also assigned?
     http_parser_info* new_http_parser_info = (http_parser_info*)malloc(sizeof(http_parser_info));
@@ -208,8 +264,8 @@ void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* a
     http_parser_info** http_parser_info_ptr = (http_parser_info**)request_handle_info.async_task_info;
     *http_parser_info_ptr = new_http_parser_info;
     new_http_parser_info->client_socket = read_socket;
-    new_http_parser_info->http_header_data = data_buffer;
-    new_http_parser_info->http_server = listening_http_server;
+    new_http_parser_info->http_header_data = new_concatted_buffer;
+    new_http_parser_info->http_server = http_server_and_buffer_info->listening_http_server;
 
     thread_task_info* curr_request_parser_node = request_handle_info.new_thread_task_info;
     curr_request_parser_node->http_parse_info = *http_parser_info_ptr;
@@ -289,6 +345,22 @@ int http_transaction_event_checker(event_node* http_node){
     ){
         http_request_emit_end(curr_http_request_info);
     }
+
+    //TODO: fix this code so it works in this polling event checker function for incoming http request
+    /*
+    struct timeval curr_time;
+    gettimeofday(&curr_time, NULL);
+    time_t elapsed_seconds           = curr_time.tv_sec  - http_server_and_buffer_info->starting_time.tv_sec;
+    suseconds_t elapsed_microseconds = curr_time.tv_usec - http_server_and_buffer_info->starting_time.tv_usec;
+    float total_elapsed_time = elapsed_seconds + elapsed_microseconds;
+
+    if(total_elapsed_time > http_server_and_buffer_info->listening_http_server->header_timeout){
+        destroy_buffer(new_concatted_buffer);
+        //TODO: remove event handler
+
+        async_socket_destroy(read_socket);
+    }
+    */
 
     //TODO: close when underlying socket is closed, or when response end is closed?
     return curr_http_request_info->is_socket_closed;
@@ -420,56 +492,13 @@ void async_http_response_set_status_msg(async_http_outgoing_response* curr_http_
 }
 
 void async_http_response_set_header(async_http_outgoing_response* curr_http_response, char* header_key, char* header_val){
-    size_t key_len = strlen(header_key);
-    size_t value_len = strlen(header_val);
-    size_t new_header_len = key_len + value_len + 2;
-    //TODO: make sure indexing with capacity and lengths work?
-    if(curr_http_response->header_buff_len + new_header_len > curr_http_response->header_buff_capacity){
-        char* new_header_str = (char*)realloc(curr_http_response->header_buffer, curr_http_response->header_buff_capacity + HEADER_BUFF_SIZE);
-        if(new_header_str == NULL){
-            //TODO: error handling here
-            return;
-        }
-
-        curr_http_response->header_buff_capacity += HEADER_BUFF_SIZE;
-    }
-
-    strncpy(
-        curr_http_response->header_buffer + curr_http_response->header_buff_len, 
+    async_http_set_header(
         header_key,
-        key_len
-    );
-
-    size_t key_offset = curr_http_response->header_buff_len;
-
-    curr_http_response->header_buff_len += key_len;
-
-    curr_http_response->header_buffer[curr_http_response->header_buff_len++] = '\0';
-
-    strncpy(
-        curr_http_response->header_buffer + curr_http_response->header_buff_len,
         header_val,
-        value_len
-    );
-
-    size_t val_offset = curr_http_response->header_buff_len;
-
-    curr_http_response->header_buff_len += value_len;
-
-    curr_http_response->header_buffer[curr_http_response->header_buff_len++] = '\0';
-
-    /*
-    write(
-        STDOUT_FILENO,
-        curr_http_response->header_buffer,
-        curr_http_response->header_buff_len
-    );
-    */
-
-    ht_set(
-        curr_http_response->response_header_table, 
-        curr_http_response->header_buffer + key_offset, 
-        curr_http_response->header_buffer + val_offset
+        &curr_http_response->header_buffer,
+        &curr_http_response->header_buff_len,
+        &curr_http_response->header_buff_capacity,
+        curr_http_response->response_header_table
     );
 }
 
@@ -479,13 +508,6 @@ void async_http_response_write_head(async_http_outgoing_response* curr_http_resp
     }
 
     int total_header_len = 14; //TODO: explained why initialized to 14?
-
-    hti response_table_iter = ht_iterator(curr_http_response->response_header_table);
-    while(ht_next(&response_table_iter)){
-        const char* curr_key_str = response_table_iter.key;
-        char* curr_val_str = (char*)response_table_iter.value;
-        total_header_len += strlen(curr_key_str) + strlen(curr_val_str) + 4;
-    }
 
     curr_http_response->status_code = status_code;
     int max_status_code_str_len = 10;
@@ -497,47 +519,22 @@ void async_http_response_write_head(async_http_outgoing_response* curr_http_resp
     int status_msg_len = strlen(curr_http_response->status_message);
     total_header_len += status_msg_len;
 
-    buffer* response_header_buffer = create_buffer(total_header_len, sizeof(char));
+    char* HTTP_version_str = "HTTP/1.1";
+
+    buffer* response_header_buffer = get_http_buffer(curr_http_response->response_header_table, &total_header_len);
     char* buffer_internal_array = (char*)get_internal_buffer(response_header_buffer);
 
-    //copy start line into buffer
-    int http_version_len = 9;
-    strncpy(buffer_internal_array, "HTTP/1.1 ", http_version_len);
-    buffer_internal_array += http_version_len;
+    copy_start_line(
+        &buffer_internal_array,
+        HTTP_version_str,
+        strlen(HTTP_version_str),
+        status_code_str,
+        status_code_len,
+        curr_http_response->status_message,
+        status_msg_len
+    );
 
-    strncpy(buffer_internal_array, status_code_str, status_code_len);
-    buffer_internal_array += status_code_len;
-
-    strncpy(buffer_internal_array, " ", 1);
-    buffer_internal_array++;
-
-    strncpy(buffer_internal_array, curr_http_response->status_message, status_msg_len);
-    buffer_internal_array += status_msg_len;
-    
-    int CRLF_len = 2;
-    strncpy(buffer_internal_array, "\r\n", CRLF_len);
-    buffer_internal_array += CRLF_len;
-
-    hti res_table_iter_copier = ht_iterator(curr_http_response->response_header_table);
-    while(ht_next(&res_table_iter_copier)){
-        int curr_header_key_len = strlen(res_table_iter_copier.key);
-        strncpy(buffer_internal_array, res_table_iter_copier.key, curr_header_key_len);
-        buffer_internal_array += curr_header_key_len;
-
-        int colon_space_len = 2;
-        strncpy(buffer_internal_array, ": ", colon_space_len);
-        buffer_internal_array += colon_space_len;
-
-        int curr_header_val_len = strlen(res_table_iter_copier.value);
-        strncpy(buffer_internal_array, res_table_iter_copier.value, curr_header_val_len);
-        buffer_internal_array += curr_header_val_len;
-
-        strncpy(buffer_internal_array, "\r\n", CRLF_len);
-        buffer_internal_array += CRLF_len;
-    } 
-
-    strncpy(buffer_internal_array, "\r\n", CRLF_len);
-    buffer_internal_array += CRLF_len;
+    copy_all_headers(&buffer_internal_array, curr_http_response->response_header_table);
 
     async_socket_write(
         curr_http_response->tcp_socket_ptr,

@@ -9,7 +9,6 @@
 #include <sys/epoll.h>
 
 #include <stdio.h>
-#include <stdio.h>
 
 #include "../../../async_runtime/event_loop.h"
 #include "../../../async_runtime/io_uring_ops.h"
@@ -51,6 +50,8 @@ void async_recv(async_socket* receiving_socket);
 
 async_socket* async_socket_create(void){
     async_socket* new_socket = (async_socket*)calloc(1, sizeof(async_socket));
+    new_socket->is_writable = 1;
+    
     /*
     new_socket->domain = domain;
     new_socket->type = type;
@@ -144,6 +145,12 @@ void thread_connect_interm(event_node* connect_task_node){
     create_socket_node(&connected_socket, connect_data->fd);
 
     async_socket_emit_connection(connected_socket);
+
+    pthread_mutex_lock(&connected_socket->send_stream_lock);
+    if(!connected_socket->is_writing && connected_socket->is_open && connected_socket->send_stream.size > 0){
+        async_send(connected_socket);
+    }
+    pthread_mutex_unlock(&connected_socket->send_stream_lock);
 }
 
 async_socket* async_connect(async_connect_info* connect_info_ptr, void(*connect_task_handler)(void*), void(*connection_handler)(async_socket*, void*), void* connection_arg){
@@ -191,7 +198,6 @@ event_node* create_socket_node(async_socket** new_socket_dbl_ptr, int new_socket
     new_socket->socket_fd = new_socket_fd;
     new_socket->is_open = 1;
     new_socket->is_readable = 1;
-    new_socket->is_writable = 1;
 
     return socket_event_node;
 }
@@ -581,7 +587,6 @@ void uring_send_interm(event_node* send_event_node){
 void async_send(async_socket* sending_socket){
     sending_socket->is_writing = 1;
         
-    //TODO: move this code inside async_send()?
     event_node* send_buffer_node = remove_first(&sending_socket->send_stream); 
     socket_buffer_info send_buffer_info = *((socket_buffer_info*)send_buffer_node->data_ptr); // dont copy and use pointer instead, and defer for destruction of destroy_event_node until later?
     destroy_event_node(send_buffer_node);
@@ -669,7 +674,7 @@ void async_socket_write(async_socket* writing_socket, buffer* buffer_to_write, i
     socket_buffer_node_info->send_callback = send_callback;
 
     pthread_mutex_lock(&writing_socket->send_stream_lock);
-    if(!writing_socket->is_writing && writing_socket->is_open){
+    if(!writing_socket->is_writing && writing_socket->is_open && writing_socket->send_stream.size > 0){
         async_send(writing_socket);
     }
     pthread_mutex_unlock(&writing_socket->send_stream_lock);
