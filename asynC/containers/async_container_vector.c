@@ -31,13 +31,9 @@ async_container_vector* async_container_vector_create(size_t capacity, int resiz
     return new_vector;
 }
 
-/*
-void destroy_vector(vector* vector){
-    free(vector->array);
-    //only free array in vector because that's guaranteed to be malloc'd
-    //don't free vector itself because that's not necessarily guaranteed to be malloc'd
+void async_container_vector_destroy(async_container_vector* vector){
+    free(vector);
 }
-*/
 
 //TODO: realloc() array if size is too small compared to capacity, based on resize factor?
 int async_container_vector_remove(async_container_vector* vector, size_t index, void* item_buffer){

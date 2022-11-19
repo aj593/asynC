@@ -4,6 +4,7 @@
 #include "../../../containers/hash_table.h"
 #include "../../../containers/linked_list.h"
 #include "../../../containers/buffer.h"
+#include "../async_network_template/async_socket.h"
 
 #include <stddef.h>
 
@@ -39,6 +40,16 @@ void copy_start_line(
     int second_str_len,
     char* third_str,
     int third_str_len
+);
+
+void http_buffer_check_for_double_CRLF(
+    async_socket* read_socket,
+    int* found_double_CRLF_ptr,
+    buffer** base_buffer_dble_ptr,
+    buffer* new_data_buffer,
+    void data_handler_to_remove(async_socket*, buffer*, void*),
+    void data_handler_to_add(async_socket*, buffer*, void*),
+    void* arg
 );
 
 buffer* get_http_buffer(hash_table* header_table_ptr, int* request_header_length);

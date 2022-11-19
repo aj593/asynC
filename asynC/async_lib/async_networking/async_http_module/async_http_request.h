@@ -20,4 +20,6 @@ void async_http_request_options_set_header(http_request_options* http_options_pt
 void async_http_request_options_init(http_request_options* http_options_ptr);
 async_outgoing_http_request* async_http_request(char* host_url, char* http_method, http_request_options* options, void(*response_handler)(async_http_incoming_response*, void*), void* arg);
 
+void async_http_response_on_data(async_http_incoming_response* res, void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*), void* arg, int is_temp, int num_listens);
+
 #endif

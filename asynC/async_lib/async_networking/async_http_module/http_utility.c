@@ -86,7 +86,7 @@ void parse_http(
         event_node* new_request_data = create_event_node(sizeof(buffer_item), NULL, NULL);
         buffer_item* buff_item_ptr = (buffer_item*)new_request_data->data_ptr;
         buff_item_ptr->buffer_array = buffer_from_array(rest_of_str, start_of_body_len);
-        //TODO: need mutex lock here?
+        //TODO: need mutex lock here
         prepend(http_data_list_ptr, new_request_data);
     }
 }
@@ -226,4 +226,56 @@ void copy_all_headers(char** destination_buffer, hash_table* header_table){
 
     memcpy(*destination_buffer, CRLF_STR, CRLF_LEN);
     *destination_buffer += CRLF_LEN;
+}
+
+void http_buffer_check_for_double_CRLF(
+    async_socket* read_socket,
+    int* found_double_CRLF_ptr,
+    buffer** base_buffer_dble_ptr,
+    buffer* new_data_buffer,
+    void data_handler_to_remove(async_socket*, buffer*, void*),
+    void data_handler_to_add(async_socket*, buffer*, void*),
+    void* arg
+){
+    int old_data_capacity = get_buffer_capacity(*base_buffer_dble_ptr);
+    int new_data_capacity = get_buffer_capacity(new_data_buffer);
+
+    int char_buffer_check_length = old_data_capacity + new_data_capacity + 1;
+
+    char* old_data_internal_buffer = get_internal_buffer(*base_buffer_dble_ptr);
+    char* new_data_internal_buffer = get_internal_buffer(new_data_buffer);
+
+    char char_buffer_check_array[char_buffer_check_length];
+    strncpy(char_buffer_check_array, old_data_internal_buffer, old_data_capacity);
+    strncpy(char_buffer_check_array + old_data_capacity, new_data_internal_buffer, new_data_capacity);
+    char_buffer_check_array[char_buffer_check_length - 1] = '\0';
+
+    int num_buffers_to_concat = 2;
+    buffer* buffer_array[] = {
+        *base_buffer_dble_ptr,
+        new_data_buffer
+    };
+
+    buffer* new_concatted_buffer = buffer_concat(buffer_array, num_buffers_to_concat);
+    destroy_buffer(*base_buffer_dble_ptr);
+    destroy_buffer(new_data_buffer);
+    *base_buffer_dble_ptr = new_concatted_buffer;
+
+    if(strstr(char_buffer_check_array, "\r\n\r\n") == NULL){
+        return;
+    }
+
+    //TODO: remove "data_handler_to_remove" data handler here
+
+    /*
+    async_socket_on_data(
+        read_socket,
+        data_handler_to_add,
+        arg,
+        0,
+        0
+    );
+    */
+
+    *found_double_CRLF_ptr = 1;
 }

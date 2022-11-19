@@ -30,7 +30,8 @@ typedef struct c_vector {
 //void vector_init(vector* my_vector, size_t capacity, int resize_factor);
 
 async_container_vector* async_container_vector_create(size_t capacity, int resize_factor, size_t size_per_element);
-//void destroy_vector(async_container_vector* vector);
+
+void async_container_vector_destroy(async_container_vector* vector);
 
 int async_container_vector_remove(async_container_vector* vector, size_t index, void* item_buffer);
 

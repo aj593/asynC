@@ -6,6 +6,7 @@
 #include "../async_file_system/async_fs_readstream.h"
 #include "../async_networking/async_network_template/async_socket.h"
 #include "../async_networking/async_http_module/async_http_server.h"
+#include "../async_networking/async_http_module/async_http_request.h"
 
 enum emitter_events {
     //async_fs_readstream events
@@ -25,7 +26,14 @@ enum emitter_events {
 
     //async_http_server events
     async_http_server_listen_event,
-    async_http_server_request_event
+    async_http_server_request_event,
+
+    //async_http_incoming_request events
+    async_http_incoming_request_data_event,
+    async_http_incoming_request_end_event,
+
+    //async_http_outgoing_request events
+    async_http_incoming_response_data_event
 };
 
 union event_emitter_callbacks {
@@ -46,6 +54,13 @@ union event_emitter_callbacks {
     //async_http_server event handlers
     void(*http_server_listen_callback)(async_http_server*, void*);
     void(*request_handler)(async_http_server*, async_incoming_http_request*, async_http_outgoing_response*, void*);
+
+    //async_http_incoming_request event handlers
+    void(*incoming_req_data_handler)(async_incoming_http_request*, buffer*, void*);
+    void(*req_end_handler)(async_incoming_http_request*, void*);
+
+    //async_http_request event handlers
+    void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*);
 };
 
 typedef struct event_emitter_handler {

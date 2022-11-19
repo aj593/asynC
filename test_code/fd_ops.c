@@ -28,8 +28,16 @@ void after_dns(char** ip_list, int num_ips, void* arg){
     free(ip_list);
 }
 
+void response_data_handler(async_http_incoming_response* response, buffer* buffer, void* arg){
+    printf("got part of response\n");
+
+    write(STDOUT_FILENO, get_internal_buffer(buffer), get_buffer_capacity(buffer));
+}
+
 void response_handler(async_http_incoming_response* response, void* arg){
     printf("got my response!\n");
+
+    async_http_response_on_data(response, response_data_handler, NULL, 0, 0);
 }
 
 void data_handler(async_ipc_socket* ipc_socket, buffer* buffer, void* arg){
@@ -78,11 +86,11 @@ int main(){
     async_http_request_options_set_header(&options, "spaghetti", "meatball");
     int num_bytes = 100;
     char custom_url[num_bytes];
-    printf("input a url:\n");
-    fgets(custom_url, num_bytes, stdin);
+    //printf("input a url:\n");
+    //fgets(custom_url, num_bytes, stdin);
     int url_len = strnlen(custom_url, num_bytes);
     custom_url[url_len - 1] = '\0';
-    async_outgoing_http_request* new_request = async_http_request(custom_url, "GET", &options, response_handler, NULL);
+    async_outgoing_http_request* new_request = async_http_request("google.com", "GET", &options, response_handler, NULL);
     /*
     for(int i = 0; i < 5; i++){
         //char* array[] = {"/bin/ls", NULL};

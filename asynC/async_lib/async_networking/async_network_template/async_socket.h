@@ -65,6 +65,7 @@ typedef struct connect_info {
 //typedef struct socket_channel async_socket;
 //async_socket* async_socket_create(int domain, int type, int protocol);
 event_node* create_socket_node(async_socket** new_socket, int new_socket_fd);
+async_socket* async_socket_create(void);
 void async_socket_write(async_socket* writing_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_socket*, void*));
 void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_times_listen);
 async_socket* async_connect(async_connect_info* connect_info, void(*connect_task_handler)(void*), void(*connection_handler)(async_socket*, void*), void* connection_arg);

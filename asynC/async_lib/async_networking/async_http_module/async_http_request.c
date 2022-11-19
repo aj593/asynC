@@ -3,6 +3,7 @@
 #include "../async_tcp_module/async_tcp_socket.h"
 #include "../../../containers/linked_list.h"
 #include "../../async_dns_module/async_dns.h"
+#include "../../event_emitter_module/async_event_emitter.h"
 
 #include "../../../async_runtime/thread_pool.h"
 #include "http_utility.h"
@@ -20,6 +21,7 @@ char* localhost_str = "localhost";
 typedef struct async_http_incoming_response {
     async_container_vector* data_handler;
     async_container_vector* end_handler;
+    async_container_vector* event_emitter_handler;
     hash_table* response_header_table;
     linked_list response_data_list;
     char* http_version;
@@ -27,6 +29,7 @@ typedef struct async_http_incoming_response {
     int status_code;
     char* status_message;
     size_t content_length;
+    unsigned int num_data_listeners;
 } async_http_incoming_response;
 
 typedef struct client_side_http_transaction_info client_side_http_transaction_info;
@@ -50,10 +53,18 @@ typedef struct response_buffer_info {
 typedef struct client_side_http_transaction_info {
     async_outgoing_http_request* request_info;
     async_http_incoming_response* response_info;
+    int found_double_CRLF;
+    buffer* buffer_data;
 } client_side_http_transaction_info;
+
+void response_data_emit_data(async_http_incoming_response* res, buffer* curr_buffer);
+void http_parse_response_task(void* arg);
+void http_response_parser_interm(event_node* http_parse_node);
+void response_data_handler(async_socket*, buffer*, void*);
 
 async_outgoing_http_request* create_outgoing_http_request(void){
     async_outgoing_http_request* new_http_request = calloc(1, sizeof(async_outgoing_http_request));
+    //new_http_request->http_msg_socket = async_socket_create();
     linked_list_init(&new_http_request->request_write_list);
     new_http_request->connecting_port = 80;
 
@@ -61,8 +72,9 @@ async_outgoing_http_request* create_outgoing_http_request(void){
 }
 
 async_http_incoming_response* create_incoming_response(void){
-    async_http_incoming_response* new_response = (async_http_incoming_response*)malloc(sizeof(async_http_incoming_response));
+    async_http_incoming_response* new_response = (async_http_incoming_response*)calloc(1, sizeof(async_http_incoming_response));
     new_response->response_header_table = ht_create();
+    new_response->event_emitter_handler = create_event_listener_vector();
     linked_list_init(&new_response->response_data_list);
 
     return new_response;
@@ -106,17 +118,26 @@ typedef struct buffer_holder_t {
     buffer* buffer_to_write;
 } buffer_holder_t;
 
+//TODO: make extra callback param?
 void async_outgoing_http_request_write(async_outgoing_http_request* writing_request, buffer* buffer_item){
-    event_node* new_node = create_event_node(sizeof(buffer_holder_t), NULL, NULL);
-    buffer_holder_t* buffer_holder = (buffer_holder_t*)new_node->data_ptr;
-    buffer_holder->buffer_to_write = buffer_item;
+    if(writing_request->http_msg_socket == NULL){
+        event_node* new_node = create_event_node(sizeof(buffer_holder_t), NULL, NULL);
+        buffer_holder_t* buffer_holder = (buffer_holder_t*)new_node->data_ptr;
+        buffer_holder->buffer_to_write = buffer_item;
 
-    append(&writing_request->request_write_list, new_node);
-
-    //TODO: write directly to socket if request's socket pointer isn't null?
+        append(&writing_request->request_write_list, new_node);
+    }
+    else{
+        async_socket_write(
+            writing_request->http_msg_socket,
+            buffer_item,
+            get_buffer_capacity(buffer_item),
+            NULL //TODO: make not null if callback param included for this function?
+        );
+    }
 }
 
-void after_request_dns_callback(char ** ip_list, int num_ips, void * arg);
+void after_request_dns_callback(char** ip_list, int num_ips, void * arg);
     
 //TODO: also parse ports if possible
 async_outgoing_http_request* async_http_request(char* host_url, char* http_method, http_request_options* options, void(*response_handler)(async_http_incoming_response*, void*), void* arg){
@@ -297,20 +318,16 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     http_client_transaction_ptr->request_info->http_msg_socket = newly_connected_socket;
     enqueue_polling_event(http_request_transaction_tracker_node);
     
-    async_socket_on_data(newly_connected_socket, socket_data_handler, http_client_transaction_ptr, 1, 1);
-}
-
-int client_http_request_event_checker(event_node* client_http_transaction_node){
-    client_side_http_transaction_info* http_info = (client_side_http_transaction_info*)client_http_transaction_node->data_ptr;
+    async_socket_on_data(newly_connected_socket, socket_data_handler, http_client_transaction_ptr, 0, 0);
 
     //TODO add extra condition that request should also be writeable, allow request to be ended/not writable anymore
-    while(http_info->request_info->request_write_list.size > 0){
-        event_node* buffer_node = remove_first(&http_info->request_info->request_write_list);
+    while(request_info->request_write_list.size > 0){
+        event_node* buffer_node = remove_first(&request_info->request_write_list);
         buffer_holder_t* buffer_holder = (buffer_holder_t*)buffer_node->data_ptr;
         buffer* buffer_to_write = buffer_holder->buffer_to_write;
 
         async_socket_write(
-            http_info->request_info->http_msg_socket,
+            request_info->http_msg_socket,
             buffer_to_write,
             get_buffer_capacity(buffer_to_write),
             NULL    
@@ -320,17 +337,12 @@ int client_http_request_event_checker(event_node* client_http_transaction_node){
         destroy_buffer(buffer_to_write);
     }
 
-    //TODO: emit data event only when response is flowing/data listeners
-    while(http_info->response_info != NULL && http_info->response_info->response_data_list.size > 0){
-        //TODO: add response data handler
-        event_node* response_node = remove_first(&http_info->response_info->response_data_list);
-        buffer_holder_t* buffer_holder = (buffer_holder_t*)response_node->data_ptr;
-        buffer* curr_buffer = buffer_holder->buffer_to_write;
-        printf("curr response info is %s\n", (char*)get_internal_buffer(curr_buffer));
+    //TODO: call linked list destroy on request writing list?
+    linked_list_destroy(&request_info->request_write_list);
+}
 
-        destroy_buffer(curr_buffer);
-        destroy_event_node(response_node);
-    }
+int client_http_request_event_checker(event_node* client_http_transaction_node){
+    client_side_http_transaction_info* http_info = (client_side_http_transaction_info*)client_http_transaction_node->data_ptr;
 
     return !http_info->request_info->http_msg_socket->is_open; //TODO: make better to condition for when to close request
 }
@@ -339,29 +351,40 @@ void client_http_request_finish_handler(event_node* finished_http_request_node){
 
 }
 
-void http_parse_response_task(void* arg);
-void http_response_parser_interm(event_node* http_parse_node);
-void response_data_enqueuer(async_socket*, buffer*, void*);
-
-void socket_data_handler(async_socket* socket, buffer* initial_response_buffer, void* arg){
+void socket_data_handler(async_socket* socket, buffer* data_buffer, void* arg){
     client_side_http_transaction_info* client_http_info = (client_side_http_transaction_info*)arg;
     
+    if(client_http_info->found_double_CRLF){
+        return;
+    }
+
+    http_buffer_check_for_double_CRLF(
+        socket,
+        &client_http_info->found_double_CRLF,
+        &client_http_info->buffer_data,
+        data_buffer,
+        socket_data_handler,
+        response_data_handler,
+        NULL
+    );
+
+    if(!client_http_info->found_double_CRLF){
+        return;
+    }
+
     new_task_node_info http_response_parser_task;
     create_thread_task(sizeof(response_buffer_info), http_parse_response_task, http_response_parser_interm, &http_response_parser_task);
     thread_task_info* curr_thread_info = http_response_parser_task.new_thread_task_info;
-    //curr_thread_info->cb_arg = arg;
-
     response_buffer_info* new_response_item = (response_buffer_info*)http_response_parser_task.async_task_info;
     new_response_item->transaction_info = client_http_info;
     new_response_item->transaction_info->response_info = create_incoming_response();
-    new_response_item->response_buffer = initial_response_buffer;
+    new_response_item->response_buffer = client_http_info->buffer_data;
     new_response_item->socket_ptr = socket;
-
     curr_thread_info->custom_data_ptr = new_response_item;
 
     async_socket_on_data(
-        new_response_item->socket_ptr,
-        response_data_enqueuer,
+        socket,
+        response_data_handler,
         new_response_item->transaction_info->response_info,
         0,
         0
@@ -395,11 +418,77 @@ void http_response_parser_interm(event_node* http_parse_node){
     response_handler(response, arg);
 }
 
-void response_data_enqueuer(async_socket* socket_with_response, buffer* response_data, void* arg){
+typedef struct {
+    async_http_incoming_response* response_ptr;
+    buffer* curr_buffer;
+} response_and_buffer_data;
+
+void async_http_incoming_response_check_data(async_http_incoming_response* res_ptr){
+    //TODO: emit data event only when response is flowing/response has data listeners
+    while(res_ptr->response_data_list.size > 0){
+        event_node* response_node = remove_first(&res_ptr->response_data_list);
+        buffer_holder_t* buffer_holder = (buffer_holder_t*)response_node->data_ptr;
+        buffer* curr_buffer = buffer_holder->buffer_to_write;
+
+        response_data_emit_data(res_ptr, curr_buffer);
+
+        destroy_buffer(curr_buffer);
+    }
+}
+
+void response_data_emit_data(async_http_incoming_response* res, buffer* curr_buffer){
+    response_and_buffer_data curr_res_and_buf = {
+        .response_ptr = res,
+        .curr_buffer = curr_buffer
+    };
+
+    async_event_emitter_emit_event(
+        res->event_emitter_handler,
+        async_http_incoming_response_data_event,
+        &curr_res_and_buf
+    );
+}
+
+void response_data_converter(union event_emitter_callbacks res_data_callback, void* data, void* arg){
+    void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*) = res_data_callback.http_request_data_callback;
+    response_and_buffer_data* res_and_buffer_ptr = (response_and_buffer_data*)data;
+
+    http_request_data_callback(
+        res_and_buffer_ptr->response_ptr,
+        buffer_copy(res_and_buffer_ptr->curr_buffer),
+        arg
+    );
+}
+
+void async_http_response_on_data(async_http_incoming_response* res, void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*), void* arg, int is_temp, int num_listens){
+    union event_emitter_callbacks res_data_callback = { .http_request_data_callback = http_request_data_callback };
+
+    async_event_emitter_on_event(
+        &res->event_emitter_handler,
+        async_http_incoming_response_data_event,
+        res_data_callback,
+        response_data_converter,
+        &res->num_data_listeners,
+        arg,
+        is_temp,
+        num_listens
+    );
+
+    async_http_incoming_response_check_data(res);
+}
+
+void response_data_handler(async_socket* socket_with_response, buffer* response_data, void* arg){
     async_http_incoming_response* incoming_response = (async_http_incoming_response*)arg;
+
     event_node* new_node = create_event_node(sizeof(buffer_holder_t), NULL, NULL);
     buffer_holder_t* buffer_holder = (buffer_holder_t*)new_node->data_ptr;
     buffer_holder->buffer_to_write = response_data;
 
+    //TODO: need mutex lock here?
     append(&incoming_response->response_data_list, new_node);
+
+    //TODO: add is_flowing field and use that instead, and set is_flowing based on if num_data_listeners > 0?
+    if(incoming_response->num_data_listeners > 0){
+        async_http_incoming_response_check_data(incoming_response);
+    }
 }

@@ -13,6 +13,7 @@ typedef struct http_parser_info http_parser_info;
 async_http_server* async_create_http_server();
 void async_http_server_listen(async_http_server* listening_server, int port, char* ip_address, void(*http_listen_callback)(async_http_server*, void*), void* arg);
 void async_http_server_on_request(async_http_server* http_server, void(*request_handler)(async_http_server*, async_incoming_http_request*, async_http_outgoing_response*, void*), void* arg, int is_temp_subscriber, int num_times_listen);
+void async_http_server_close(async_http_server* http_server);
 
 char* async_http_request_get(async_incoming_http_request* http_req, char* header_key_name);
 char* async_http_request_method(async_incoming_http_request* http_req);

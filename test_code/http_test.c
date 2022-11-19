@@ -107,4 +107,5 @@ void http_server_on_request(async_http_server* http_server, async_incoming_http_
 
     //async_http_response_write(res, buffer_from_array(html_string, sizeof(html_string)));
     //async_http_response_end(res);
+    async_http_server_close(http_server);
 }

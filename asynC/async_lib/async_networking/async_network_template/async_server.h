@@ -74,7 +74,6 @@ void async_server_listen(async_server* listening_server, async_listen_info* curr
 void async_server_on_listen(async_server* listening_server, void(*listen_handler)(async_server*, void*), void* arg, int is_temp_subscriber, int num_listens);
 void async_server_on_connection(async_server* listening_server, void(*connection_handler)(async_socket*, void*), void* arg, int is_temp_subscriber, int num_listens);
 
-
 void async_server_close(async_server* closing_server);
 
 #endif
