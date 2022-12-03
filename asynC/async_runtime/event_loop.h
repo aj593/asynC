@@ -8,6 +8,11 @@
 //typedef struct async_event_queue async_event_queue;
 typedef struct event_node event_node;
 
+typedef struct async_queue_task {
+    int(*queue_task)(void*);
+    void* arg;
+} async_queue_task;
+
 //put this here so event_emitter can use this
 //hash_table* subscriber_hash_table; //TODO: put this in a different file?
 
@@ -15,6 +20,8 @@ void asynC_init();
 void asynC_cleanup();
 
 void asynC_wait(); //TODO: make this available only among library files, not in driver/main.c code?
+
+void future_task_queue_enqueue(int(*queue_task)(void*), void* arg);
 
 //void enqueue_event(async_event_queue* curr_event_queue, event_node* event_node);
 void enqueue_polling_event(event_node* polling_event_node);

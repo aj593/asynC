@@ -444,6 +444,16 @@ void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(
     //add_socket_data_listener(reading_socket, new_data_handler, arg, 0);
 }
 
+void async_socket_off_data(async_socket* reading_socket, void(*data_handler)(async_socket*, buffer*, void*)){
+    union event_emitter_callbacks socket_data_handler = { .async_socket_data_handler = data_handler };
+
+    async_event_emitter_off_event(
+        reading_socket->event_listener_vector,
+        async_socket_data_event,
+        socket_data_handler
+    );
+}
+
 void async_socket_emit_data(async_socket* data_socket, buffer* socket_receive_buffer, int num_bytes){
     socket_data_info new_data_info = {
         .curr_socket_ptr = data_socket,

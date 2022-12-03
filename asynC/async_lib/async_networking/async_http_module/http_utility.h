@@ -26,10 +26,11 @@ void parse_http(
 void async_http_set_header(
     char* header_key, 
     char* header_val, 
-    char** string_buffer,
+    char** string_buffer_ptr,
     size_t* buffer_len_ptr,
     size_t* buffer_cap_ptr,
-    hash_table* header_table
+    hash_table* header_table,
+    int* is_chunked
 );
 
 void copy_start_line(

@@ -36,6 +36,31 @@ void async_event_emitter_on_event(
     }
 }
 
+void async_event_emitter_off_event(
+    async_container_vector* event_listener_vector,
+    enum emitter_events curr_event,
+    union event_emitter_callbacks emitter_callback
+){
+    event_emitter_handler* event_handler = async_container_vector_internal_array(event_listener_vector);
+    for(int i = 0; i < async_container_vector_size(event_listener_vector); i++){
+        if(event_handler[i].curr_event != curr_event){
+            continue;
+        }
+
+        //TODO: is it safe to compare all function pointer types using this generic function signature for comparison?
+        if(
+            emitter_callback.generic_callback != event_handler[i].curr_callback.generic_callback &&
+            emitter_callback.generic_callback != NULL
+        ){
+            continue;
+        }
+
+        async_container_vector_remove(event_listener_vector, i, NULL);
+
+        return;
+    }
+}
+
 /*
 void async_event_emitter_on_event_num_times(
     async_container_vector** event_listener_vector,

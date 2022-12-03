@@ -109,7 +109,8 @@ void async_http_set_header(
     char** string_buffer_ptr,
     size_t* buffer_len_ptr,
     size_t* buffer_cap_ptr,
-    hash_table* header_table
+    hash_table* header_table,
+    int* is_chunked
 ){
     size_t key_len = strlen(header_key);
     size_t value_len = strlen(header_val);
@@ -165,6 +166,8 @@ void async_http_set_header(
         string_buffer + key_offset, 
         string_buffer + val_offset
     );
+
+    //if(!strncmp(header_key, "Transfer-Encoding"))
 }
 
 void copy_start_line(
@@ -266,6 +269,7 @@ void http_buffer_check_for_double_CRLF(
     }
 
     //TODO: remove "data_handler_to_remove" data handler here
+    async_socket_off_data(read_socket, data_handler_to_remove);
 
     /*
     async_socket_on_data(

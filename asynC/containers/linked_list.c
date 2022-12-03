@@ -55,11 +55,26 @@ void destroy_event_node(event_node* node_to_destroy){
     free(node_to_destroy);
 }
 
+void add(linked_list* list, event_node* before_node, event_node* middle_node, event_node* after_node){
+    before_node->next = middle_node;
+    middle_node->next = after_node;
+
+    after_node->prev = middle_node;
+    middle_node->prev = before_node;
+
+    middle_node->linked_list_ptr = list;
+
+    list->size++;
+}
+
 //TODO: return early in add_next and add_prev if new_node already has linked_list_ptr?
 
 //TODO: require that added event_node be not NULL?
 //TODO: make it so ppl can't add next node to dummy tail node?
 void add_next(linked_list* list, event_node* curr, event_node* new_node){
+    add(list, curr, new_node, curr->next);
+
+    /*
     event_node* after_curr = curr->next;
 
     curr->next = new_node;
@@ -71,6 +86,7 @@ void add_next(linked_list* list, event_node* curr, event_node* new_node){
     new_node->linked_list_ptr = list;
 
     list->size++;
+    */
 }
 
 void prepend(linked_list* list, event_node* new_first){
@@ -79,6 +95,9 @@ void prepend(linked_list* list, event_node* new_first){
 
 //TODO: make it so ppl can't add previous node to dummy head node?
 void add_prev(linked_list* list, event_node* curr, event_node* new_node){
+    add(list, curr->prev, new_node, curr);
+
+    /*
     event_node* before_curr = curr->prev;
 
     curr->prev = new_node;
@@ -90,6 +109,7 @@ void add_prev(linked_list* list, event_node* curr, event_node* new_node){
     new_node->linked_list_ptr = list;
     
     list->size++;
+    */
 }
 
 void append(linked_list* list, event_node* new_last){

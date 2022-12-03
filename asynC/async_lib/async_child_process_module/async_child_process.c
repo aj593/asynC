@@ -161,7 +161,8 @@ int child_process_creator_destroy(void){
 void forker_handler(void){
     curr_process_pid = getpid();
 
-    //signal(SIGCHLD, SIGCHLD_handler);
+    //TODO: do cross platform way
+    signal(SIGCHLD, SIGCHLD_handler);
     /*
     struct sigaction child_sigaction_handler;
     child_sigaction_handler.__sigaction_handler.sa_handler = SIGCHLD_handler;
@@ -183,7 +184,7 @@ void forker_handler(void){
             break;
         }
 
-        char pipe_msg[msg_num_bytes]; //TODO: malloc this?
+        char pipe_msg[msg_num_bytes]; //TODO: malloc this, since array on stack may be too big?
         curr_num_bytes_read = read(forker_pipe[PIPE_READ_END], pipe_msg, msg_num_bytes);
         //write(STDOUT_FILENO, forker_pipe, curr_num_bytes_read);
         if(curr_num_bytes_read < 0){

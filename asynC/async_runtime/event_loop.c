@@ -4,6 +4,8 @@
 
 #include "../containers/hash_table.h"
 #include "../containers/async_container_vector.h"
+#include "../containers/async_container_linked_list.h"
+
 #include "thread_pool.h"
 #include "io_uring_ops.h"
 
@@ -34,6 +36,10 @@ async_event_queue polling_event_queue; //singly linked list that keeps track of 
 async_event_queue idle_queue;
 async_event_queue execute_queue;
 async_event_queue defer_queue;
+
+async_container_linked_list future_task_queue;
+
+void future_task_queue_check(void);
 
 void async_event_queue_lock(async_event_queue* event_queue){
     pthread_mutex_lock(&event_queue->queue_mutex);
@@ -109,6 +115,9 @@ void asynC_init(){
     async_event_queue_init(&idle_queue);
     async_event_queue_init(&execute_queue);
     async_event_queue_init(&defer_queue);
+
+    async_container_linked_list_init(&future_task_queue, sizeof(async_queue_task));
+
     //TODO: add error checking with this
     child_process_creator_init();
 
@@ -139,6 +148,8 @@ void asynC_cleanup(){
     async_event_queue_destroy(&idle_queue);
     async_event_queue_destroy(&execute_queue);
     async_event_queue_destroy(&defer_queue);
+
+    //TODO: destroy future_task_queue here
     
     child_process_creator_destroy();
 
@@ -159,7 +170,8 @@ int queue_contains_events(void){
         polling_event_queue.queue_list.size > 0 || 
         idle_queue.queue_list.size > 0 ||
         execute_queue.queue_list.size > 0 ||
-        defer_queue.queue_list.size > 0;
+        defer_queue.queue_list.size > 0 ||
+        future_task_queue.size > 0;
 
     async_event_queue_unlock(&polling_event_queue);
     async_event_queue_unlock(&idle_queue);
@@ -216,6 +228,33 @@ void asynC_wait(){
 
         uring_try_submit_task();
         submit_thread_tasks();
+
+        //TODO: execute future_task_queue tasks here or earlier in event loop iteration?
+        future_task_queue_check();
+    }
+}
+
+void future_task_queue_enqueue(int(*queue_task)(void*), void* arg){
+    async_queue_task new_task = {
+        .queue_task = queue_task,
+        .arg = arg
+    };
+
+    async_container_linked_list_append(&future_task_queue, &new_task);
+}
+
+void future_task_queue_check(void){
+    async_container_linked_list_iterator task_queue_iterator = async_container_linked_list_start_iterator(&future_task_queue);
+
+    while(async_container_linked_list_iterator_has_next(&task_queue_iterator)){
+        async_container_linked_list_iterator_next(&task_queue_iterator, NULL);
+
+        async_queue_task* queue_task_info = async_container_linked_list_iterator_get(&task_queue_iterator);
+        int queue_task_ret_val = queue_task_info->queue_task(queue_task_info->arg);
+
+        if(queue_task_ret_val == 0){
+            async_container_linked_list_iterator_remove(&task_queue_iterator, NULL);
+        }
     }
 }
 

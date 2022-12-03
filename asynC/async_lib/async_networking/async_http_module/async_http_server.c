@@ -69,6 +69,7 @@ typedef struct async_incoming_http_request {
     buffer* request_buffer;
     event_node* event_queue_node;
     async_http_server* http_server_ptr;
+    async_http_outgoing_response* response_ptr;
 } async_incoming_http_request;
 
 typedef struct async_http_outgoing_response {
@@ -81,6 +82,8 @@ typedef struct async_http_outgoing_response {
     size_t header_buff_len;
     size_t header_buff_capacity;
     async_http_server* http_server_ptr;
+    async_incoming_http_request* request_ptr;
+    int is_chunked;
 } async_http_outgoing_response;
 
 typedef struct http_request_handler {
@@ -235,6 +238,13 @@ void after_http_listen(async_tcp_server* server, void* cb_arg){
 void http_connection_handler(async_socket* new_http_socket, void* arg){
     async_http_server* http_server_arg = (async_http_server*)arg;
 
+    //TODO: should I put this here?
+    if(http_server_arg->num_request_listeners == 0){
+        async_socket_destroy(new_http_socket); //TODO: use end() or destroy()?
+        return;
+    }
+
+    //TODO: need this allocation? try to take it away and replace with single request + response block?
     http_server_and_buffer* new_server_and_buffer = (http_server_and_buffer*)calloc(1, sizeof(http_server_and_buffer));
     new_server_and_buffer->listening_http_server = http_server_arg;
 
@@ -309,6 +319,9 @@ void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* a
     http_parser_info_ptr->http_server = http_server_and_buffer_info->listening_http_server;
     http_parser_info_ptr->http_request_info = (async_incoming_http_request*)http_req_res_single_block;
     http_parser_info_ptr->http_response_info = (async_http_outgoing_response*)(http_parser_info_ptr->http_request_info + 1);
+
+    http_parser_info_ptr->http_request_info->response_ptr = http_parser_info_ptr->http_response_info;
+    http_parser_info_ptr->http_response_info->request_ptr = http_parser_info_ptr->http_request_info;
 
     http_request_init(http_parser_info_ptr->http_request_info, read_socket, http_server_and_buffer_info->listening_http_server);
     http_response_init(http_parser_info_ptr->http_response_info, read_socket, http_server_and_buffer_info->listening_http_server);
@@ -581,7 +594,8 @@ void async_http_response_set_header(async_http_outgoing_response* curr_http_resp
         &curr_http_response->header_buffer,
         &curr_http_response->header_buff_len,
         &curr_http_response->header_buff_capacity,
-        curr_http_response->response_header_table
+        curr_http_response->response_header_table,
+        &curr_http_response->is_chunked
     );
 }
 
@@ -602,7 +616,7 @@ void async_http_response_write_head(async_http_outgoing_response* curr_http_resp
     int status_msg_len = strlen(curr_http_response->status_message);
     total_header_len += status_msg_len;
 
-    char* HTTP_version_str = "HTTP/1.1";
+    char* HTTP_version_str = "HTTP/1.0";
 
     buffer* response_header_buffer = get_http_buffer(curr_http_response->response_header_table, &total_header_len);
     char* buffer_internal_array = (char*)get_internal_buffer(response_header_buffer);
@@ -648,6 +662,7 @@ void async_http_response_write(async_http_outgoing_response* curr_http_response,
     );
 }
 
+//TODO: make it so response isn't writable anymore?
 void async_http_response_end(async_http_outgoing_response* curr_http_response){
     if(!curr_http_response->was_header_written){
         async_http_response_write_head(
@@ -657,5 +672,23 @@ void async_http_response_end(async_http_outgoing_response* curr_http_response){
         );
     }
 
+    char* transfer_encoding_string_value = ht_get(curr_http_response->response_header_table, "Transfer-Encoding");
+    if(strstr(transfer_encoding_string_value, "chunked")){
+        //TODO: make a single global instance of this buffer so it's reuseable?
+        char chunked_termination_array[] = "0\r\n\r\n";
+        buffer* chunked_termination_buffer = buffer_from_array(chunked_termination_array, sizeof(chunked_termination_array) - 1);
+        
+        async_socket_write(
+            curr_http_response->tcp_socket_ptr,
+            chunked_termination_buffer,
+            get_buffer_capacity(chunked_termination_buffer),
+            NULL
+        );
+
+        destroy_buffer(chunked_termination_buffer);
+    }
+}
+
+void async_http_outgoing_response_end_connection(async_http_outgoing_response* curr_http_response){
     async_socket_end(curr_http_response->tcp_socket_ptr);
 }

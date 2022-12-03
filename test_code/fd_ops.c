@@ -35,7 +35,9 @@ void response_data_handler(async_http_incoming_response* response, buffer* buffe
 }
 
 void response_handler(async_http_incoming_response* response, void* arg){
-    printf("got my response!\n");
+    char* content_length_string = async_http_incoming_response_get(response, "Content-Length");
+
+    printf("got my response of length %s bytes\n", content_length_string);
 
     async_http_response_on_data(response, response_data_handler, NULL, 0, 0);
 }
@@ -74,10 +76,54 @@ void ipc_connection_handler(async_ipc_socket* socket, void* arg){
     async_socket_on_data(socket, data_handler, NULL, 0, 0);
 }
 
+typedef struct {
+    int a;
+    int b;
+} custom_struct;
+
 int main(){
     asynC_init();
 
+    /*
+    custom_struct a = {
+        .a = 2,
+        .b = 3
+    };
+    custom_struct b = {
+        .a = 2,
+        .b = 3
+    };
+    printf("equal value?: %d", memcmp(&a, &b, sizeof(custom_struct)));
+    */
+
+    async_container_linked_list new_list;
+    async_container_linked_list_init(&new_list, sizeof(int));
+    int x = 3;
+    async_container_linked_list_append(&new_list, &x);
+    x = 5;
+    async_container_linked_list_append(&new_list, &x);
+    x = 7;
+    async_container_linked_list_append(&new_list, &x);
+
+    async_container_linked_list_iterator new_iterator = async_container_linked_list_start_iterator(&new_list);
+    while(async_container_linked_list_iterator_has_next(&new_iterator)){
+        int curr_num;
+        
+        async_container_linked_list_iterator_next(&new_iterator, &curr_num);
+
+        printf("curr num is %d\n", curr_num);
+    }
+
+    while(async_container_linked_list_size(&new_list) > 0){
+        int curr_num;
+        
+        async_container_linked_list_iterator_remove(&new_iterator, &curr_num);
+
+        printf("curr num removed is %d\n", curr_num);
+    }
+
     //async_dns_lookup("www.tire.com", after_dns, NULL);
+    /*
     http_request_options options;
     async_http_request_options_init(&options);
     char foo[] = "foofhfhfhjfhjfjhfhjfhjfhjfjhfhjfkjhfhjfk";
@@ -90,7 +136,8 @@ int main(){
     //fgets(custom_url, num_bytes, stdin);
     int url_len = strnlen(custom_url, num_bytes);
     custom_url[url_len - 1] = '\0';
-    async_outgoing_http_request* new_request = async_http_request("google.com", "GET", &options, response_handler, NULL);
+    async_outgoing_http_request* new_request = async_http_request("youtube.com", "GET", &options, response_handler, NULL);
+    */
     /*
     for(int i = 0; i < 5; i++){
         //char* array[] = {"/bin/ls", NULL};

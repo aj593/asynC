@@ -37,6 +37,9 @@ enum emitter_events {
 };
 
 union event_emitter_callbacks {
+    //general callback used for comparisons?
+    void(*generic_callback)(void);
+
     //async_fs_readstream event handlers
     void(*readstream_data_handler)(async_fs_readstream*, buffer*, void*);
     void(*readstream_end_handler)(async_fs_readstream*, void*);
@@ -85,6 +88,12 @@ void async_event_emitter_on_event(
     void* arg,
     int is_temp_subscriber,
     size_t num_times_listen
+);
+
+void async_event_emitter_off_event(
+    async_container_vector* event_listener_vector,
+    enum emitter_events curr_event,
+    union event_emitter_callbacks emitter_callback
 );
 
 void async_event_emitter_emit_event(

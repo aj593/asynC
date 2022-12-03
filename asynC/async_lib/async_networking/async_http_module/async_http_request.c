@@ -42,6 +42,7 @@ typedef struct async_outgoing_http_request {
     int connecting_port;
     char* host;
     char* url;
+    int is_chunked;
 } async_outgoing_http_request;
 
 typedef struct response_buffer_info {
@@ -81,6 +82,7 @@ async_http_incoming_response* create_incoming_response(void){
 }
 
 void async_http_request_options_init(http_request_options* http_options_ptr){
+    memset(http_options_ptr, 0, sizeof(http_request_options));
     size_t num_header_bytes = sizeof(char) * HEADER_BUFFER_CAPACITY;
     http_options_ptr->header_buffer = calloc(1, num_header_bytes);
     http_options_ptr->curr_header_capacity = num_header_bytes;
@@ -105,7 +107,8 @@ void async_http_request_options_set_header(http_request_options* http_options_pt
         &http_options_ptr->header_buffer,
         &http_options_ptr->curr_header_len,
         &http_options_ptr->curr_header_capacity,
-        http_options_ptr->request_header_table
+        http_options_ptr->request_header_table,
+        &http_options_ptr->is_chunked
     );
 }
 
@@ -147,6 +150,7 @@ async_outgoing_http_request* async_http_request(char* host_url, char* http_metho
     //set response event handler and extra arg
     new_http_request->response_handler = response_handler;
     new_http_request->response_arg = arg;
+    new_http_request->is_chunked = options->is_chunked;
 
     //find length of host url string and traverse backwards to find index of last period character
     size_t host_url_length = strnlen(host_url, LONGEST_ALLOWED_URL);
@@ -491,4 +495,16 @@ void response_data_handler(async_socket* socket_with_response, buffer* response_
     if(incoming_response->num_data_listeners > 0){
         async_http_incoming_response_check_data(incoming_response);
     }
+}
+
+char* async_http_incoming_response_get(async_http_incoming_response* res_ptr, char* header_key_string){
+    return ht_get(res_ptr->response_header_table, header_key_string);
+}
+
+int async_http_incoming_response_status_code(async_http_incoming_response* res_ptr){
+    return res_ptr->status_code;
+}
+
+char* async_http_incoming_response_status_message(async_http_incoming_response* res_ptr){
+    return res_ptr->status_message;
 }
