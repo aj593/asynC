@@ -46,9 +46,11 @@ void open_task_handler(void* open_task){
     async_open_info* open_info = (async_open_info*)open_task;
     *open_info->fd_ptr = open(
         open_info->filename,
-        open_info->flags
-        //open_info.mode //TODO: need mode here? or make different version with it?
+        open_info->flags,
+        open_info->mode //TODO: need mode here? or make different version with it?
     );
+
+    //perror("open()");
 
     //*open_info->is_done_ptr = 1;
 }
@@ -109,7 +111,7 @@ typedef struct read_task {
     int read_fd;
     buffer* buffer; //use void* instead?
     int max_num_bytes_to_read;
-    int* num_bytes_read_ptr;
+    unsigned int* num_bytes_read_ptr;
     int offset;
     //int* is_done_ptr;
 } async_read_info;
@@ -251,7 +253,7 @@ typedef struct write_task {
     int write_fd;
     buffer* buffer;
     int max_num_bytes_to_write;
-    int* num_bytes_written_ptr;
+    unsigned int* num_bytes_written_ptr;
     //int* is_done_ptr;
 } async_write_info;
 

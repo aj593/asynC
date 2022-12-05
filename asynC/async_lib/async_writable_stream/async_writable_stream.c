@@ -1,5 +1,8 @@
 #include "async_writable_stream.h"
 
+#include "../../async_runtime/event_loop.h"
+
+
 #include <stdlib.h>
 #include <limits.h>
 #include <string.h>
@@ -17,6 +20,7 @@ void async_writable_stream_init(async_writable_stream* new_writable_stream, unsi
     new_writable_stream->size_per_buffer = size_per_buffer;
     new_writable_stream->total_bytes_written = 0;
     new_writable_stream->is_queued = 0;
+    new_writable_stream->is_queueable = 0;
     new_writable_stream->writing_task = writing_task;
     new_writable_stream->writing_task_arg = writing_task_arg;
 }
@@ -38,7 +42,7 @@ unsigned int min_value(unsigned int integer_array[], unsigned int num_entries){
 void async_writable_stream_write(async_writable_stream* writable_stream, void* copied_buffer, unsigned int num_bytes_to_write, void(*writable_stream_callback)(void*), void* arg){
     char* buffer_to_copy = (char*)copied_buffer;
     unsigned int num_bytes_left_to_write = num_bytes_to_write;
-    unsigned int curr_index = 0;
+    //unsigned int curr_index = 0; //TODO: use this instead of incrementing buffer pointer?
 
     //TODO: append new buffer in list if list size is 0? or do after async write/read operation is done?
     if(writable_stream->buffer_list.size == 0 && num_bytes_to_write > 0){
@@ -112,8 +116,31 @@ void async_writable_stream_write(async_writable_stream* writable_stream, void* c
     }
 
     //TODO: queue into event queue that goes into event loop
-    if(!writable_stream->is_queued){
+    if(
+        !writable_stream->is_queued &&
+        writable_stream->is_queueable
+    ){
         future_task_queue_enqueue(writable_stream->writing_task, writable_stream->writing_task_arg);
         writable_stream->is_queued = 1;
+    }
+}
+
+void async_writable_stream_execute_callbacks(async_writable_stream* current_writable_stream){
+    async_container_linked_list_iterator new_callback_list_iterator = 
+        async_container_linked_list_start_iterator(&current_writable_stream->callback_list);
+
+    //TODO: end condition based on list size, or iterator_has_next()?
+    while(current_writable_stream->callback_list.size > 0){
+        async_container_linked_list_iterator_next(&new_callback_list_iterator, NULL);
+
+        async_writable_stream_callback_info* curr_callback_info = 
+            (async_writable_stream_callback_info*)async_container_linked_list_iterator_get(&new_callback_list_iterator);
+    
+        if(current_writable_stream->total_bytes_written < curr_callback_info->required_num_bytes_written){
+            break;
+        }
+
+        curr_callback_info->writable_stream_callback(curr_callback_info->arg);
+        async_container_linked_list_iterator_remove(&new_callback_list_iterator, NULL);
     }
 }

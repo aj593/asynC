@@ -36,7 +36,7 @@ typedef struct thread_task_info {
     //following fields may be placed in union
     buffer* buffer;
     int fd; 
-    int num_bytes;
+    unsigned int num_bytes;
     int success;
     async_server* listening_server;
     async_socket* rw_socket;
