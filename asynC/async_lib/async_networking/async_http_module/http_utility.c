@@ -91,6 +91,18 @@ void parse_http(
     }
 }
 
+int is_chunked_checker(hash_table* header_table){
+    char* transfer_encoding_str = ht_get(header_table, "Transfer-Encoding");
+    int found_chunked_encoding = 
+        transfer_encoding_str != NULL &&
+        strstr(transfer_encoding_str, "chunked") != NULL;
+
+    //TODO: move this elsewhere in this function?
+    return 
+        ht_get(header_table, "Content-Length") == NULL ||
+        found_chunked_encoding;
+}
+
 buffer* get_http_buffer(hash_table* header_table_ptr, int* request_header_length){
     hti request_header_iterator = ht_iterator(header_table_ptr);
     while(ht_next(&request_header_iterator)){
@@ -109,8 +121,7 @@ void async_http_set_header(
     char** string_buffer_ptr,
     size_t* buffer_len_ptr,
     size_t* buffer_cap_ptr,
-    hash_table* header_table,
-    int* is_chunked
+    hash_table* header_table
 ){
     size_t key_len = strlen(header_key);
     size_t value_len = strlen(header_val);

@@ -28,7 +28,7 @@ void async_http_response_set_status_msg(async_http_outgoing_response* curr_http_
 void async_http_response_set_header(async_http_outgoing_response* curr_http_response, char* header_key, char* header_val);
 
 void async_http_response_write_head(async_http_outgoing_response* curr_http_response, int status_code, char* status_msg);
-void async_http_response_write(async_http_outgoing_response* curr_http_response, buffer* response_data);
+void async_http_response_write(async_http_outgoing_response* curr_http_response, void* response_data, unsigned int num_bytes);
 void async_http_response_end(async_http_outgoing_response* curr_http_response);
 
 #endif

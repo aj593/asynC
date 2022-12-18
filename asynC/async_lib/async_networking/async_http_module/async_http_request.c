@@ -38,7 +38,7 @@ typedef struct async_outgoing_http_request {
     void (*response_handler)(async_http_incoming_response*, void* arg);
     void* response_arg;
     async_socket* http_msg_socket;
-    linked_list request_write_list;
+    //linked_list request_write_list;
     int connecting_port;
     char* host;
     char* url;
@@ -65,8 +65,8 @@ void response_data_handler(async_socket*, buffer*, void*);
 
 async_outgoing_http_request* create_outgoing_http_request(void){
     async_outgoing_http_request* new_http_request = calloc(1, sizeof(async_outgoing_http_request));
-    //new_http_request->http_msg_socket = async_socket_create();
-    linked_list_init(&new_http_request->request_write_list);
+    new_http_request->http_msg_socket = async_socket_create();
+    //linked_list_init(&new_http_request->request_write_list);
     new_http_request->connecting_port = 80;
 
     return new_http_request;
@@ -107,8 +107,7 @@ void async_http_request_options_set_header(http_request_options* http_options_pt
         &http_options_ptr->header_buffer,
         &http_options_ptr->curr_header_len,
         &http_options_ptr->curr_header_capacity,
-        http_options_ptr->request_header_table,
-        &http_options_ptr->is_chunked
+        http_options_ptr->request_header_table
     );
 }
 
@@ -122,22 +121,32 @@ typedef struct buffer_holder_t {
 } buffer_holder_t;
 
 //TODO: make extra callback param?
-void async_outgoing_http_request_write(async_outgoing_http_request* writing_request, buffer* buffer_item){
-    if(writing_request->http_msg_socket == NULL){
-        event_node* new_node = create_event_node(sizeof(buffer_holder_t), NULL, NULL);
-        buffer_holder_t* buffer_holder = (buffer_holder_t*)new_node->data_ptr;
-        buffer_holder->buffer_to_write = buffer_item;
+void async_outgoing_http_request_write(async_outgoing_http_request* writing_request, void* buffer, unsigned int num_bytes){
+    if(writing_request->is_chunked){
+        char request_chunk_info[MAX_IP_STR_LEN];
+        int num_bytes_formatted = snprintf(
+            request_chunk_info,
+            MAX_IP_STR_LEN,
+            "%x\r\n",
+            num_bytes
+        );
 
-        append(&writing_request->request_write_list, new_node);
-    }
-    else{
         async_socket_write(
             writing_request->http_msg_socket,
-            buffer_item,
-            get_buffer_capacity(buffer_item),
-            NULL //TODO: make not null if callback param included for this function?
+            buffer,
+            num_bytes_formatted,
+            NULL,
+            NULL
         );
     }
+    
+    async_socket_write(
+        writing_request->http_msg_socket,
+        buffer,
+        num_bytes,
+        NULL, //TODO: make not null if callback param included for this function?
+        NULL
+    );
 }
 
 void after_request_dns_callback(char** ip_list, int num_ips, void * arg);
@@ -150,7 +159,8 @@ async_outgoing_http_request* async_http_request(char* host_url, char* http_metho
     //set response event handler and extra arg
     new_http_request->response_handler = response_handler;
     new_http_request->response_arg = arg;
-    new_http_request->is_chunked = options->is_chunked;
+    //new_http_request->is_chunked = options->is_chunked;
+    new_http_request->is_chunked = is_chunked_checker(options->request_header_table);
 
     //find length of host url string and traverse backwards to find index of last period character
     size_t host_url_length = strnlen(host_url, LONGEST_ALLOWED_URL);
@@ -265,9 +275,18 @@ async_outgoing_http_request* async_http_request(char* host_url, char* http_metho
 
     copy_all_headers(&curr_req_buffer_ptr, options->request_header_table);
 
+    async_socket_write(
+        new_http_request->http_msg_socket, 
+        get_internal_buffer(http_request_header_buffer),
+        get_buffer_capacity(http_request_header_buffer),
+        NULL,
+        NULL
+    );
+
     async_http_request_options_destroy(options);
 
-    async_outgoing_http_request_write(new_http_request, http_request_header_buffer);
+    destroy_buffer(http_request_header_buffer);
+
     async_dns_lookup(host_str_copy, after_request_dns_callback, new_http_request);
 
     return new_http_request;
@@ -291,6 +310,7 @@ void after_request_dns_callback(char** ip_list, int num_ips, void* arg){
 
     //TODO: write http info here instead of in http_request_connection_handler?
     /*async_socket* new_socket = */async_tcp_connect(
+        new_connect_info->http_request_info->http_msg_socket,
         new_connect_info->ip_list[new_connect_info->curr_index++],
         new_connect_info->http_request_info->connecting_port,
         http_request_connection_handler,
@@ -323,26 +343,6 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     enqueue_polling_event(http_request_transaction_tracker_node);
     
     async_socket_on_data(newly_connected_socket, socket_data_handler, http_client_transaction_ptr, 0, 0);
-
-    //TODO add extra condition that request should also be writeable, allow request to be ended/not writable anymore
-    while(request_info->request_write_list.size > 0){
-        event_node* buffer_node = remove_first(&request_info->request_write_list);
-        buffer_holder_t* buffer_holder = (buffer_holder_t*)buffer_node->data_ptr;
-        buffer* buffer_to_write = buffer_holder->buffer_to_write;
-
-        async_socket_write(
-            request_info->http_msg_socket,
-            buffer_to_write,
-            get_buffer_capacity(buffer_to_write),
-            NULL    
-        );
-
-        destroy_event_node(buffer_node);
-        destroy_buffer(buffer_to_write);
-    }
-
-    //TODO: call linked list destroy on request writing list?
-    linked_list_destroy(&request_info->request_write_list);
 }
 
 int client_http_request_event_checker(event_node* client_http_transaction_node){

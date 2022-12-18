@@ -29,9 +29,10 @@ void async_http_set_header(
     char** string_buffer_ptr,
     size_t* buffer_len_ptr,
     size_t* buffer_cap_ptr,
-    hash_table* header_table,
-    int* is_chunked
+    hash_table* header_table
 );
+
+int is_chunked_checker(hash_table* header_table);
 
 void copy_start_line(
     char** buffer_internal_array, 

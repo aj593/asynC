@@ -12,12 +12,12 @@
 
 void tcp_connect_task_handler(void* connect_task_info);
 
-async_tcp_socket* async_tcp_connect(char* ip_address, int port, void(*connection_handler)(async_tcp_socket*, void*), void* arg){
+async_tcp_socket* async_tcp_connect(async_socket* connecting_tcp_socket, char* ip_address, int port, void(*connection_handler)(async_tcp_socket*, void*), void* arg){
     async_connect_info curr_connect_info;
     strncpy(curr_connect_info.ip_address, ip_address, MAX_IP_STR_LEN);
     curr_connect_info.port = port;
     
-    return async_connect(&curr_connect_info, tcp_connect_task_handler, connection_handler, arg);
+    return async_connect(connecting_tcp_socket, &curr_connect_info, tcp_connect_task_handler, connection_handler, arg);
 }
 
 void tcp_connect_task_handler(void* connect_task_info){

@@ -8,6 +8,7 @@
 #include "../../../containers/async_container_vector.h"
 #include "../../../async_runtime/event_loop.h"
 #include "async_server.h"
+#include "../../async_stream/async_stream.h"
 
 typedef struct async_container_vector async_container_vector;
 typedef struct async_server async_server;
@@ -21,7 +22,8 @@ typedef struct async_socket {
     //int type;
     //int protocol;
     int is_open;
-    linked_list send_stream;
+    //linked_list send_stream;
+    async_stream socket_send_stream;
     atomic_int is_reading;
     atomic_int is_writing;
     atomic_int is_flowing;
@@ -65,11 +67,11 @@ typedef struct connect_info {
 //typedef struct socket_channel async_socket;
 //async_socket* async_socket_create(int domain, int type, int protocol);
 event_node* create_socket_node(async_socket** new_socket, int new_socket_fd);
-//async_socket* async_socket_create(void);
-void async_socket_write(async_socket* writing_socket, buffer* buffer_to_write, int num_bytes_to_write, void(*send_callback)(async_socket*, void*));
+async_socket* async_socket_create(void);
+void async_socket_write(async_socket* writing_socket, void* buffer_to_write, int num_bytes_to_write, void (*send_callback)(void*), void* arg);
 void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_times_listen);
 void async_socket_off_data(async_socket* reading_socket, void(*data_handler)(async_socket*, buffer*, void*));
-async_socket* async_connect(async_connect_info* connect_info, void(*connect_task_handler)(void*), void(*connection_handler)(async_socket*, void*), void* connection_arg);
+async_socket* async_connect(async_socket* connecting_socket, async_connect_info* connect_info_ptr, void(*connect_task_handler)(void*), void(*connection_handler)(async_socket*, void*), void* connection_arg);
 
 void async_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int, void*), void* arg, int is_temp_subscriber, int num_times_listen);
 void async_socket_end(async_socket* ending_socket);

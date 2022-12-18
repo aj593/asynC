@@ -594,8 +594,7 @@ void async_http_response_set_header(async_http_outgoing_response* curr_http_resp
         &curr_http_response->header_buffer,
         &curr_http_response->header_buff_len,
         &curr_http_response->header_buff_capacity,
-        curr_http_response->response_header_table,
-        &curr_http_response->is_chunked
+        curr_http_response->response_header_table
     );
 }
 
@@ -635,17 +634,20 @@ void async_http_response_write_head(async_http_outgoing_response* curr_http_resp
 
     async_socket_write(
         curr_http_response->tcp_socket_ptr,
-        response_header_buffer,
+        get_internal_buffer(response_header_buffer),
         total_header_len,
+        NULL,
         NULL
     );
+
+    curr_http_response->is_chunked = is_chunked_checker(curr_http_response->response_header_table);
 
     destroy_buffer(response_header_buffer);
 
     curr_http_response->was_header_written = 1;
 }
 
-void async_http_response_write(async_http_outgoing_response* curr_http_response, buffer* response_data){
+void async_http_response_write(async_http_outgoing_response* curr_http_response, void* response_data, unsigned int num_bytes){
     if(!curr_http_response->was_header_written){
         async_http_response_write_head(
             curr_http_response,
@@ -654,11 +656,31 @@ void async_http_response_write(async_http_outgoing_response* curr_http_response,
         );
     }
 
+    if(curr_http_response->is_chunked){
+        //TODO: using MAX_IP_STR_LEN as max length?
+        char response_chunk_info[MAX_IP_STR_LEN];
+        int num_bytes_formatted = snprintf(
+            response_chunk_info, 
+            MAX_IP_STR_LEN,
+            "%x\r\n",
+            num_bytes
+        );
+
+        async_socket_write(
+            curr_http_response->tcp_socket_ptr,
+            response_chunk_info,
+            num_bytes_formatted,
+            NULL,
+            NULL
+        );
+    }
+
     async_socket_write(
         curr_http_response->tcp_socket_ptr,
         response_data,
-        get_buffer_capacity(response_data),
-        NULL //TODO: allow callback to be put in after done writing response?
+        num_bytes,
+        NULL, //TODO: allow callback to be put in after done writing response?
+        NULL
     );
 }
 
@@ -672,20 +694,17 @@ void async_http_response_end(async_http_outgoing_response* curr_http_response){
         );
     }
 
-    char* transfer_encoding_string_value = ht_get(curr_http_response->response_header_table, "Transfer-Encoding");
-    if(strstr(transfer_encoding_string_value, "chunked")){
+    if(curr_http_response->is_chunked){
         //TODO: make a single global instance of this buffer so it's reuseable?
         char chunked_termination_array[] = "0\r\n\r\n";
-        buffer* chunked_termination_buffer = buffer_from_array(chunked_termination_array, sizeof(chunked_termination_array) - 1);
         
         async_socket_write(
             curr_http_response->tcp_socket_ptr,
-            chunked_termination_buffer,
-            get_buffer_capacity(chunked_termination_buffer),
+            chunked_termination_array,
+            sizeof(chunked_termination_array) - 1,
+            NULL,
             NULL
         );
-
-        destroy_buffer(chunked_termination_buffer);
     }
 }
 

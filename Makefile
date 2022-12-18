@@ -1,6 +1,6 @@
 CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic -fpic
-LIBRARY_OBJS = buffer.o async_container_vector.o event_loop.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_server.o async_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o async_dns.o async_http_request.o http_utility.o async_tcp_server.o async_tcp_socket.o async_ipc_server.o async_ipc_socket.o async_child_process.o async_event_emitter.o async_container_linked_list.o async_writable_stream.o
-LIBRARY_OBJ_FOLDER = obj/buffer.o obj/async_container_vector.o obj/event_loop.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_server.o obj/async_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o obj/async_dns.o obj/async_http_request.o obj/http_utility.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/async_ipc_server.o obj/async_ipc_socket.o obj/async_child_process.o obj/async_event_emitter.o obj/async_container_linked_list.o obj/async_writable_stream.o
+LIBRARY_OBJS = buffer.o async_container_vector.o event_loop.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_server.o async_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o async_dns.o async_http_request.o http_utility.o async_tcp_server.o async_tcp_socket.o async_ipc_server.o async_ipc_socket.o async_child_process.o async_event_emitter.o async_container_linked_list.o async_stream.o
+LIBRARY_OBJ_FOLDER = obj/buffer.o obj/async_container_vector.o obj/event_loop.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_server.o obj/async_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o obj/async_dns.o obj/async_http_request.o obj/http_utility.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/async_ipc_server.o obj/async_ipc_socket.o obj/async_child_process.o obj/async_event_emitter.o obj/async_container_linked_list.o obj/async_stream.o
 ASYNC_SHARED_LIB_NAME = libasynC.so
 #TODO: add # -Wextra flag later
 
@@ -103,8 +103,8 @@ async_fs.o: asynC/async_lib/async_file_system/async_fs.c asynC/async_lib/async_f
 async_fs_readstream.o: asynC/async_lib/async_file_system/async_fs_readstream.c asynC/async_lib/async_file_system/async_fs_readstream.h
 	gcc -c asynC/async_lib/async_file_system/async_fs_readstream.c -o obj/async_fs_readstream.o $(CFLAGS)
 
-async_writable_stream.o: asynC/async_lib/async_writable_stream/async_writable_stream.c asynC/async_lib/async_writable_stream/async_writable_stream.h
-	gcc -c asynC/async_lib/async_writable_stream/async_writable_stream.c -o obj/async_writable_stream.o $(CFLAGS)
+async_stream.o: asynC/async_lib/async_stream/async_stream.c asynC/async_lib/async_stream/async_stream.h
+	gcc -c asynC/async_lib/async_stream/async_stream.c -o obj/async_stream.o $(CFLAGS)
 
 async_fs_writestream.o: asynC/async_lib/async_file_system/async_fs_writestream.c asynC/async_lib/async_file_system/async_fs_writestream.h
 	gcc -c asynC/async_lib/async_file_system/async_fs_writestream.c -o obj/async_fs_writestream.o  $(CFLAGS)

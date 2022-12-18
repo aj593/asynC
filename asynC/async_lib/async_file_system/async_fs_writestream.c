@@ -4,7 +4,7 @@
 #include "../../async_runtime/thread_pool.h"
 #include "../../async_runtime/event_loop.h"
 #include "../../async_runtime/io_uring_ops.h"
-#include "../async_writable_stream/async_writable_stream.h"
+#include "../async_stream/async_stream.h"
 #include "../../async_runtime/thread_pool.h"
 
 #include <stdlib.h>
@@ -25,7 +25,7 @@ typedef struct fs_writable_stream {
     int is_done;
     char filename[PATH_MAX]; //TODO: need this to be PATH_MAX, or need this at all, use strlen to find string length first?
     //linked_list buffer_stream_list;
-    async_writable_stream writestream;
+    async_stream writestream;
     pthread_mutex_t buffer_stream_lock;
     //TODO: add event handler vectors? will have to be destroyed when writestream is closed
 } async_fs_writestream;
@@ -60,6 +60,10 @@ void after_basic_async_write(event_node* event_node_ptr);
 size_t min_size(size_t num1, size_t num2);
 void after_writestream_close(int err, void* writestream_cb_arg);
 
+int fs_writestream_future_task_queue_checker(void* arg){
+    return 1;
+}
+
 async_fs_writestream* create_fs_writestream(char* filename){
     async_fs_writestream* new_writestream = (async_fs_writestream*)calloc(1, sizeof(async_fs_writestream));
     new_writestream->is_writable = 1;
@@ -67,11 +71,13 @@ async_fs_writestream* create_fs_writestream(char* filename){
     strncpy(new_writestream->filename, filename, PATH_MAX);
 
     //linked_list_init(&new_writestream->buffer_stream_list);
-    async_writable_stream_init(
+    async_stream_init(
         &new_writestream->writestream, 
         DEFAULT_WRITE_BUFFER_SIZE, 
         basic_async_write, 
-        new_writestream
+        new_writestream,
+        fs_writestream_future_task_queue_checker,
+        NULL
     );
 
     pthread_mutex_init(&new_writestream->buffer_stream_lock, NULL);
@@ -124,7 +130,7 @@ void async_fs_writestream_write(async_fs_writestream* writestream, void* write_b
         return;
     }
 
-    async_writable_stream_write(
+    async_stream_enqueue(
         &writestream->writestream,
         write_buffer,
         num_bytes_to_write,
@@ -150,24 +156,14 @@ int basic_async_write(void* arg){
     thread_task_info* write_task_info_ptr = new_write_task_info_block.new_thread_task_info;
     write_task_info_ptr->fd = writestream->write_fd;
     write_task_info_ptr->custom_data_ptr = writestream;
-
-    async_container_linked_list_iterator new_iterator = 
-        async_container_linked_list_start_iterator(&writestream->writestream.buffer_list);
     
-    async_container_linked_list_iterator_next(&new_iterator, NULL);
-    async_writable_stream_buffer* stream_buffer_info = async_container_linked_list_iterator_get(&new_iterator);
-
-    size_t num_bytes_to_write = stream_buffer_info->buffer_size - stream_buffer_info->out_index;
-    if(stream_buffer_info->in_index > stream_buffer_info->out_index){
-        size_t in_and_out_index_difference = stream_buffer_info->in_index - stream_buffer_info->out_index;
-        num_bytes_to_write = min_size(num_bytes_to_write, in_and_out_index_difference);
-    }
+    async_stream_ptr_data new_ptr_data = async_stream_get_buffer_stream_ptr(&writestream->writestream);
     
     async_basic_write_task_info* write_task_info = (async_basic_write_task_info*)new_write_task_info_block.async_task_info;
     write_task_info->write_fd = writestream->write_fd;
     write_task_info->num_bytes_written_ptr = &write_task_info_ptr->num_bytes;
-    write_task_info->num_bytes_to_write = num_bytes_to_write;
-    write_task_info->buffer = stream_buffer_info->buffer + stream_buffer_info->out_index;
+    write_task_info->num_bytes_to_write = new_ptr_data.num_bytes;
+    write_task_info->buffer = new_ptr_data.ptr;
 
     writestream->is_writing = 1;
 
@@ -189,67 +185,17 @@ void after_basic_async_write(event_node* event_node_ptr){
     async_fs_writestream* current_writestream = (async_fs_writestream*)write_data->custom_data_ptr;
     
     current_writestream->is_writing = 0;
-    current_writestream->writestream.total_bytes_written += write_data->num_bytes;
-    //TODO: move this function call downward so it's below out index increment?
-    async_writable_stream_execute_callbacks(&current_writestream->writestream);
+    async_stream_dequeue(&current_writestream->writestream, write_data->num_bytes);
 
-    async_container_linked_list_iterator new_iterator = 
-        async_container_linked_list_start_iterator(&current_writestream->writestream.buffer_list);
-    
-    async_container_linked_list_iterator_next(&new_iterator, NULL);
-    async_writable_stream_buffer* stream_buffer_info = async_container_linked_list_iterator_get(&new_iterator);
-
-    //TODO: what if num bytes written is -1 due to error?, make extra field for number of bytes attempted to be written and compare?
-    stream_buffer_info->out_index = (stream_buffer_info->out_index + write_data->num_bytes) % stream_buffer_info->buffer_size;
-
-    if(stream_buffer_info->in_index == stream_buffer_info->out_index){
-        if(stream_buffer_info->was_filled){
-            async_container_linked_list_iterator_remove(&new_iterator, NULL);
-        }
-        else{
-            stream_buffer_info->in_index  = 0;
-            stream_buffer_info->out_index = 0;
-        }
-    }
-
-    async_container_linked_list_iterator check_iterator = 
-        async_container_linked_list_start_iterator(&current_writestream->writestream.buffer_list);
-    async_container_linked_list_iterator_next(&check_iterator, NULL);
-    
-    async_writable_stream_buffer* check_stream_buffer_info =
-        async_container_linked_list_iterator_get(&check_iterator);
-
-    //TODO: call basic_async_write like this, or enqueue it into future_task_queue?
-    //TODO: check for queueable condition here even though it was set to 1 above?
     if(
-        current_writestream->writestream.buffer_list.size > 0 &&
-        (
-            check_stream_buffer_info->in_index != check_stream_buffer_info->out_index ||
-            (
-                check_stream_buffer_info->in_index == check_stream_buffer_info->out_index &&
-                check_stream_buffer_info->was_filled
-            )
-        )
+        !current_writestream->writestream.is_queued &&
+        !current_writestream->is_writable
     ){
-        future_task_queue_enqueue(
-            current_writestream->writestream.writing_task, 
-            current_writestream->writestream.writing_task_arg
+        async_close(
+            current_writestream->write_fd,
+            after_writestream_close,
+            current_writestream
         );
-
-        //basic_async_write(current_writestream);
-    }
-    else {
-        current_writestream->writestream.is_queued = 0;
-
-        //TODO: emit drain event here?
-
-        if(!current_writestream->is_writable){
-            async_close(
-                current_writestream->write_fd,
-                after_writestream_close,
-                current_writestream
-            );
-        }
     }
 }
 

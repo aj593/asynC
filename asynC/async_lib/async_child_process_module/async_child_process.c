@@ -481,9 +481,9 @@ void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_bu
 
     int buffer_first_char_index = internal_socket_buffer[0];
     char array[] = { buffer_first_char_index };
-    buffer* resume_signal_buffer = buffer_from_array(array, 1);
-    async_socket_write(ipc_socket, resume_signal_buffer, 1, NULL);
-    destroy_buffer(resume_signal_buffer);
+    //buffer* resume_signal_buffer = buffer_from_array(array, 1);
+    async_socket_write(ipc_socket, array, 1, NULL, NULL);
+    //destroy_buffer(resume_signal_buffer);
 
     new_child_process->async_ipc_sockets[buffer_first_char_index] = ipc_socket;
     void(*curr_ipc_socket_connection_handler)(async_ipc_socket*, void*) = new_child_process->ipc_socket_connection_handlers[buffer_first_char_index];
