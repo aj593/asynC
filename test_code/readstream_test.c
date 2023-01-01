@@ -9,12 +9,13 @@
 async_fs_writestream* output_file;
 
 void readstream_data_callback(async_fs_readstream* readstream, buffer* read_data, void* arg){
-    //printf("%s\n", (char*)get_internal_buffer(read_data));
+    printf("%s\n", (char*)get_internal_buffer(read_data));
 
     async_fs_writestream_write(
         output_file, 
-        read_data, 
+        get_internal_buffer(read_data), 
         get_buffer_capacity(read_data),
+        NULL,
         NULL
     );
 }
@@ -28,6 +29,10 @@ int main(int argc, char* argv[]){
     if(argc != needed_num_args){
         printf("need exactly %d arguments, you provided %d args instead\n", needed_num_args, argc);
         return 1;
+    }
+
+    for(int i = 0; i < argc; i++){
+        printf("curr arg is %s\n", argv[i]);
     }
 
     asynC_init();

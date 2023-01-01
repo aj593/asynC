@@ -14,11 +14,12 @@
 #define TASK_THREAD_BLOCK
 
 typedef struct task_handler_block {
-    event_node* event_node_ptr;
+    //event_node* event_node_ptr;
     void(*task_handler)(void*);
     void* async_task_info;
     int task_type;
-    int* is_done_ptr;
+    int is_done;
+    void* arg;
 } task_block;
 
 #endif
@@ -26,12 +27,13 @@ typedef struct task_handler_block {
 #ifndef THREAD_TASK_INFO
 #define THREAD_TASK_INFO
 
+/*
 //TODO: make another union to go into this struct for different kind of return/result values from different tasks?
 typedef struct thread_task_info {
     //int fs_index; //TODO: need this?
     grouped_fs_cbs fs_cb;
     void* cb_arg;
-    int is_done; //TODO: make this atomic?
+    //int is_done; //TODO: make this atomic?
 
     //following fields may be placed in union
     buffer* buffer;
@@ -44,13 +46,16 @@ typedef struct thread_task_info {
     char** resolved_ip_addresses;
     void* custom_data_ptr;
 } thread_task_info;
+*/
 
 #endif
 
+/*
 typedef struct new_task_node_info {
     thread_task_info* new_thread_task_info;
     void* async_task_info;
 } new_task_node_info;
+*/
 
 void thread_pool_init(void);
 void thread_pool_destroy(void);
@@ -58,8 +63,19 @@ void thread_pool_destroy(void);
 //int is_defer_queue_empty();
 void submit_thread_tasks(void);
 
-event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(void*));
-void create_thread_task(size_t thread_task_size, void(*thread_task_func)(void*), void(*post_task_handler)(event_node*), new_task_node_info* task_info_struct_ptr);
-//void enqueue_task(event_node* task);
+void* async_thread_pool_create_task_copied(
+    void(*thread_task_func)(void*), 
+    void(*post_task_handler)(event_node*), 
+    void* thread_task_data,
+    size_t thread_task_size,
+    void* arg 
+);
+
+void* async_thread_pool_create_task(
+    void(*thread_task_func)(void*), 
+    void(*post_task_handler)(event_node*), 
+    void* thread_task_data, 
+    void* arg
+);
 
 #endif

@@ -6,7 +6,7 @@
 #include "../../event_emitter_module/async_event_emitter.h"
 
 #include "../../../async_runtime/thread_pool.h"
-#include "http_utility.h"
+#include "async_http_incoming_message.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -16,98 +16,134 @@
 
 #define HEADER_BUFFER_CAPACITY 50
 #define LONGEST_ALLOWED_URL 2048
-char* localhost_str = "localhost";
+char localhost_str[] = "localhost";
+char* http_version_string_ptr = "HTTP/1.1";
 
 typedef struct async_http_incoming_response {
-    async_container_vector* data_handler;
-    async_container_vector* end_handler;
-    async_container_vector* event_emitter_handler;
-    hash_table* response_header_table;
-    linked_list response_data_list;
-    char* http_version;
+    async_http_incoming_message incoming_response;
     char* status_code_str;
     int status_code;
     char* status_message;
-    size_t content_length;
     unsigned int num_data_listeners;
 } async_http_incoming_response;
 
 typedef struct client_side_http_transaction_info client_side_http_transaction_info;
 
 typedef struct async_outgoing_http_request {
-    void (*response_handler)(async_http_incoming_response*, void* arg);
-    void* response_arg;
-    async_socket* http_msg_socket;
-    //linked_list request_write_list;
+    async_http_outgoing_message outgoing_message_info;
     int connecting_port;
     char* host;
-    char* url;
-    int is_chunked;
+    void (*response_handler)(async_http_incoming_response*, void* arg);
+    void* response_arg;
 } async_outgoing_http_request;
 
+/*
 typedef struct response_buffer_info {
     buffer* response_buffer;
     client_side_http_transaction_info* transaction_info;
     async_socket* socket_ptr;
 } response_buffer_info;
+*/
 
 typedef struct client_side_http_transaction_info {
     async_outgoing_http_request* request_info;
     async_http_incoming_response* response_info;
-    int found_double_CRLF;
-    buffer* buffer_data;
 } client_side_http_transaction_info;
+
+typedef struct connect_attempt_info {
+    async_outgoing_http_request* http_request_info;
+    char** ip_list;
+    int total_ips;
+    int curr_index;
+} connect_attempt_info;
 
 void response_data_emit_data(async_http_incoming_response* res, buffer* curr_buffer);
 void http_parse_response_task(void* arg);
 void http_response_parser_interm(event_node* http_parse_node);
 void response_data_handler(async_socket*, buffer*, void*);
-
-async_outgoing_http_request* create_outgoing_http_request(void){
-    async_outgoing_http_request* new_http_request = calloc(1, sizeof(async_outgoing_http_request));
-    new_http_request->http_msg_socket = async_socket_create();
-    //linked_list_init(&new_http_request->request_write_list);
-    new_http_request->connecting_port = 80;
-
-    return new_http_request;
-}
-
-async_http_incoming_response* create_incoming_response(void){
-    async_http_incoming_response* new_response = (async_http_incoming_response*)calloc(1, sizeof(async_http_incoming_response));
-    new_response->response_header_table = ht_create();
-    new_response->event_emitter_handler = create_event_listener_vector();
-    linked_list_init(&new_response->response_data_list);
-
-    return new_response;
-}
+void async_http_outgoing_request_write_head(async_outgoing_http_request* outgoing_request_ptr);
+void after_request_dns_callback(char** ip_list, int num_ips, void * arg);
+void http_request_connection_handler(async_socket* newly_connected_socket, void* arg);
 
 void async_http_request_options_init(http_request_options* http_options_ptr){
-    memset(http_options_ptr, 0, sizeof(http_request_options));
-    size_t num_header_bytes = sizeof(char) * HEADER_BUFFER_CAPACITY;
-    http_options_ptr->header_buffer = calloc(1, num_header_bytes);
-    http_options_ptr->curr_header_capacity = num_header_bytes;
-    http_options_ptr->curr_header_len = 0;
-    http_options_ptr->http_version = "HTTP/1.1";
-    http_options_ptr->request_header_table = ht_create();
+    http_options_ptr->header_buffer = create_buffer(HEADER_BUFFER_CAPACITY);
+    http_options_ptr->table_ptr = ht_create();
 }
 
+/*
 void async_http_request_options_destroy(http_request_options* http_options_ptr){
-    free(http_options_ptr->header_buffer);
-    ht_destroy(http_options_ptr->request_header_table);
+    destroy_buffer(http_options_ptr->header_buffer);
+    ht_destroy(http_options_ptr->table_ptr);
 }
+*/
 
-void async_http_request_options_set_header(http_request_options* http_options_ptr, char* header_key, char* header_val){
-    if(strncmp(header_key, "Host", 20) == 0){
+ void outgoing_http_request_init(
+    async_outgoing_http_request* new_http_request,
+    http_request_options* options_ptr,
+    void (*response_handler)(async_http_incoming_response*, void*),
+    void* arg
+){
+    async_http_message_template* template_ptr = 
+        &new_http_request->outgoing_message_info.incoming_msg_template_info;
+
+    if(options_ptr != NULL){
+        template_ptr->header_table  = options_ptr->table_ptr;
+        template_ptr->header_buffer = options_ptr->header_buffer;
+    }
+
+    async_socket* new_socket = async_socket_create();
+    if(new_socket == NULL){
         return;
     }
 
-    async_http_set_header(
-        header_key,
-        header_val,
+    async_http_outgoing_message_init(
+        &new_http_request->outgoing_message_info,
+        new_socket,
+        template_ptr->request_method,
+        template_ptr->request_url,
+        template_ptr->http_version
+    );
+
+    new_http_request->response_handler = response_handler;
+    new_http_request->response_arg = arg;
+
+    if(new_http_request->connecting_port == 0){
+        new_http_request->connecting_port = 80;
+    }
+}
+
+void async_http_outgoing_request_destroy(async_outgoing_http_request* http_request_to_destroy){
+    async_http_outgoing_message_destroy(&http_request_to_destroy->outgoing_message_info);
+}
+
+void incoming_response_init(async_http_incoming_response* new_response, async_socket* socket_ptr){
+    async_http_message_template* template_msg_ptr = &new_response->incoming_response.incoming_msg_template_info;
+
+    async_http_incoming_message_init(
+        &new_response->incoming_response,
+        socket_ptr,
+        template_msg_ptr->http_version,
+        new_response->status_code_str,
+        new_response->status_message
+    );
+}
+
+void async_http_incoming_response_destroy(async_http_incoming_response* response_to_destroy){
+    async_http_incoming_message_destroy(&response_to_destroy->incoming_response);
+}
+
+void async_http_request_options_set_header(http_request_options* http_options_ptr, char* header_key, char* header_val){
+    /* TODO: need this?
+    if(strncmp(header_key, "Host", 20) == 0){
+        return;
+    }
+    */
+
+    async_http_outgoing_message_set_header(
+        http_options_ptr->table_ptr,
         &http_options_ptr->header_buffer,
-        &http_options_ptr->curr_header_len,
-        &http_options_ptr->curr_header_capacity,
-        http_options_ptr->request_header_table
+        header_key,
+        header_val
     );
 }
 
@@ -121,79 +157,37 @@ typedef struct buffer_holder_t {
 } buffer_holder_t;
 
 //TODO: make extra callback param?
-void async_outgoing_http_request_write(async_outgoing_http_request* writing_request, void* buffer, unsigned int num_bytes){
-    if(writing_request->is_chunked){
-        char request_chunk_info[MAX_IP_STR_LEN];
-        int num_bytes_formatted = snprintf(
-            request_chunk_info,
-            MAX_IP_STR_LEN,
-            "%x\r\n",
-            num_bytes
-        );
-
-        async_socket_write(
-            writing_request->http_msg_socket,
-            buffer,
-            num_bytes_formatted,
-            NULL,
-            NULL
-        );
-    }
-    
-    async_socket_write(
-        writing_request->http_msg_socket,
+void async_outgoing_http_request_write(
+    async_outgoing_http_request* writing_request, 
+    void* buffer, 
+    unsigned int num_bytes,
+    void(*send_callback)(void*),
+    void* arg
+){
+    async_http_outgoing_message_write(
+        &writing_request->outgoing_message_info,
         buffer,
         num_bytes,
-        NULL, //TODO: make not null if callback param included for this function?
-        NULL
+        send_callback,
+        arg
     );
 }
 
-void after_request_dns_callback(char** ip_list, int num_ips, void * arg);
-    
-//TODO: also parse ports if possible
-async_outgoing_http_request* async_http_request(char* host_url, char* http_method, http_request_options* options, void(*response_handler)(async_http_incoming_response*, void*), void* arg){
-    //create new request struct
-    async_outgoing_http_request* new_http_request = create_outgoing_http_request();
-    
-    //set response event handler and extra arg
-    new_http_request->response_handler = response_handler;
-    new_http_request->response_arg = arg;
-    //new_http_request->is_chunked = options->is_chunked;
-    new_http_request->is_chunked = is_chunked_checker(options->request_header_table);
-
+char* async_http_request_parse(async_outgoing_http_request* new_http_request, char* host_url, int* bytes_ptr){
     //find length of host url string and traverse backwards to find index of last period character
     size_t host_url_length = strnlen(host_url, LONGEST_ALLOWED_URL);
-    int dot_index;
-    for(dot_index = host_url_length; dot_index >= 0; dot_index--){
-        if(host_url[dot_index] == '.'){
-            break;
-        }
+
+    int dot_index = host_url_length;
+    while(dot_index >= 0 && host_url[dot_index] != '.'){
+        dot_index--;
     }
 
-    int found_nondigit_char = 0;
+    //int found_nondigit_char = 0;
     int colon_index = dot_index + 1;
 
     while(colon_index < host_url_length){
         if(host_url[colon_index] == ':'){
-            int curr_number_index = colon_index + 1;
-            int new_port = 0;
-
-            while(curr_number_index < host_url_length){
-                if(!isdigit(host_url[curr_number_index])){
-                    found_nondigit_char = 1;
-                    break;
-                }
-
-                int curr_digit = host_url[curr_number_index] - '0';
-                new_port = (new_port * 10) + curr_digit;
-
-                curr_number_index++;
-            }
-
-            if(!found_nondigit_char){
-                new_http_request->connecting_port = new_port;
-            }
+            new_http_request->connecting_port = strtoul(host_url + 1, NULL, 10);
 
             break;
         }
@@ -203,37 +197,39 @@ async_outgoing_http_request* async_http_request(char* host_url, char* http_metho
 
     //Traverse forward from index of last dot character to find index of first slash after this
     //This is where the URL route will be
-    int start_of_url_index;
-    for(start_of_url_index = dot_index; start_of_url_index < host_url_length; start_of_url_index++){
-        if(host_url[start_of_url_index] == '/'){
-            break;
-        }
+    int start_of_url_index = dot_index;
+    while(start_of_url_index < host_url_length && host_url[start_of_url_index] != '/'){
+        start_of_url_index++;
     }
     
-    //Set the url length to be 1 by default if it's the root (the '/' character)
-    int url_length = 1;
+    //Set the url length to be 1 by default if it's the root (the "/" string)
+    //int url_length = 1;
+
+    async_http_message_template* msg_template_ptr = 
+        &new_http_request->outgoing_message_info.incoming_msg_template_info;
 
     //TODO: able to condense the following code?
     //If the index after the start of the url index is greater than the whole length
-    //the route is the root of the site (?)
+    //the route is the root of the site (not 100% sure on this (?))
     if(start_of_url_index + 1 > host_url_length){
-        new_http_request->url = "/";
-    }
+        msg_template_ptr->request_url = "/";
+    }    
     //if not, the url length is the difference between the index at the end of the
     //string and the index where the url starts
     else{
-        url_length = host_url_length - start_of_url_index;
-        new_http_request->url = &host_url[start_of_url_index];
+        //url_length = host_url_length - start_of_url_index;
+        msg_template_ptr->request_url = &host_url[start_of_url_index];
     }
 
     //Find the index where the first slash character appearing to the left of the dot is
-    int first_slash_index_before_dot;
-    for(first_slash_index_before_dot = dot_index; first_slash_index_before_dot >= 0; first_slash_index_before_dot--){
-        if(host_url[first_slash_index_before_dot] == '/'){
-            break;
-        }
+    int first_slash_index_before_dot = dot_index;
+    while(first_slash_index_before_dot >= 0 && host_url[first_slash_index_before_dot] != '/'){
+        first_slash_index_before_dot--;
     }
-    
+
+    //TODO: don't need this because fields from options will be passed onto new_http_request struct?
+    //async_http_request_options_destroy(options);
+
     //the host string lenght is the difference between where 
     //the first slash after it is and where the first slash before it is - 1
     int host_str_len = colon_index - first_slash_index_before_dot - 1;
@@ -247,59 +243,49 @@ async_outgoing_http_request* async_http_request(char* host_url, char* http_metho
         host_str_len = strnlen(host_str, LONGEST_ALLOWED_URL);
     }
 
+    return host_str;
+}
+    
+//TODO: also parse ports if possible
+async_outgoing_http_request* async_http_request(
+    char* host_url, 
+    char* http_method, 
+    http_request_options* options, 
+    void(*response_handler)(async_http_incoming_response*, void*), 
+    void* arg
+){
+    //create new request struct
+    int single_req_res_block_size = sizeof(async_outgoing_http_request) + sizeof(async_http_incoming_response);
+    void* request_and_response_block = calloc(1, single_req_res_block_size);
+
+    async_outgoing_http_request* new_http_request = (async_outgoing_http_request*)request_and_response_block;
+    
+    async_http_message_template* msg_template_ptr = 
+        &new_http_request->outgoing_message_info.incoming_msg_template_info;
+
+    strncpy(msg_template_ptr->request_method, http_method, REQUEST_METHOD_STR_LEN);
+    strncpy(msg_template_ptr->http_version, http_version_string_ptr, HTTP_VERSION_LEN);
+
+    int host_str_len;
+    char* host_str = async_http_request_parse(new_http_request, host_url, &host_str_len);
+
+    outgoing_http_request_init(new_http_request, options, response_handler, arg);
+    msg_template_ptr->is_chunked = is_chunked_checker(options->table_ptr);
+
+    async_http_outgoing_request_write_head(new_http_request);
+
     //put host string into own separate string so it can be properly null terminated
     char host_str_copy[host_str_len + 1];
     strncpy(host_str_copy, host_str, host_str_len);
     host_str_copy[host_str_len] = '\0';
-
-    int request_header_length = 22;
-
-    request_header_length += host_str_len;
-    int http_method_len = strnlen(http_method, 20);
-    request_header_length += http_method_len + host_url_length;
-
-    buffer* http_request_header_buffer = get_http_buffer(options->request_header_table, &request_header_length);
-    char* curr_req_buffer_ptr = (char*)get_internal_buffer(http_request_header_buffer);
-    
-    copy_start_line(
-        &curr_req_buffer_ptr,
-        http_method,
-        http_method_len,
-        new_http_request->url,
-        url_length,
-        options->http_version,
-        strlen(options->http_version)
-    );
-
-    copy_single_header_entry(&curr_req_buffer_ptr, "Host", host_str);
-
-    copy_all_headers(&curr_req_buffer_ptr, options->request_header_table);
-
-    async_socket_write(
-        new_http_request->http_msg_socket, 
-        get_internal_buffer(http_request_header_buffer),
-        get_buffer_capacity(http_request_header_buffer),
-        NULL,
-        NULL
-    );
-
-    async_http_request_options_destroy(options);
-
-    destroy_buffer(http_request_header_buffer);
-
     async_dns_lookup(host_str_copy, after_request_dns_callback, new_http_request);
 
     return new_http_request;
 }
 
-typedef struct connect_attempt_info {
-    async_outgoing_http_request* http_request_info;
-    char** ip_list;
-    int total_ips;
-    int curr_index;
-} connect_attempt_info;
-
-void http_request_connection_handler(async_socket* newly_connected_socket, void* arg);
+void async_http_outgoing_request_write_head(async_outgoing_http_request* outgoing_request_ptr){
+    async_http_outgoing_message_write_head(&outgoing_request_ptr->outgoing_message_info);
+}
 
 void after_request_dns_callback(char** ip_list, int num_ips, void* arg){
     connect_attempt_info* new_connect_info = (connect_attempt_info*)malloc(sizeof(connect_attempt_info));
@@ -310,7 +296,7 @@ void after_request_dns_callback(char** ip_list, int num_ips, void* arg){
 
     //TODO: write http info here instead of in http_request_connection_handler?
     /*async_socket* new_socket = */async_tcp_connect(
-        new_connect_info->http_request_info->http_msg_socket,
+        new_connect_info->http_request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket,
         new_connect_info->ip_list[new_connect_info->curr_index++],
         new_connect_info->http_request_info->connecting_port,
         http_request_connection_handler,
@@ -331,94 +317,88 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     free(connect_info->ip_list);
     free(connect_info);
 
-    event_node* http_request_transaction_tracker_node = create_event_node(
-        sizeof(client_side_http_transaction_info), 
-        client_http_request_finish_handler,
-        client_http_request_event_checker
-    );
+    //TODO: initialize socket pointers for request and response here too?
+    client_side_http_transaction_info transaction_info = {
+        .request_info  = request_info,
+        .response_info = (async_http_incoming_response*)(request_info + 1)
+    };
     
-    client_side_http_transaction_info* http_client_transaction_ptr = (client_side_http_transaction_info*)http_request_transaction_tracker_node->data_ptr;
-    http_client_transaction_ptr->request_info = request_info;
-    http_client_transaction_ptr->request_info->http_msg_socket = newly_connected_socket;
-    enqueue_polling_event(http_request_transaction_tracker_node);
+    event_node* new_http_transaction_node = 
+        async_event_loop_create_new_polling_event(
+            &transaction_info,
+            sizeof(client_side_http_transaction_info),
+            client_http_request_event_checker,
+            client_http_request_finish_handler
+        );
     
+    client_side_http_transaction_info* http_client_transaction_ptr = 
+        (client_side_http_transaction_info*)new_http_transaction_node->data_ptr;
+
     async_socket_on_data(newly_connected_socket, socket_data_handler, http_client_transaction_ptr, 0, 0);
 }
 
 int client_http_request_event_checker(event_node* client_http_transaction_node){
     client_side_http_transaction_info* http_info = (client_side_http_transaction_info*)client_http_transaction_node->data_ptr;
 
-    return !http_info->request_info->http_msg_socket->is_open; //TODO: make better to condition for when to close request
+    //TODO: make better to condition for when to close request
+    return !http_info->request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket->is_open; 
 }
 
 void client_http_request_finish_handler(event_node* finished_http_request_node){
+    client_side_http_transaction_info* ending_http_info = (client_side_http_transaction_info*)finished_http_request_node->data_ptr;
 
+    //async_outgoing_http_request* ending_request_info  = ending_http_info->request_info;
+    //destroy_buffer(ending_request_info->buffer_data);
+
+    async_http_incoming_response* ending_response_info = ending_http_info->response_info;
+    //async_container_vector_destroy(ending_response_info->event_emitter_handler);
+    ht_destroy(ending_response_info->incoming_response.incoming_msg_template_info.header_table);
+    async_stream_destroy(&ending_response_info->incoming_response.incoming_data_stream);
 }
 
 void socket_data_handler(async_socket* socket, buffer* data_buffer, void* arg){
     client_side_http_transaction_info* client_http_info = (client_side_http_transaction_info*)arg;
-    
-    if(client_http_info->found_double_CRLF){
-        return;
-    }
 
-    http_buffer_check_for_double_CRLF(
-        socket,
-        &client_http_info->found_double_CRLF,
-        &client_http_info->buffer_data,
+    int found_double_CRLF_ret = async_http_incoming_message_double_CRLF_check(
+        &client_http_info->response_info->incoming_response,
         data_buffer,
         socket_data_handler,
         response_data_handler,
-        NULL
+        client_http_info->response_info
     );
 
-    if(!client_http_info->found_double_CRLF){
+    if(found_double_CRLF_ret == -1){
         return;
     }
 
-    new_task_node_info http_response_parser_task;
-    create_thread_task(sizeof(response_buffer_info), http_parse_response_task, http_response_parser_interm, &http_response_parser_task);
-    thread_task_info* curr_thread_info = http_response_parser_task.new_thread_task_info;
-    response_buffer_info* new_response_item = (response_buffer_info*)http_response_parser_task.async_task_info;
-    new_response_item->transaction_info = client_http_info;
-    new_response_item->transaction_info->response_info = create_incoming_response();
-    new_response_item->response_buffer = client_http_info->buffer_data;
-    new_response_item->socket_ptr = socket;
-    curr_thread_info->custom_data_ptr = new_response_item;
+    async_thread_pool_create_task(
+        http_parse_response_task,
+        http_response_parser_interm,
+        client_http_info,
+        NULL
+    );
 
-    async_socket_on_data(
-        socket,
-        response_data_handler,
-        new_response_item->transaction_info->response_info,
-        0,
-        0
+    incoming_response_init(
+        client_http_info->response_info, 
+        client_http_info->request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket
     );
 }
 
-void http_parse_response_task(void* response_item_ptr){
-    response_buffer_info* curr_response_item = (response_buffer_info*)response_item_ptr;
-    //curr_response_item->transaction_info->response_info = create_incoming_response();
-    async_http_incoming_response* new_incoming_http_response = curr_response_item->transaction_info->response_info;
+void http_parse_response_task(void* transaction_item_ptr){
+    client_side_http_transaction_info* curr_transaction_item = (client_side_http_transaction_info*)transaction_item_ptr;
+    async_http_incoming_response* new_incoming_http_response = curr_transaction_item->response_info;
 
-    parse_http(
-        curr_response_item->response_buffer,
-        &new_incoming_http_response->http_version,
-        &new_incoming_http_response->status_code_str,
-        &new_incoming_http_response->status_message,
-        new_incoming_http_response->response_header_table,
-        &new_incoming_http_response->content_length,
-        &new_incoming_http_response->response_data_list
-    );
-
-    destroy_buffer(curr_response_item->response_buffer);
+    async_http_incoming_message_parse(&new_incoming_http_response->incoming_response);
 }
 
 void http_response_parser_interm(event_node* http_parse_node){
-    thread_task_info* http_response_data = (thread_task_info*)http_parse_node->data_ptr;
-    response_buffer_info* response_info = (response_buffer_info*)http_response_data->custom_data_ptr;
-    void(*response_handler)(async_http_incoming_response*, void*) = response_info->transaction_info->request_info->response_handler;
-    async_http_incoming_response* response = response_info->transaction_info->response_info;
-    void* arg = response_info->transaction_info->request_info->response_arg;
+    task_block* curr_parser_task_block = (task_block*)http_parse_node->data_ptr;
+    client_side_http_transaction_info* transaction_info = 
+        (client_side_http_transaction_info*)curr_parser_task_block->async_task_info;
+
+    void(*response_handler)(async_http_incoming_response*, void*) = transaction_info->request_info->response_handler;
+    async_http_incoming_response* response = transaction_info->response_info;
+    void* arg = transaction_info->request_info->response_arg;
     response_handler(response, arg);
 }
 
@@ -428,15 +408,17 @@ typedef struct {
 } response_and_buffer_data;
 
 void async_http_incoming_response_check_data(async_http_incoming_response* res_ptr){
-    //TODO: emit data event only when response is flowing/response has data listeners
-    while(res_ptr->response_data_list.size > 0){
-        event_node* response_node = remove_first(&res_ptr->response_data_list);
-        buffer_holder_t* buffer_holder = (buffer_holder_t*)response_node->data_ptr;
-        buffer* curr_buffer = buffer_holder->buffer_to_write;
+    async_stream* stream_ptr = &res_ptr->incoming_response.incoming_data_stream;
+
+    while(!is_async_stream_empty(stream_ptr)){
+        async_stream_ptr_data ptr_to_data = async_stream_get_buffer_stream_ptr(stream_ptr);
+        //TODO: need to create buffer in here, to do in emit_data function?
+        buffer* curr_buffer = buffer_from_array(ptr_to_data.ptr, ptr_to_data.num_bytes);
 
         response_data_emit_data(res_ptr, curr_buffer);
 
         destroy_buffer(curr_buffer);
+        async_stream_dequeue(stream_ptr, ptr_to_data.num_bytes);
     }
 }
 
@@ -447,7 +429,7 @@ void response_data_emit_data(async_http_incoming_response* res, buffer* curr_buf
     };
 
     async_event_emitter_emit_event(
-        res->event_emitter_handler,
+        res->incoming_response.incoming_msg_template_info.event_emitter_handler,
         async_http_incoming_response_data_event,
         &curr_res_and_buf
     );
@@ -468,7 +450,7 @@ void async_http_response_on_data(async_http_incoming_response* res, void(*http_r
     union event_emitter_callbacks res_data_callback = { .http_request_data_callback = http_request_data_callback };
 
     async_event_emitter_on_event(
-        &res->event_emitter_handler,
+        &res->incoming_response.incoming_msg_template_info.event_emitter_handler,
         async_http_incoming_response_data_event,
         res_data_callback,
         response_data_converter,
@@ -484,12 +466,15 @@ void async_http_response_on_data(async_http_incoming_response* res, void(*http_r
 void response_data_handler(async_socket* socket_with_response, buffer* response_data, void* arg){
     async_http_incoming_response* incoming_response = (async_http_incoming_response*)arg;
 
-    event_node* new_node = create_event_node(sizeof(buffer_holder_t), NULL, NULL);
-    buffer_holder_t* buffer_holder = (buffer_holder_t*)new_node->data_ptr;
-    buffer_holder->buffer_to_write = response_data;
+    async_stream_enqueue(
+        &incoming_response->incoming_response.incoming_data_stream,
+        get_internal_buffer(response_data),
+        get_buffer_capacity(response_data),
+        NULL,
+        NULL
+    );
 
-    //TODO: need mutex lock here?
-    append(&incoming_response->response_data_list, new_node);
+    destroy_buffer(response_data);
 
     //TODO: add is_flowing field and use that instead, and set is_flowing based on if num_data_listeners > 0?
     if(incoming_response->num_data_listeners > 0){
@@ -498,7 +483,7 @@ void response_data_handler(async_socket* socket_with_response, buffer* response_
 }
 
 char* async_http_incoming_response_get(async_http_incoming_response* res_ptr, char* header_key_string){
-    return ht_get(res_ptr->response_header_table, header_key_string);
+    return ht_get(res_ptr->incoming_response.incoming_msg_template_info.header_table, header_key_string);
 }
 
 int async_http_incoming_response_status_code(async_http_incoming_response* res_ptr){

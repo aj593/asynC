@@ -73,20 +73,6 @@ void add(linked_list* list, event_node* before_node, event_node* middle_node, ev
 //TODO: make it so ppl can't add next node to dummy tail node?
 void add_next(linked_list* list, event_node* curr, event_node* new_node){
     add(list, curr, new_node, curr->next);
-
-    /*
-    event_node* after_curr = curr->next;
-
-    curr->next = new_node;
-    new_node->next = after_curr;
-
-    after_curr->prev = new_node;
-    new_node->prev = curr;
-
-    new_node->linked_list_ptr = list;
-
-    list->size++;
-    */
 }
 
 void prepend(linked_list* list, event_node* new_first){
@@ -96,20 +82,6 @@ void prepend(linked_list* list, event_node* new_first){
 //TODO: make it so ppl can't add previous node to dummy head node?
 void add_prev(linked_list* list, event_node* curr, event_node* new_node){
     add(list, curr->prev, new_node, curr);
-
-    /*
-    event_node* before_curr = curr->prev;
-
-    curr->prev = new_node;
-    new_node->prev = before_curr;
-
-    before_curr->next = new_node;
-    new_node->next = curr;
-
-    new_node->linked_list_ptr = list;
-    
-    list->size++;
-    */
 }
 
 void append(linked_list* list, event_node* new_last){

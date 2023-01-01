@@ -50,6 +50,8 @@ typedef struct async_socket {
     unsigned int num_connection_listeners;
     unsigned int num_end_listeners;
     unsigned int num_close_listeners;
+    int is_queued_for_writing;
+    int is_queueable_for_writing;
 } async_socket;
 
 #endif
@@ -60,7 +62,7 @@ typedef struct connect_info {
     char ipc_client_path[MAX_SOCKET_NAME_LEN];
     char ipc_server_path[MAX_SOCKET_NAME_LEN];
     int port;
-    int* socket_fd_ptr;
+    int socket_fd;
     void* custom_data;
 } async_connect_info;
 

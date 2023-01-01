@@ -48,9 +48,22 @@ void end_handler(void* arg){
 
 void response_writer(async_fs_readstream* readstream, buffer* html_buffer, void* res_arg){
     async_http_outgoing_response* res = (async_http_outgoing_response*)res_arg;
-    async_http_response_write(res, html_buffer);
+    async_http_response_write(
+        res, 
+        get_internal_buffer(html_buffer), 
+        get_buffer_capacity(html_buffer),
+        NULL, 
+        NULL
+    );
     //total_num_bytes_read += get_buffer_capacity(html_buffer);
     //printf("i read %d bytes\n", total_num_bytes_read);
+
+    write(
+        STDOUT_FILENO,
+        get_internal_buffer(html_buffer),
+        get_buffer_capacity(html_buffer)
+    );
+
     destroy_buffer(html_buffer);
 }
 
@@ -60,6 +73,7 @@ void response_stream_ender(async_fs_readstream* readstream, void* arg){
     async_http_outgoing_response* res = (async_http_outgoing_response*)arg;
     //sleep(1);
     async_http_response_end(res);
+    async_http_outgoing_response_end_connection(res);
 }
 
 void http_server_on_request(async_http_server* http_server, async_incoming_http_request* req, async_http_outgoing_response* res, void* arg){
@@ -77,6 +91,8 @@ void http_server_on_request(async_http_server* http_server, async_incoming_http_
 
     if(strncmp(async_incoming_http_request_url(req), "/", 20) == 0){
         async_http_response_set_header(res, "Content-Type", "text/html");
+        async_http_response_set_header(res, "Transfer-Encoding", "chunked");
+        async_http_response_set_header(res, "Content-Length", "217");
         async_http_response_set_header(res, "foo", "bar");
         curr_readstream = create_async_fs_readstream("../test_files/basic.html");
         async_fs_readstream_on_data(curr_readstream, response_writer, res, 0, 0);
@@ -107,5 +123,5 @@ void http_server_on_request(async_http_server* http_server, async_incoming_http_
 
     //async_http_response_write(res, buffer_from_array(html_string, sizeof(html_string)));
     //async_http_response_end(res);
-    async_http_server_close(http_server);
+    //async_http_server_close(http_server);
 }

@@ -22,17 +22,15 @@ typedef struct async_server {
     //int domain;
     //int type;
     //int protocol;
+    int newly_accepted_fd;
     int listening_socket;
-    //int has_event_arr[2];
     int has_connection_waiting;
-    //int dummy_int;
     int is_listening;
     int is_currently_accepting;
-    //hash_table* socket_table;
     int num_connections;
     async_container_vector* event_listeners_vector;
-    //async_container_vector* listeners_vector;
-    //async_container_vector* connection_vector;
+    char ip_address[MAX_IP_STR_LEN];
+    int port;
     char name[MAX_SOCKET_NAME_LEN];
     void(*listen_task)(void*);
     void(*accept_task)(void*);
@@ -52,10 +50,12 @@ typedef struct listen_task {
     void* custom_data;
 } async_listen_info;
 
+/*
 typedef struct async_accept_info {
     async_server* accepting_server;
     int* new_fd_ptr;
 } async_accept_info;
+*/
 
 #ifndef SOCKET_INFO
 #define SOCKET_INFO

@@ -12,11 +12,12 @@
 
 //void hi_handler(event_emitter* emitter, )
 
+/*
 void data_handler(async_socket* socket, buffer* read_buffer, void* arg){
     printf("buffer is %ld bytes long\n", get_buffer_capacity(read_buffer));
     /*void* char_buff = get_internal_buffer(read_buffer);
 
-    write(STDOUT_FILENO, char_buff, get_buffer_capacity(read_buffer));*/
+    write(STDOUT_FILENO, char_buff, get_buffer_capacity(read_buffer));
     //write(STDOUT_FILENO, " ", 1);
 
     destroy_buffer(read_buffer);
@@ -35,7 +36,13 @@ void send_cb(async_socket* socket_ptr, void* cb_arg){
     char* internal_dest_buffer = (char*)get_internal_buffer(send_buffer);
     memcpy(internal_dest_buffer, stdin_buffer, num_bytes_read);
 
-    async_socket_write(socket_ptr, send_buffer, num_bytes_read, send_cb);
+    async_socket_write(
+        socket_ptr, 
+        send_buffer, 
+        num_bytes_read, 
+        NULL,
+        NULL
+    );
     destroy_buffer(send_buffer);
 }
 
@@ -74,6 +81,7 @@ void connection_done_handler(async_socket* socket, void* arg){
 void write_callback(async_socket* written_socket, int num){
     printf("done writing\n");
 }
+*/
 
 int port = 3000;
 
@@ -109,7 +117,7 @@ void chat_connection_handler(async_socket* new_socket, void* arg){
     socket_array[curr_num_sockets++] = new_socket;
     async_socket_on_data(new_socket, chat_data_handler, NULL, 0 , 0);
     async_socket_on_end(new_socket, socket_end_callback, NULL, 0, 0);
-    async_server_close(new_server);
+    //async_server_close(new_server);
     /*
     if(new_server->num_connections == 3){
         printf("closing server!\n");
@@ -126,13 +134,15 @@ void chat_data_handler(async_socket* reading_socket, buffer* chat_data, void* ar
         if(socket_array[i] != reading_socket){
             async_socket_write(
                 socket_array[i], 
-                chat_data, 
+                internal_buffer, 
                 get_buffer_capacity(chat_data),
+                NULL,
                 NULL
             );
         }
-        
     }
+
+    destroy_buffer(chat_data);
 }
 
 int main(int argc, char* argv[]){

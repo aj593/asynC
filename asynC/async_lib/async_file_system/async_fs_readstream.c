@@ -44,17 +44,17 @@ typedef struct buffer_info {
 void readstream_finish_handler(event_node* readstream_node);
 int readstream_checker(event_node* readstream_node);
 void after_readstream_open(int readstream_fd, void* arg);
-void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, int num_bytes_read, void* buffer_cb_arg);
-void async_fs_readstream_emit_data(async_fs_readstream* readstream, buffer* data_buffer, int num_bytes);
+void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg);
+void async_fs_readstream_emit_data(async_fs_readstream* readstream, buffer* data_buffer, size_t num_bytes);
 void async_fs_readstream_emit_end(async_fs_readstream* readstream);
 
 async_fs_readstream* create_async_fs_readstream(char* filename){
     async_fs_readstream* new_readstream_ptr = calloc(1, sizeof(async_fs_readstream));
     new_readstream_ptr->read_chunk_size = DEFAULT_READSTREAM_CHUNK_SIZE;
-    new_readstream_ptr->read_buffer = create_buffer(DEFAULT_READSTREAM_CHUNK_SIZE, 1);
+    new_readstream_ptr->read_buffer = create_buffer(DEFAULT_READSTREAM_CHUNK_SIZE);
     new_readstream_ptr->event_listener_vector = create_event_listener_vector();
 
-    async_open(filename, O_RDONLY, 0644, after_readstream_open, new_readstream_ptr);
+    async_fs_open(filename, O_RDONLY, 0644, after_readstream_open, new_readstream_ptr);
 
     return new_readstream_ptr;
 }
@@ -70,11 +70,17 @@ void after_readstream_open(int readstream_fd, void* arg){
     readstream_ptr->is_open = 1;
     readstream_ptr->is_readable = 1;
 
-    //TODO: decide whether or not to put readstream into event queue based on return values from open() and stat()
-    event_node* readstream_node = create_event_node(sizeof(fs_readstream_info), readstream_finish_handler, readstream_checker);
-    fs_readstream_info* readstream_info = (fs_readstream_info*)readstream_node->data_ptr;
-    readstream_info->readstream_ptr = readstream_ptr;
-    enqueue_polling_event(readstream_node);
+    //TODO: only put existing readstream pointer into event_node data pointer, not fs_readstream_info struct
+    fs_readstream_info readstream_info = {
+        .readstream_ptr = readstream_ptr
+    };
+
+    async_event_loop_create_new_polling_event(
+        &readstream_info,
+        sizeof(fs_readstream_info),
+        readstream_checker,
+        readstream_finish_handler
+    );
 }
 
 int readstream_checker(event_node* readstream_node){
@@ -87,7 +93,7 @@ int readstream_checker(event_node* readstream_node){
     {
         readstream->is_currently_reading = 1;
 
-        async_pread(
+        async_fs_buffer_pread(
             readstream->read_fd,
             readstream->read_buffer,
             readstream->read_chunk_size,
@@ -115,10 +121,10 @@ void readstream_finish_handler(event_node* readstream_node){
     async_fs_readstream* ending_readstream_ptr = readstream_info_ptr->readstream_ptr;
     async_fs_readstream_emit_end(ending_readstream_ptr);
 
-    async_close(ending_readstream_ptr->read_fd, after_readstream_close, ending_readstream_ptr);
+    async_fs_close(ending_readstream_ptr->read_fd, after_readstream_close, ending_readstream_ptr);
 }
 
-void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, int num_bytes_read, void* buffer_cb_arg){
+void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg){
     async_fs_readstream* readstream_ptr_arg = (async_fs_readstream*)buffer_cb_arg;
     
     if(num_bytes_read > 0){
@@ -136,7 +142,7 @@ void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, 
     readstream_ptr_arg->is_currently_reading = 0;
 }
 
-void async_fs_readstream_emit_data(async_fs_readstream* readstream, buffer* data_buffer, int num_bytes){
+void async_fs_readstream_emit_data(async_fs_readstream* readstream, buffer* data_buffer, size_t num_bytes){
     buffer_info curr_buffer_info = {
         .readstream_ptr = readstream,
         .read_buffer = data_buffer,

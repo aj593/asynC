@@ -1,6 +1,6 @@
 CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic -fpic
-LIBRARY_OBJS = buffer.o async_container_vector.o event_loop.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_server.o async_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o async_dns.o async_http_request.o http_utility.o async_tcp_server.o async_tcp_socket.o async_ipc_server.o async_ipc_socket.o async_child_process.o async_event_emitter.o async_container_linked_list.o async_stream.o
-LIBRARY_OBJ_FOLDER = obj/buffer.o obj/async_container_vector.o obj/event_loop.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_server.o obj/async_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o obj/async_dns.o obj/async_http_request.o obj/http_utility.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/async_ipc_server.o obj/async_ipc_socket.o obj/async_child_process.o obj/async_event_emitter.o obj/async_container_linked_list.o obj/async_stream.o
+LIBRARY_OBJS = buffer.o async_container_vector.o event_loop.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_server.o async_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o async_dns.o async_http_request.o async_http_message_template.o async_tcp_server.o async_tcp_socket.o async_ipc_server.o async_ipc_socket.o async_child_process.o async_event_emitter.o async_container_linked_list.o async_stream.o async_http_incoming_message.o async_http_outgoing_message.o
+LIBRARY_OBJ_FOLDER = obj/buffer.o obj/async_container_vector.o obj/event_loop.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_server.o obj/async_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o obj/async_dns.o obj/async_http_request.o obj/async_http_message_template.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/async_ipc_server.o obj/async_ipc_socket.o obj/async_child_process.o obj/async_event_emitter.o obj/async_container_linked_list.o obj/async_stream.o obj/async_http_incoming_message.o obj/async_http_outgoing_message.o
 ASYNC_SHARED_LIB_NAME = libasynC.so
 #TODO: add # -Wextra flag later
 
@@ -173,8 +173,14 @@ async_http_server.o: asynC/async_lib/async_networking/async_http_module/async_ht
 async_http_request.o: asynC/async_lib/async_networking/async_http_module/async_http_request.c asynC/async_lib/async_networking/async_http_module/async_http_request.h
 	gcc -c asynC/async_lib/async_networking/async_http_module/async_http_request.c -o obj/async_http_request.o $(CFLAGS)
 
-http_utility.o: asynC/async_lib/async_networking/async_http_module/http_utility.c asynC/async_lib/async_networking/async_http_module/http_utility.h
-	gcc -c asynC/async_lib/async_networking/async_http_module/http_utility.c -o obj/http_utility.o $(CFLAGS)
+async_http_message_template.o: asynC/async_lib/async_networking/async_http_module/async_http_message_template.c asynC/async_lib/async_networking/async_http_module/async_http_message_template.h
+	gcc -c asynC/async_lib/async_networking/async_http_module/async_http_message_template.c -o obj/async_http_message_template.o $(CFLAGS)
+
+async_http_incoming_message.o: asynC/async_lib/async_networking/async_http_module/async_http_incoming_message.c asynC/async_lib/async_networking/async_http_module/async_http_incoming_message.h
+	gcc -c asynC/async_lib/async_networking/async_http_module/async_http_incoming_message.c -o obj/async_http_incoming_message.o $(CFLAGS)
+
+async_http_outgoing_message.o: asynC/async_lib/async_networking/async_http_module/async_http_outgoing_message.c asynC/async_lib/async_networking/async_http_module/async_http_outgoing_message.h
+	gcc -c asynC/async_lib/async_networking/async_http_module/async_http_outgoing_message.c -o obj/async_http_outgoing_message.o $(CFLAGS)
 
 async_child_process.o: asynC/async_lib/async_child_process_module/async_child_process.c asynC/async_lib/async_child_process_module/async_child_process.h
 	gcc -c asynC/async_lib/async_child_process_module/async_child_process.c -o obj/async_child_process.o $(CFLAGS)

@@ -77,14 +77,14 @@ void tcp_server_listen_task(void* listen_task){
 }
 
 void tcp_server_accept_task(void* accept_task){
-    async_accept_info* accept_info_ptr = (async_accept_info*)accept_task;
+    async_server* accepting_server = (async_server*)accept_task;
 
     //TODO: get these structs and info from async_accept_info pointer instead of having local variables? 
     struct sockaddr_in client_addr;
     socklen_t peer_addr_len = sizeof(client_addr);
 
-    *accept_info_ptr->new_fd_ptr = accept(
-        accept_info_ptr->accepting_server->listening_socket,
+    accepting_server->newly_accepted_fd = accept(
+        accepting_server->listening_socket,
         (struct sockaddr*)&client_addr,
         &peer_addr_len
     );

@@ -73,17 +73,16 @@ void async_server_listen(async_server* listening_server, async_listen_info* curr
         async_server_on_listen(listening_server, listen_callback, arg, 1, 1);
     }
 
-    new_task_node_info server_listen_info;
-    create_thread_task(sizeof(async_listen_info), listening_server->listen_task, listen_cb_interm, &server_listen_info);
-    thread_task_info* new_task = server_listen_info.new_thread_task_info;
-    new_task->is_done = 0;
-    new_task->listening_server = listening_server;
-    
-    async_listen_info* listen_args_info = (async_listen_info*)server_listen_info.async_task_info;
-    memcpy(listen_args_info, curr_listen_info, sizeof(async_listen_info));
-    //strncpy(listen_args_info->ip_address, ip_address, MAX_IP_STR_LEN);
-    //listen_args_info->port = port;
-    listen_args_info->listening_server = listening_server;
+    curr_listen_info->listening_server = listening_server;
+
+    async_thread_pool_create_task_copied(
+        listening_server->listen_task, 
+        listen_cb_interm,
+        curr_listen_info,
+        sizeof(async_listen_info),
+        NULL
+    );
+
     //TODO: assign success_ptr?
 }
 
@@ -107,20 +106,28 @@ void async_server_event_handler(event_node* server_info_node, uint32_t events){
 
 void listen_cb_interm(event_node* listen_node){
     //TODO: add error checking here
-    thread_task_info* listen_node_info = (thread_task_info*)listen_node->data_ptr;
+    async_listen_info* listen_node_info = (async_listen_info*)listen_node->data_ptr;
     async_server* newly_listening_server = listen_node_info->listening_server;
     newly_listening_server->is_listening = 1;
 
     async_server_emit_listen(newly_listening_server);
 
-    event_node* server_node = create_event_node(sizeof(server_info), destroy_server, server_accept_connections);
-    newly_listening_server->event_node_ptr = server_node;
-    server_node->event_handler = async_server_event_handler;
-    server_info* server_info_ptr = (server_info*)server_node->data_ptr;
-    server_info_ptr->listening_server = listen_node_info->listening_server;
-    enqueue_idle_event(server_node);
+    server_info server_info = {
+        .listening_server = newly_listening_server
+    };
 
-    epoll_add(server_info_ptr->listening_server->listening_socket, server_node, EPOLLIN);
+    event_node* server_node = async_event_loop_create_new_idle_event(
+        &server_info,
+        sizeof(server_info),
+        server_accept_connections,
+        destroy_server
+    );
+
+    newly_listening_server->event_node_ptr = server_node;
+
+    //TODO: put following two statements in same function?
+    server_node->event_handler = async_server_event_handler;
+    epoll_add(newly_listening_server->listening_socket, server_node, EPOLLIN);
 }
 
 int server_accept_connections(event_node* server_event_node){
@@ -141,29 +148,27 @@ void destroy_server(event_node* server_node){
 
 //TODO: make extra param for accept() callback?
 void async_accept(async_server* accepting_server){
-    new_task_node_info server_accept_info;
-    create_thread_task(sizeof(async_accept_info), accepting_server->accept_task, post_accept_interm, &server_accept_info);
-    thread_task_info* new_task = server_accept_info.new_thread_task_info;
-    new_task->listening_server = accepting_server;
-    
-    async_accept_info* accept_info_ptr = (async_accept_info*)server_accept_info.async_task_info;
-    accept_info_ptr->new_fd_ptr = &new_task->fd;
-    accept_info_ptr->accepting_server = accepting_server;
+    async_thread_pool_create_task(
+        accepting_server->accept_task,
+        post_accept_interm,
+        &accepting_server,
+        NULL
+    );
 }
 
 void post_accept_interm(event_node* accept_node){
-    thread_task_info* thread_accept_info_ptr = (thread_task_info*)accept_node->data_ptr;
-    async_server* accepting_server = thread_accept_info_ptr->listening_server;
+    task_block* thread_accept_task_block = (task_block*)accept_node->data_ptr;
+    async_server* accepting_server = thread_accept_task_block->async_task_info;
 
     accepting_server->is_currently_accepting = 0;
     accepting_server->has_connection_waiting = 0;
 
-    if(thread_accept_info_ptr->fd == -1){
+    if(accepting_server->newly_accepted_fd == -1){
         return;
     }
 
     async_socket* new_socket_ptr = NULL;
-    event_node* socket_event_node = create_socket_node(&new_socket_ptr, thread_accept_info_ptr->fd);
+    event_node* socket_event_node = create_socket_node(&new_socket_ptr, accepting_server->newly_accepted_fd);
     if(socket_event_node == NULL){
         //TODO: print error and return early
     }
@@ -180,8 +185,8 @@ void async_server_close(async_server* closing_server){
 
     epoll_remove(closing_server->listening_socket);
 
-    //TODO: make async call to close listening file descriptor for server
-    async_close(closing_server->listening_socket, closing_server_callback, NULL);
+    //make async call to close listening file descriptor for server
+    async_fs_close(closing_server->listening_socket, closing_server_callback, NULL);
 }
 
 void closing_server_callback(int result_val, void* cb_arg){

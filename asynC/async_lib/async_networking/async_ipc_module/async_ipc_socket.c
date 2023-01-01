@@ -58,7 +58,7 @@ int async_ipc_connect_template(char client_path[], char server_path[]){
 
 void ipc_connect_task_handler(void* connect_task_info){
     async_connect_info* connect_info = (async_connect_info*)connect_task_info;
-    *connect_info->socket_fd_ptr = async_ipc_connect_template(
+    connect_info->socket_fd = async_ipc_connect_template(
         connect_info->ipc_client_path, 
         connect_info->ipc_server_path
     );

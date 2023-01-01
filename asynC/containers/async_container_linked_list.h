@@ -22,6 +22,7 @@ typedef struct async_container_linked_list_iterator {
 } async_container_linked_list_iterator;
 
 void async_container_linked_list_init(async_container_linked_list* new_linked_list, unsigned int entry_size);
+void async_container_linked_list_destroy(async_container_linked_list* destroyed_list);
 unsigned int async_container_linked_list_size(async_container_linked_list* list_ptr);
 async_container_linked_list_iterator async_container_linked_list_start_iterator(async_container_linked_list* list_ptr);
 async_container_linked_list_iterator async_container_linked_list_end_iterator(async_container_linked_list* list_ptr);

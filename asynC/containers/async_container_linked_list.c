@@ -18,6 +18,12 @@ void async_container_linked_list_init(async_container_linked_list* new_linked_li
     new_linked_list->size_per_entry = entry_size;
 }
 
+void async_container_linked_list_destroy(async_container_linked_list* destroyed_list){
+    while(destroyed_list->size > 0){
+        async_container_linked_list_remove_first(destroyed_list, NULL);
+    }
+}
+
 //TODO: make linked list destroy method
 
 unsigned int async_container_linked_list_size(async_container_linked_list* list_ptr){

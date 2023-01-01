@@ -11,28 +11,54 @@
 #include "../../containers/linked_list.h"
 #include "../../containers/async_container_vector.h"
 
-typedef union fs_cbs {
-    void(*open_callback)(int, void*);
-    void(*read_callback)(int, buffer*, int, void*);
-    void(*write_callback)(int, buffer*, int, void*);
-    void(*chmod_callback)(int, void*);
-    void(*chown_callback)(int, void*);
-    void(*close_callback)(int, void*);
-    void(*send_callback)(async_socket*, void*);
-    void(*dns_lookup_callback)(char**, int, void*);
-    //void(*open_stat_callback)(int, size_t, void*);
-    //void(*connect_callback)(async_socket*, void*);
-    //void(*shutdown_callback)(int);
-} grouped_fs_cbs;
+void async_fs_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg);
+void async_fs_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg);
 
-void async_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg);
+void async_fs_read(
+    int read_fd, 
+    void* read_array, 
+    size_t num_bytes_to_read, 
+    void(*read_callback)(int, void*, size_t, void*), 
+    void* cb_arg
+);
 
-void async_read(int read_fd,  buffer* buff_ptr, int num_bytes_to_read, void(*read_callback)(int, buffer*, int, void*), void* cb_arg);
-void async_pread(int pread_fd, buffer* pread_buffer_ptr, int num_bytes_to_read, int offset, void(*read_callback)(int, buffer*, int, void*), void* cb_arg);
-void async_write(int write_fd, buffer* buff_ptr, int num_bytes_to_write, void(*write_callback)(int, buffer*, int, void*), void* cb_arg);
+void async_fs_buffer_read(
+    int read_fd, 
+    buffer* buff_ptr, 
+    size_t num_bytes_to_read, 
+    void(*read_callback)(int, buffer*, size_t, void*), 
+    void* cb_arg
+);
 
+void async_fs_buffer_pread(
+    int pread_fd, 
+    buffer* pread_buffer_ptr, 
+    size_t num_bytes_to_read, 
+    int offset, 
+    void(*read_callback)(int, buffer*, size_t, void*), 
+    void* cb_arg
+);
+
+void async_fs_write(
+    int write_fd, 
+    void* write_array, 
+    size_t num_bytes_to_write, 
+    void(*write_callback)(int, void*, size_t, void*), 
+    void* arg
+);
+
+void async_fs_buffer_write(
+    int write_fd, 
+    buffer* buff_ptr, 
+    size_t num_bytes_to_write, 
+    void(*write_callback)(int, buffer*, size_t, void*), 
+    void* cb_arg
+);
+
+/*
 void async_chmod(char* filename, mode_t mode, void(*chmod_callback)(int, void*), void* cb_arg);
 void async_chown(char* filename, int uid, int gid, void(*chown_callback)(int, void*), void* cb_arg);
 void async_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg);
+*/
 
 #endif

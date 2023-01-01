@@ -28,18 +28,22 @@ typedef struct fs_writable_stream {
     async_stream writestream;
     pthread_mutex_t buffer_stream_lock;
     //TODO: add event handler vectors? will have to be destroyed when writestream is closed
+    int is_queueable_for_writing;
+    int is_queued_for_writing;
 } async_fs_writestream;
 
 typedef struct writestream_node_info {
     async_fs_writestream* writestream_info;
 } fs_writestream_info;
 
+/*
 typedef struct async_basic_write_task_info {
     int write_fd;
     void* buffer;
     unsigned int num_bytes_to_write;
-    unsigned int* num_bytes_written_ptr;
+    unsigned int num_bytes_written;
 } async_basic_write_task_info;
+*/
 
 /*
 typedef struct buffer_holder {
@@ -56,13 +60,15 @@ void basic_async_write_thread_task(void* write_task_data);
 void after_writestream_open(int new_writestream_fd, void* writestream_ptr);
 void writestream_finish_handler(event_node* writestream_node);
 int is_writestream_done(event_node* writestream_node);
-void after_basic_async_write(event_node* event_node_ptr);
+void after_async_write(int write_fd, void* array, size_t num_bytes_written, void* arg);
 size_t min_size(size_t num1, size_t num2);
 void after_writestream_close(int err, void* writestream_cb_arg);
 
+/*
 int fs_writestream_future_task_queue_checker(void* arg){
     return 1;
 }
+*/
 
 async_fs_writestream* create_fs_writestream(char* filename){
     async_fs_writestream* new_writestream = (async_fs_writestream*)calloc(1, sizeof(async_fs_writestream));
@@ -71,18 +77,11 @@ async_fs_writestream* create_fs_writestream(char* filename){
     strncpy(new_writestream->filename, filename, PATH_MAX);
 
     //linked_list_init(&new_writestream->buffer_stream_list);
-    async_stream_init(
-        &new_writestream->writestream, 
-        DEFAULT_WRITE_BUFFER_SIZE, 
-        basic_async_write, 
-        new_writestream,
-        fs_writestream_future_task_queue_checker,
-        NULL
-    );
+    async_stream_init(&new_writestream->writestream, DEFAULT_WRITE_BUFFER_SIZE);
 
     pthread_mutex_init(&new_writestream->buffer_stream_lock, NULL);
     
-    async_open(
+    async_fs_open(
         new_writestream->filename, 
         O_CREAT | O_WRONLY,
         0644, //TODO: is this ok for default mode?
@@ -102,26 +101,29 @@ void after_writestream_open(int new_writestream_fd, void* writestream_ptr){
     }
 
     fs_writestream_ptr->write_fd = new_writestream_fd;
+    fs_writestream_ptr->is_queueable_for_writing = 1;
     fs_writestream_ptr->is_open = 1;
-    fs_writestream_ptr->writestream.is_queueable = 1;
 
     //TODO: put this here or in create function?
-    event_node* writestream_node = create_event_node(sizeof(fs_writestream_info), writestream_finish_handler, is_writestream_done);
-    fs_writestream_info* writestream_ptr_info = (fs_writestream_info*)writestream_node->data_ptr;
-    writestream_ptr_info->writestream_info = fs_writestream_ptr;
-    enqueue_polling_event(writestream_node); //TODO: make this an unbound event (doesn't keep event loop running)
+    fs_writestream_info writestream_ptr_info = {
+        .writestream_info = fs_writestream_ptr
+    };
+
+    //TODO: make this an unbound event (doesn't keep event loop running)
+    async_event_loop_create_new_polling_event(
+        &writestream_ptr_info,
+        sizeof(fs_writestream_info),
+        is_writestream_done,
+        writestream_finish_handler
+    );
 
     //TODO: check for queueable condition here even though it was set to 1 above?
     if(
-        fs_writestream_ptr->writestream.buffer_list.size > 0 &&
-        !fs_writestream_ptr->writestream.is_queued
+        !is_async_stream_empty(&fs_writestream_ptr->writestream) &&
+        !fs_writestream_ptr->is_queued_for_writing
     ){
-        future_task_queue_enqueue(
-            fs_writestream_ptr->writestream.writing_task,
-            fs_writestream_ptr->writestream.writing_task_arg
-        );
-
-        fs_writestream_ptr->writestream.is_queued = 1;
+        future_task_queue_enqueue(basic_async_write, fs_writestream_ptr);
+        fs_writestream_ptr->is_queued_for_writing = 1;
     }
 }
 
@@ -137,6 +139,15 @@ void async_fs_writestream_write(async_fs_writestream* writestream, void* write_b
         write_callback,
         arg 
     );
+
+    //TODO: queue into event queue that goes into event loop
+    if(
+        writestream->is_queueable_for_writing &&
+        !writestream->is_queued_for_writing
+    ){
+        future_task_queue_enqueue(basic_async_write, writestream);
+        writestream->is_queued_for_writing = 1;
+    }
 }
 
 int basic_async_write(void* arg){
@@ -144,62 +155,44 @@ int basic_async_write(void* arg){
     if(!writestream->is_open){
         return -1;
     }
-
-    new_task_node_info new_write_task_info_block;
-    create_thread_task(
-        sizeof(async_basic_write_task_info), 
-        basic_async_write_thread_task, 
-        after_basic_async_write,
-        &new_write_task_info_block
-    );
-
-    thread_task_info* write_task_info_ptr = new_write_task_info_block.new_thread_task_info;
-    write_task_info_ptr->fd = writestream->write_fd;
-    write_task_info_ptr->custom_data_ptr = writestream;
     
     async_stream_ptr_data new_ptr_data = async_stream_get_buffer_stream_ptr(&writestream->writestream);
-    
-    async_basic_write_task_info* write_task_info = (async_basic_write_task_info*)new_write_task_info_block.async_task_info;
-    write_task_info->write_fd = writestream->write_fd;
-    write_task_info->num_bytes_written_ptr = &write_task_info_ptr->num_bytes;
-    write_task_info->num_bytes_to_write = new_ptr_data.num_bytes;
-    write_task_info->buffer = new_ptr_data.ptr;
+
+    async_fs_write(
+        writestream->write_fd,
+        new_ptr_data.ptr,
+        new_ptr_data.num_bytes,
+        after_async_write,
+        writestream
+    );
 
     writestream->is_writing = 1;
 
     return 0;
 }
 
-void basic_async_write_thread_task(void* write_task_data){
-    async_basic_write_task_info* write_task_info = (async_basic_write_task_info*)write_task_data;
-
-    *write_task_info->num_bytes_written_ptr = write(
-        write_task_info->write_fd,
-        write_task_info->buffer,
-        write_task_info->num_bytes_to_write
-    );
-}
-
-void after_basic_async_write(event_node* event_node_ptr){
-    thread_task_info* write_data = (thread_task_info*)event_node_ptr->data_ptr;
-    async_fs_writestream* current_writestream = (async_fs_writestream*)write_data->custom_data_ptr;
+void after_async_write(int write_fd, void* array, size_t num_bytes_written, void* arg){
+    async_fs_writestream* current_writestream = (async_fs_writestream*)arg;
     
     current_writestream->is_writing = 0;
-    async_stream_dequeue(&current_writestream->writestream, write_data->num_bytes);
+    async_stream_dequeue(&current_writestream->writestream, num_bytes_written);
+
+    //TODO: check for queueable condition here even though it was set to 1 above?
+    (!is_async_stream_empty(&current_writestream->writestream)) ?
+        (future_task_queue_enqueue(basic_async_write, current_writestream)) : 
+        (current_writestream->is_queued_for_writing = 0);
 
     if(
-        !current_writestream->writestream.is_queued &&
+        !current_writestream->is_queued_for_writing &&
         !current_writestream->is_writable
     ){
-        async_close(
+        async_fs_close(
             current_writestream->write_fd,
             after_writestream_close,
             current_writestream
         );
     }
 }
-
-//TODO: make after basic_async_write() function here
 
 void after_writestream_close(int err, void* writestream_cb_arg){
     async_fs_writestream* closed_writestream = (async_fs_writestream*)writestream_cb_arg;
@@ -247,79 +240,3 @@ size_t min_size(size_t num1, size_t num2){
 }
 
 //#endif
-
-
-/* belonged to async_fs_writestream_write
-    int num_bytes_able_to_write = min_size(num_bytes_to_write, get_buffer_capacity(write_buffer));
-
-    int buff_highwatermark_size = DEFAULT_WRITE_BUFFER_SIZE;
-    int num_bytes_left_to_parse = num_bytes_able_to_write;
-
-    event_node* curr_buffer_node;
-    char* buffer_to_copy = (char*)get_internal_buffer(write_buffer);
-
-    while(num_bytes_left_to_parse > 0){
-        curr_buffer_node = create_event_node(sizeof(writestream_buffer_item), NULL, NULL);
-        int curr_buff_size = min_size(num_bytes_left_to_parse, buff_highwatermark_size);
-        writestream_buffer_item* write_buffer_node_info = (writestream_buffer_item*)curr_buffer_node->data_ptr;
-        write_buffer_node_info->writing_buffer = create_buffer(curr_buff_size, sizeof(char));
-    
-        void* destination_internal_buffer = get_internal_buffer(write_buffer_node_info->writing_buffer);
-        memcpy(destination_internal_buffer, buffer_to_copy, curr_buff_size);
-        buffer_to_copy += curr_buff_size;
-        num_bytes_left_to_parse -= curr_buff_size;
-
-        pthread_mutex_lock(&writestream->buffer_stream_lock);
-        append(&writestream->buffer_stream_list, curr_buffer_node);
-        pthread_mutex_unlock(&writestream->buffer_stream_lock);
-    }
-
-    writestream_buffer_item* write_buffer_node_info = (writestream_buffer_item*)curr_buffer_node->data_ptr;
-    write_buffer_node_info->writestream_write_callback = write_callback;
-*/
-
-/* belonged is_writestream_done
-    pthread_mutex_lock(&writestream->buffer_stream_lock);
-
-    if(
-        writestream->is_open && 
-        !writestream->is_writing && 
-        writestream->buffer_stream_list.size > 0
-    ){
-        writestream->is_writing = 1;
-        //TODO: make async_write() call here and remove item from writestream buffer?
-        event_node* writestream_buffer_node = remove_first(&writestream->buffer_stream_list);
-        writestream_buffer_item* removed_buffer_item = (writestream_buffer_item*)writestream_buffer_node->data_ptr;
-        removed_buffer_item->writestream = writestream;
-        buffer* buffer_to_write = removed_buffer_item->writing_buffer;
-
-        
-        async_write(
-            writestream->write_fd,
-            buffer_to_write,
-            get_buffer_capacity(buffer_to_write),
-            after_writestream_write,
-            writestream_buffer_node
-        );
-    }
-
-    pthread_mutex_unlock(&writestream->buffer_stream_lock);
-*/
-
-/*
-void after_writestream_write(int writestream_fd, buffer* removed_buffer, int num_bytes_written, void* writestream_cb_arg){
-    event_node* writestream_buffer_node = (event_node*)writestream_cb_arg;
-    writestream_buffer_item* buffer_item = (writestream_buffer_item*)writestream_buffer_node->data_ptr;
-    async_fs_writestream* writestream_ptr = buffer_item->writestream;
-
-    writestream_ptr->is_writing = 0;
-
-    if(buffer_item->writestream_write_callback != NULL){
-        //TODO: 0 is placeholder value, get error value if needed?
-        buffer_item->writestream_write_callback(0); 
-    }
-
-    destroy_buffer(removed_buffer);
-    destroy_event_node(writestream_buffer_node);
-}
-*/

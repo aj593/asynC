@@ -3,6 +3,7 @@
 #include "../containers/linked_list.h"
 
 #include <pthread.h>
+#include <string.h>
 
 pthread_t thread_id_array[NUM_THREADS];
 
@@ -58,13 +59,14 @@ void thread_pool_destroy(void){
 */
 
 int is_thread_task_done(event_node* thread_task_node){
-    thread_task_info* thread_task = (thread_task_info*)thread_task_node->data_ptr;
+    task_block* thread_task_block = (task_block*)thread_task_node->data_ptr;
     //*event_index_ptr = thread_task->fs_index;
 
-    return thread_task->is_done;
+    return thread_task_block->is_done;
 }
 
 //TODO: take in params for task type and handler?
+//TODO: delete this?
 event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(void*)){
     void* whole_task_node_block = calloc(1, sizeof(event_node) + sizeof(task_block) + task_struct_size);
     event_node* new_task_node = (event_node*)whole_task_node_block;
@@ -76,34 +78,57 @@ event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(
     return new_task_node;
 }
 
-void create_thread_task(size_t thread_task_size, void(*thread_task_func)(void*), void(*post_task_handler)(event_node*), new_task_node_info* task_info_struct_ptr){
-    void* whole_thread_task_block = calloc(1, (2 * sizeof(event_node)) + sizeof(task_block) + thread_task_size + sizeof(thread_task_info));
+void* async_thread_pool_create_task_copied(
+    void(*thread_task_func)(void*), 
+    void(*post_task_handler)(event_node*), 
+    void* thread_task_data,
+    size_t thread_task_size,
+    void* arg 
+){
+    void* whole_thread_task_block = calloc(1, (2 * sizeof(event_node)) + sizeof(task_block) + thread_task_size);
     if(whole_thread_task_block == NULL){
-        task_info_struct_ptr->async_task_info = NULL;
-        task_info_struct_ptr->new_thread_task_info = NULL;
-        return;
+        return NULL;
     }
 
     event_node* event_queue_node = (event_node*)whole_thread_task_block;
-    event_queue_node->callback_handler = post_task_handler;
-    event_queue_node->event_checker = is_thread_task_done;
-    event_queue_node->data_ptr = event_queue_node + 1;
-    thread_task_info* new_thread_task_info = (thread_task_info*)event_queue_node->data_ptr;
-    task_info_struct_ptr->new_thread_task_info = new_thread_task_info;
-
-    event_node* thread_task_node = (event_node*)(new_thread_task_info + 1);
-    thread_task_node->data_ptr = thread_task_node + 1;
-    task_block* curr_task_block = (task_block*)(thread_task_node->data_ptr);
-    curr_task_block->is_done_ptr = &new_thread_task_info->is_done;
-    curr_task_block->task_handler = thread_task_func;
+    event_node* thread_task_node = event_queue_node + 1;
+    task_block* curr_task_block  = (task_block*)(thread_task_node + 1);
     curr_task_block->async_task_info = (void*)(curr_task_block + 1);
-    curr_task_block->event_node_ptr = event_queue_node;
-    task_info_struct_ptr->async_task_info = curr_task_block->async_task_info;
+    curr_task_block->task_handler = thread_task_func;
+    curr_task_block->arg = arg;
+
+    if(thread_task_data != NULL){
+        memcpy(curr_task_block->async_task_info, thread_task_data, thread_task_size);
+    }
+
+    event_queue_node->event_checker = is_thread_task_done;
+    event_queue_node->callback_handler = post_task_handler;
+
+    event_queue_node->data_ptr = curr_task_block;
+    thread_task_node->data_ptr = curr_task_block;
 
     //TODO: use defer enqueue event here?
     enqueue_deferred_event(event_queue_node);
     //enqueue_idle_event(event_queue_node);
     defer_enqueue_task(thread_task_node);
+
+    return curr_task_block->async_task_info;
+}
+
+//TODO: am i doing this right?
+void* async_thread_pool_create_task(
+    void(*thread_task_func)(void*), 
+    void(*post_task_handler)(event_node*), 
+    void* thread_task_data, 
+    void* arg
+){
+    return async_thread_pool_create_task_copied(
+        thread_task_func,
+        post_task_handler,
+        thread_task_data,
+        sizeof(void*),
+        arg
+    );
 }
 
 void destroy_task_node(event_node* destroy_node){
@@ -170,10 +195,7 @@ void* task_waiter(void* arg){
 
         //TODO: make it take pointer to task block instead of actual struct?
         exec_task_block->task_handler(exec_task_block->async_task_info);
-        //TODO: dont do this, change it, dont do non-null check before
-        if(exec_task_block->is_done_ptr != NULL){
-            *exec_task_block->is_done_ptr = 1;
-        }
+        exec_task_block->is_done = 1;
 
         //migrate_idle_to_execute_queue(exec_task_block->event_node_ptr);
     }

@@ -25,6 +25,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <sys/epoll.h>
+#include <limits.h>
 
 typedef struct async_event_queue {
     linked_list queue_list;
@@ -160,6 +161,26 @@ void asynC_cleanup(){
     io_uring_exit();
 }
 
+size_t min_value(size_t integer_array[], size_t num_entries){
+    size_t running_min = UINT_MAX;
+
+    for(int i = 0; i < num_entries; i++){
+        size_t curr_num = integer_array[i];
+        
+        if(curr_num < running_min){
+            running_min = curr_num;
+        }
+    }
+
+    return running_min;
+}
+
+size_t min(size_t num1, size_t num2){
+    size_t num_array[] = {num1, num2};
+
+    return min_value(num_array, 2);
+}
+
 int queue_contains_events(void){
     async_event_queue_lock(&polling_event_queue);
     async_event_queue_lock(&idle_queue);
@@ -234,13 +255,15 @@ void asynC_wait(){
     }
 }
 
-void future_task_queue_enqueue(int(*queue_task)(void*), void* arg){
+int future_task_queue_enqueue(int(*queue_task)(void*), void* arg){
     async_queue_task new_task = {
         .queue_task = queue_task,
         .arg = arg
     };
 
     async_container_linked_list_append(&future_task_queue, &new_task);
+
+    return 0; //TODO: make return value based on async_container_linked_list_append's return val
 }
 
 void future_task_queue_check(void){
@@ -281,6 +304,75 @@ void enqueue_execute_event(event_node* execute_event_node){
 
 void enqueue_deferred_event(event_node* deferred_event_node){
     enqueue_event(&defer_queue, deferred_event_node);
+}
+
+event_node* async_event_loop_create_new_event(
+    void* copy_data, 
+    size_t data_size, 
+    int(*task_checker)(event_node*), 
+    void(*after_task_handler)(event_node*),
+    void(*event_enqueue_function)(event_node*)
+){
+    event_node* new_event_node = create_event_node(data_size, after_task_handler, task_checker);
+    memcpy(new_event_node->data_ptr, copy_data, data_size);
+
+    event_enqueue_function(new_event_node);
+
+    return new_event_node;
+}
+
+event_node* async_event_loop_create_new_idle_event(
+    void* copy_data, 
+    size_t data_size, 
+    int(*task_checker)(event_node*), 
+    void(*after_task_handler)(event_node*)
+){
+    event_node* new_event_node =
+        async_event_loop_create_new_event(
+            copy_data,
+            data_size,
+            task_checker,
+            after_task_handler,
+            enqueue_idle_event
+        );
+
+    return new_event_node;
+}
+
+event_node* async_event_loop_create_new_deferred_event(
+    void* copy_data, 
+    size_t data_size, 
+    int(*task_checker)(event_node*), 
+    void(*after_task_handler)(event_node*)
+){
+    event_node* new_event_node =
+        async_event_loop_create_new_event(
+            copy_data,
+            data_size,
+            task_checker,
+            after_task_handler,
+            enqueue_deferred_event
+        );
+
+    return new_event_node;
+}
+
+event_node* async_event_loop_create_new_polling_event(
+    void* copy_data, 
+    size_t data_size, 
+    int(*task_checker)(event_node*), 
+    void(*after_task_handler)(event_node*)
+){
+    event_node* new_event_node =
+        async_event_loop_create_new_event(
+            copy_data,
+            data_size,
+            task_checker,
+            after_task_handler,
+            enqueue_polling_event
+        );
+
+    return new_event_node;
 }
 
 void migrate_idle_to_execute_queue(event_node* completed_thread_task_node){

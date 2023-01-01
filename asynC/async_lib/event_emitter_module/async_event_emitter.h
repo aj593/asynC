@@ -29,8 +29,8 @@ enum emitter_events {
     async_http_server_request_event,
 
     //async_http_incoming_request events
-    async_http_incoming_request_data_event,
-    async_http_incoming_request_end_event,
+    async_http_incoming_message_data_event,
+    async_http_incoming_message_end_event,
 
     //async_http_outgoing_request events
     async_http_incoming_response_data_event
@@ -56,11 +56,11 @@ union event_emitter_callbacks {
 
     //async_http_server event handlers
     void(*http_server_listen_callback)(async_http_server*, void*);
-    void(*request_handler)(async_http_server*, async_incoming_http_request*, async_http_outgoing_response*, void*);
+    void(*request_handler)(async_http_server*, async_http_server_request*, async_http_outgoing_response*, void*);
 
     //async_http_incoming_request event handlers
-    void(*incoming_req_data_handler)(async_incoming_http_request*, buffer*, void*);
-    void(*req_end_handler)(async_incoming_http_request*, void*);
+    void(*incoming_req_data_handler)(buffer*, void*);
+    void(*req_end_handler)(void*);
 
     //async_http_request event handlers
     void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*);

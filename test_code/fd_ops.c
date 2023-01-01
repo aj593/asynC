@@ -57,7 +57,7 @@ void data_handler(async_ipc_socket* ipc_socket, buffer* buffer, void* arg){
     destroy_buffer(buffer);
     //async_socket_end(ipc_socket);
 }
-
+/*
 void child_func_example(async_ipc_socket* socket){
     char array_msg[] = "hello world\n";
     buffer* write_buffer = buffer_from_array(array_msg, sizeof(array_msg));
@@ -71,6 +71,7 @@ void child_func_example(async_ipc_socket* socket){
     free(write_buffer);
     async_socket_end(socket);
 }
+*/
 
 void ipc_connection_handler(async_ipc_socket* socket, void* arg){
     async_socket_on_data(socket, data_handler, NULL, 0, 0);
@@ -85,6 +86,12 @@ int main(){
     asynC_init();
 
     /*
+    hash_table* new_table = ht_create();
+    buffer* new_buffer = create_buffer(2);
+    async_http_set_header("foo", "bar", &new_buffer, new_table);
+    */
+
+    /*
     custom_struct a = {
         .a = 2,
         .b = 3
@@ -96,6 +103,7 @@ int main(){
     printf("equal value?: %d", memcmp(&a, &b, sizeof(custom_struct)));
     */
 
+    /*
     async_container_linked_list new_list;
     async_container_linked_list_init(&new_list, sizeof(int));
     int x = 3;
@@ -121,9 +129,10 @@ int main(){
 
         printf("curr num removed is %d\n", curr_num);
     }
+    */
 
     //async_dns_lookup("www.tire.com", after_dns, NULL);
-    /*
+    
     http_request_options options;
     async_http_request_options_init(&options);
     char foo[] = "foofhfhfhjfhjfjhfhjfhjfhjfjhfhjfkjhfhjfk";
@@ -137,7 +146,7 @@ int main(){
     int url_len = strnlen(custom_url, num_bytes);
     custom_url[url_len - 1] = '\0';
     async_outgoing_http_request* new_request = async_http_request("youtube.com", "GET", &options, response_handler, NULL);
-    */
+    
     /*
     for(int i = 0; i < 5; i++){
         //char* array[] = {"/bin/ls", NULL};
@@ -188,7 +197,7 @@ void after_read(int, buffer*, int, void*);
 void after_open(int fd, void* cb_arg){
     printf("my fd is %d\n", fd);
     int num_buff_bytes = 100;
-    async_read(fd, create_buffer(num_buff_bytes, 1), num_buff_bytes, after_read, NULL);
+    async_read(fd, create_buffer(num_buff_bytes), num_buff_bytes, after_read, NULL);
 }
 
 void after_read(int fd, buffer* read_buffer, int num_bytes_read, void* arg){

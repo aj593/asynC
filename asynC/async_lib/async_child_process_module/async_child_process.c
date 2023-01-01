@@ -111,7 +111,7 @@ int sync_connect_ipc_socket(char* server_name, int duping_fd, pid_t child_pid){
 void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg);
 void async_ipc_socket_connection_handler(async_ipc_socket*, void* arg);
 void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, buffer* data_buffer, void* arg);
-void after_fork_pipe_write(int pipe_fd, buffer* child_info_buffer, int num_bytes_written, void* arg);
+void after_fork_pipe_write(int pipe_fd, buffer* child_info_buffer, size_t num_bytes_written, void* arg);
 
 void exec_task(void);
 void fork_task(char* server_name);
@@ -347,7 +347,7 @@ async_child_process* async_child_process_fork(void(*child_func)(async_ipc_socket
     total_buffer_length += server_name_num_bytes_formatted;
     total_buffer_length += sizeof(func_ptr_holder);
 
-    new_child_process->child_info_buffer = create_buffer(total_buffer_length, 1);
+    new_child_process->child_info_buffer = create_buffer(total_buffer_length);
     char* internal_msg_buffer = get_internal_buffer(new_child_process->child_info_buffer);
     char* curr_buffer_offset = internal_msg_buffer;
     memcpy(curr_buffer_offset, &total_buffer_length, sizeof(total_buffer_length));
@@ -406,7 +406,7 @@ async_child_process* async_child_process_exec(char* executable_name, char* args[
 
     total_buffer_length += args_len;
 
-    new_child_process->child_info_buffer = create_buffer(total_buffer_length, sizeof(char));
+    new_child_process->child_info_buffer = create_buffer(total_buffer_length);
     char* child_internal_buffer = get_internal_buffer(new_child_process->child_info_buffer);
     char* curr_child_buffer_offset = child_internal_buffer;
     memcpy(curr_child_buffer_offset, &total_buffer_length, sizeof(total_buffer_length));
@@ -428,7 +428,7 @@ void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg){
     async_child_process* new_child_process = (async_child_process*)arg;
     async_server_on_connection(ipc_server, async_ipc_socket_connection_handler, new_child_process, 0, 0);
     
-    async_write(
+    async_fs_buffer_write(
         forker_pipe[PIPE_WRITE_END],
         new_child_process->child_info_buffer,
         get_buffer_capacity(new_child_process->child_info_buffer),
@@ -437,7 +437,7 @@ void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg){
     );
 }
 
-void after_fork_pipe_write(int pipe_fd, buffer* child_info_buffer, int num_bytes_written, void* arg){
+void after_fork_pipe_write(int pipe_fd, buffer* child_info_buffer, size_t num_bytes_written, void* arg){
     destroy_buffer(child_info_buffer);
 
     //TODO: need to set this to NULL?
