@@ -37,19 +37,6 @@ typedef struct async_outgoing_http_request {
     void* response_arg;
 } async_outgoing_http_request;
 
-/*
-typedef struct response_and_buffer_data{
-    async_http_incoming_response* response_ptr;
-    buffer* curr_buffer;
-} response_and_buffer_data;
-
-typedef struct response_buffer_info {
-    buffer* response_buffer;
-    client_side_http_transaction_info* transaction_info;
-    async_socket* socket_ptr;
-} response_buffer_info;
-*/
-
 typedef struct client_side_http_transaction_info {
     async_outgoing_http_request* request_info;
     async_http_incoming_response* response_info;
@@ -377,10 +364,7 @@ void socket_data_handler(async_socket* socket, buffer* data_buffer, void* arg){
         return;
     }
 
-    incoming_response_init(
-        client_http_info->response_info, 
-        client_http_info->request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket
-    );
+    incoming_response_init(client_http_info->response_info, socket);
 }
 
 void after_http_parse_response(void* parser_data, void* arg){
@@ -427,6 +411,10 @@ void async_http_incoming_response_on_end(
         is_temp,
         num_times_listen
     );
+}
+
+void async_http_request_end(async_outgoing_http_request* outgoing_request){
+    async_outgoing_http_request_write(outgoing_request, "", 0, NULL, NULL);
 }
 
 char* async_http_incoming_response_get(async_http_incoming_response* res_ptr, char* header_key_string){

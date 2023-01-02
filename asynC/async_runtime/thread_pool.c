@@ -64,15 +64,6 @@ void thread_pool_destroy(void){
     }
 }
 
-/*
-    event_node* new_task_node = create_event_node(sizeof(task_block), NULL, NULL);
-    task_block* task_block_ptr = (task_block*)new_task_node->data_ptr;
-    task_block_ptr->async_task_info = calloc(1, task_struct_size);
-    task_block_ptr->task_handler = task_handler;
-
-    return new_task_node;
-*/
-
 int is_thread_task_done(event_node* thread_task_node){
     task_block* thread_task_block = (task_block*)thread_task_node->data_ptr;
     //*event_index_ptr = thread_task->fs_index;

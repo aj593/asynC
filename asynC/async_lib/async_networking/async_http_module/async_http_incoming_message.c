@@ -14,39 +14,70 @@ typedef struct incoming_message_info {
     unsigned int num_bytes;
 } incoming_message_info;
 
-void req_end_converter(union event_emitter_callbacks curr_end_callback, void* data, void* arg);
-void async_http_incoming_message_emit_data(async_http_incoming_message* incoming_msg, void* data_ptr, unsigned int num_bytes);
-void incoming_msg_data_converter(union event_emitter_callbacks incoming_req_callback, void* data, void* arg);
-void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info);
-void async_http_incoming_message_check_data(async_http_incoming_message* incoming_msg_ptr);
+void async_http_incoming_message_init(
+    async_http_incoming_message* incoming_msg,
+    async_socket* socket_ptr,
+    char* start_line_first_token_ptr,
+    char* start_line_second_token_ptr,
+    char* start_line_third_token_ptr
+);
+
+void async_http_incoming_message_destroy(async_http_incoming_message* incoming_msg);
+
+int double_CRLF_check_and_enqueue_parse_task(
+    async_http_incoming_message* incoming_msg_ptr,
+    buffer* data_buffer,
+    void data_handler_to_remove(async_socket*, buffer*, void*),
+    void(*after_parse_task)(void*, void*),
+    void* thread_cb_arg
+);
+
+int async_http_incoming_message_double_CRLF_check(
+    async_http_incoming_message* incoming_msg_ptr,
+    buffer* new_data_buffer,
+    void data_handler_to_remove(async_socket*, buffer*, void*),
+    void data_handler_to_add(async_socket*, buffer*, void*),
+    void* arg
+);
+
 void async_http_incoming_message_parse(void* incoming_msg_ptr_arg);
 void async_http_incoming_message_data_handler(async_socket* socket, buffer* data, void* arg);
+void async_http_incoming_message_check_data(async_http_incoming_message* incoming_msg_ptr);
 
-//TODO: use library function instead?
-/*
-int str_to_num(char* num_str){
-    int content_len_num = 0;
-    int curr_index = 0;
-    while(num_str[curr_index] != '\0'){
-        int curr_digit = num_str[curr_index] - '0';
-        content_len_num = (content_len_num * 10) + curr_digit;
+int async_http_incoming_message_chunk_handler(
+    async_http_incoming_message* incoming_msg_ptr, 
+    async_stream_ptr_data* ptr_to_data,
+    int* num_bytes_to_dequeue_ptr, 
+    void** buffer_to_emit,
+    int* num_bytes_to_emit
+);
 
-        curr_index++;
-    }
+void async_http_incoming_message_on_data(
+    async_http_incoming_message* incoming_msg_ptr, 
+    void(*http_incoming_msg_data_callback)(buffer*, void*), 
+    void* arg, 
+    int is_temp, 
+    int num_listens
+);
 
-    return content_len_num;
-}
+void async_http_incoming_message_emit_data(
+    async_http_incoming_message* incoming_msg, 
+    void* data_ptr, 
+    unsigned int num_bytes
+);
 
-int is_number_str(char* num_str){
-    for(int i = 0; i < 20 && num_str[i] != '\0'; i++){
-        if(!isdigit(num_str[i])){
-            return 0;
-        }
-    }
+void incoming_msg_data_converter(union event_emitter_callbacks incoming_req_callback, void* data, void* arg);
 
-    return 1;
-}
-*/
+void async_http_incoming_message_on_end(
+    async_http_incoming_message* incoming_msg, 
+    void(*req_end_handler)(void*), 
+    void* arg, 
+    int is_temp, 
+    int num_listens
+);
+
+void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info);
+void req_end_converter(union event_emitter_callbacks curr_end_callback, void* data, void* arg);
 
 void async_http_incoming_message_init(
     async_http_incoming_message* incoming_msg,
@@ -205,6 +236,58 @@ void async_http_incoming_message_parse(void* incoming_msg_ptr_arg){
     }
 }
 
+void async_http_incoming_message_data_handler(async_socket* socket, buffer* data, void* arg){
+    async_http_incoming_message* incoming_msg_ptr = (async_http_incoming_message*)arg;    
+
+    //TODO: need mutex lock here?
+    async_stream_enqueue(
+        &incoming_msg_ptr->incoming_data_stream,
+        get_internal_buffer(data),
+        get_buffer_capacity(data),
+        NULL,
+        NULL 
+    );
+
+    destroy_buffer(data);
+
+    async_http_incoming_message_check_data(incoming_msg_ptr);
+}
+
+void async_http_incoming_message_check_data(async_http_incoming_message* incoming_msg_ptr){
+    //emit data event only when request is flowing/request has data listeners
+    if(incoming_msg_ptr->num_data_listeners == 0){
+        return;
+    }
+
+    async_stream* curr_stream_ptr = &incoming_msg_ptr->incoming_data_stream;
+    int* is_response_chunked_ptr  = &incoming_msg_ptr->incoming_msg_template_info.is_chunked;
+
+    while(!is_async_stream_empty(curr_stream_ptr)){
+        async_stream_ptr_data ptr_to_data = async_stream_get_buffer_stream_ptr(curr_stream_ptr);
+        void* buffer_to_emit  = ptr_to_data.ptr;
+        int num_bytes_to_emit = ptr_to_data.num_bytes;
+        
+        int num_bytes_to_dequeue = num_bytes_to_emit;
+        int is_set_to_emit = 1;
+
+        if(*is_response_chunked_ptr){
+            is_set_to_emit = async_http_incoming_message_chunk_handler(
+                incoming_msg_ptr,
+                &ptr_to_data,
+                &num_bytes_to_dequeue,
+                &buffer_to_emit,
+                &num_bytes_to_emit
+            );
+        }
+
+        if(is_set_to_emit){
+            async_http_incoming_message_emit_data(incoming_msg_ptr, buffer_to_emit, num_bytes_to_emit);
+        }
+        
+        async_stream_dequeue(curr_stream_ptr, num_bytes_to_dequeue);
+    }
+}
+
 int async_http_incoming_message_chunk_handler(
     async_http_incoming_message* incoming_msg_ptr, 
     async_stream_ptr_data* ptr_to_data,
@@ -275,23 +358,6 @@ int async_http_incoming_message_chunk_handler(
     return is_set_to_emit;
 }
 
-void async_http_incoming_message_data_handler(async_socket* socket, buffer* data, void* arg){
-    async_http_incoming_message* incoming_msg_ptr = (async_http_incoming_message*)arg;    
-
-    //TODO: need mutex lock here?
-    async_stream_enqueue(
-        &incoming_msg_ptr->incoming_data_stream,
-        get_internal_buffer(data),
-        get_buffer_capacity(data),
-        NULL,
-        NULL 
-    );
-
-    destroy_buffer(data);
-
-    async_http_incoming_message_check_data(incoming_msg_ptr);
-}
-
 void async_http_incoming_message_on_data(
     async_http_incoming_message* incoming_msg_ptr, 
     void(*http_incoming_msg_data_callback)(buffer*, void*), 
@@ -313,41 +379,6 @@ void async_http_incoming_message_on_data(
     );
 
     async_http_incoming_message_check_data(incoming_msg_ptr);
-}
-
-void async_http_incoming_message_check_data(async_http_incoming_message* incoming_msg_ptr){
-    //emit data event only when request is flowing/request has data listeners
-    if(incoming_msg_ptr->num_data_listeners == 0){
-        return;
-    }
-
-    async_stream* curr_stream_ptr = &incoming_msg_ptr->incoming_data_stream;
-    int* is_response_chunked_ptr  = &incoming_msg_ptr->incoming_msg_template_info.is_chunked;
-
-    while(!is_async_stream_empty(curr_stream_ptr)){
-        async_stream_ptr_data ptr_to_data = async_stream_get_buffer_stream_ptr(curr_stream_ptr);
-        void* buffer_to_emit  = ptr_to_data.ptr;
-        int num_bytes_to_emit = ptr_to_data.num_bytes;
-        
-        int num_bytes_to_dequeue = num_bytes_to_emit;
-        int is_set_to_emit = 1;
-
-        if(*is_response_chunked_ptr){
-            is_set_to_emit = async_http_incoming_message_chunk_handler(
-                incoming_msg_ptr,
-                &ptr_to_data,
-                &num_bytes_to_dequeue,
-                &buffer_to_emit,
-                &num_bytes_to_emit
-            );
-        }
-
-        if(is_set_to_emit){
-            async_http_incoming_message_emit_data(incoming_msg_ptr, buffer_to_emit, num_bytes_to_emit);
-        }
-        
-        async_stream_dequeue(curr_stream_ptr, num_bytes_to_dequeue);
-    }
 }
 
 void async_http_incoming_message_emit_data(async_http_incoming_message* incoming_msg, void* data_ptr, unsigned int num_bytes){

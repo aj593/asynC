@@ -46,9 +46,5 @@ void async_http_message_template_init(
 void async_http_message_template_destroy(async_http_message_template* msg_template_ptr);
 
 int is_chunked_checker(hash_table* header_table);
-void copy_start_line(async_http_message_template* msg_template);
-buffer* get_http_buffer(hash_table* header_table_ptr, int* request_header_length);
-void copy_single_header_entry(buffer* destination_buffer, const char* key, char* value);
-void copy_all_headers(async_http_message_template* msg_template_ptr);
 
 #endif

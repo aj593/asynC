@@ -31,9 +31,12 @@ void async_stream_enqueue(async_stream* writable_stream, void* copied_buffer, un
     //unsigned int curr_index = 0; //TODO: use this instead of incrementing buffer pointer?
 
     //TODO: end function early if num_bytes_to_write == 0?
+    if(num_bytes_to_write == 0){
+        return;
+    }
 
     //TODO: append new buffer in list if list size is 0? or do after async write/read operation is done?
-    if(writable_stream->buffer_list.size == 0 && num_bytes_to_write > 0){
+    if(writable_stream->buffer_list.size == 0){
         async_container_linked_list_append(&writable_stream->buffer_list, NULL);
 
         async_container_linked_list_iterator new_iterator = async_container_linked_list_start_iterator(&writable_stream->buffer_list);

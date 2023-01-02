@@ -22,6 +22,8 @@ void async_outgoing_http_request_write(
     void* arg
 );
 
+void async_http_request_end(async_outgoing_http_request* outgoing_request);
+
 void async_http_request_options_set_header(http_request_options* http_options_ptr, char* header_key, char* header_val);
 void async_http_request_options_init(http_request_options* http_options_ptr);
 async_outgoing_http_request* async_http_request(char* host_url, char* http_method, http_request_options* options, void(*response_handler)(async_http_incoming_response*, void*), void* arg);

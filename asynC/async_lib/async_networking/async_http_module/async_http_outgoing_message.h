@@ -17,7 +17,6 @@ void async_http_outgoing_message_init(
 );
 
 void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_msg);
-void async_http_outgoing_message_write_head(async_http_outgoing_message* outgoing_msg_ptr);
 
 void async_http_outgoing_message_set_header(
     hash_table* table_ptr,
@@ -25,6 +24,8 @@ void async_http_outgoing_message_set_header(
     char* header_key, 
     char* header_val
 );
+
+void async_http_outgoing_message_write_head(async_http_outgoing_message* outgoing_msg_ptr);
 
 void async_http_outgoing_message_write(
     async_http_outgoing_message* outgoing_msg_ptr,

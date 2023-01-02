@@ -56,7 +56,7 @@ union event_emitter_callbacks {
 
     //async_http_server event handlers
     void(*http_server_listen_callback)(async_http_server*, void*);
-    void(*request_handler)(async_http_server*, async_http_server_request*, async_http_outgoing_response*, void*);
+    void(*request_handler)(async_http_server*, async_http_server_request*, async_http_server_response*, void*);
 
     //async_http_incoming_message event handlers
     void(*incoming_msg_data_handler)(buffer*, void*);
@@ -69,6 +69,7 @@ union event_emitter_callbacks {
 typedef struct event_emitter_handler {
     enum emitter_events curr_event;
     union event_emitter_callbacks curr_callback;
+    void(*generic_callback)();
     void (*curr_event_converter)(union event_emitter_callbacks, void*, void*);
     void* curr_arg;
     int is_temp_subscriber;
