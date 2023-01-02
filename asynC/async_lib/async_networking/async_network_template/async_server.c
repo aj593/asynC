@@ -40,13 +40,13 @@ typedef struct socket_send_buffer {
 
 void async_accept(async_server* accepting_server);
 
-void listen_cb_interm(event_node* listen_node);
+void after_server_listen(void* thread_data, void* cb_arg);
 
 void closing_server_callback(int result_val, void* cb_arg);
 
 void destroy_server(event_node* server_node);
 int server_accept_connections(event_node* server_event_node);
-void post_accept_interm(event_node* accept_node);
+void post_accept_interm(void* accept_info, void* arg);
 
 void async_server_on_listen(async_server* listening_server, void(*listen_handler)(async_server*, void*), void* arg, int is_temp_subscriber, int num_listens);
 void async_server_on_connection(async_server* listening_server, void(*connection_handler)(async_socket*, void*), void* arg, int is_temp_subscriber, int num_listens);
@@ -77,7 +77,7 @@ void async_server_listen(async_server* listening_server, async_listen_info* curr
 
     async_thread_pool_create_task_copied(
         listening_server->listen_task, 
-        listen_cb_interm,
+        after_server_listen,
         curr_listen_info,
         sizeof(async_listen_info),
         NULL
@@ -104,9 +104,9 @@ void async_server_event_handler(event_node* server_info_node, uint32_t events){
     }
 }
 
-void listen_cb_interm(event_node* listen_node){
+void after_server_listen(void* thread_data, void* cb_arg){
     //TODO: add error checking here
-    async_listen_info* listen_node_info = (async_listen_info*)listen_node->data_ptr;
+    async_listen_info* listen_node_info = (async_listen_info*)thread_data;
     async_server* newly_listening_server = listen_node_info->listening_server;
     newly_listening_server->is_listening = 1;
 
@@ -156,9 +156,8 @@ void async_accept(async_server* accepting_server){
     );
 }
 
-void post_accept_interm(event_node* accept_node){
-    task_block* thread_accept_task_block = (task_block*)accept_node->data_ptr;
-    async_server* accepting_server = thread_accept_task_block->async_task_info;
+void post_accept_interm(void* accept_info, void* arg){
+    async_server* accepting_server = (async_server*)accept_info;
 
     accepting_server->is_currently_accepting = 0;
     accepting_server->has_connection_waiting = 0;

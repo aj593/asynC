@@ -51,45 +51,6 @@ typedef struct async_http_outgoing_response {
     char status_message[MAX_IP_STR_LEN];
 } async_http_outgoing_response;
 
-/*
-typedef struct http_request_handler {
-    void(*http_request_callback)(async_http_server_request*, async_http_outgoing_response*);
-} http_request_handler;
-
-typedef struct request_data_callback {
-    void(*req_data_handler)(buffer*, void*);
-    void* arg;
-} request_data_callback;
-
-typedef struct request_end_callback {
-    void(*req_end_handler)(void*);
-    void* arg;
-} request_end_callback;
-
-typedef struct listen_callback_t {
-    void(*listen_callback)(void*);
-    void* arg;
-} listen_callback_t;
-*/
-
-/*
-typedef struct {
-    async_http_server* listening_http_server;
-    buffer* old_buffer_data;
-    int found_double_CRLF;
-} http_server_and_buffer;
-*/
-
-/*
-typedef struct http_parser_info {
-    async_incoming_http_request* http_request_info;
-    async_http_outgoing_response* http_response_info;
-    buffer* http_header_data;
-    async_socket* client_socket;
-    async_http_server* http_server;
-} http_parser_info;
-*/
-
 typedef struct async_http_transaction {
     async_http_server* http_server_ptr;
     async_http_server_request* http_request_info;
@@ -104,10 +65,10 @@ void after_http_listen(async_tcp_server* http_server, void* cb_arg);
 void http_connection_handler(async_socket* new_http_socket, void* arg);
 void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* arg);
 void async_http_incoming_request_parse_task(void* http_info);
-void http_parser_interm(event_node* http_parser_node);
-void http_request_socket_data_handler(async_socket* socket, buffer* data, void* arg);
+void after_http_parse_request(void* parse_data, void* arg);
+void async_http_incoming_message_data_handler(async_socket* socket, buffer* data, void* arg);
 void http_request_emit_data(async_http_server_request* http_request, void* data_ptr, unsigned int num_bytes);
-void http_request_emit_end(async_http_server_request* http_request);
+//void http_request_emit_end(async_http_server_request* http_request);
 //void async_http_incoming_request_check_data(async_incoming_http_request* curr_http_request_info);
 void async_http_server_listen(async_http_server* listening_server, int port, char* ip_address, void(*http_listen_callback)(async_http_server*, void*), void* arg);
 void async_http_server_on_listen(async_http_server* listening_http_server, void(*http_listen_callback)(async_http_server*, void*), void* arg, int is_temp_subscriber, int num_times_listen);
@@ -182,8 +143,6 @@ void async_http_server_close(async_http_server* http_server){
     http_server->is_listening = 0;
     async_server_close(http_server->wrapped_tcp_server);
 }
-
-void async_http_server_after_close();
 
 void http_server_interm_handler(event_node* http_server_node_ptr){
     async_http_server_info* http_server_info = (async_http_server_info*)http_server_node_ptr->data_ptr;
@@ -294,38 +253,25 @@ void handle_request_data(async_socket* read_socket, buffer* data_buffer, void* a
     async_http_server_request* new_request = (async_http_server_request*)arg;
     async_http_outgoing_response* new_response = (async_http_outgoing_response*)(new_request + 1);
 
-    int double_CRLF_ret = async_http_incoming_message_double_CRLF_check(
-        &new_request->incoming_msg_info,
-        data_buffer,
-        handle_request_data,
-        http_request_socket_data_handler,
-        new_request
-    );
-
-    if(double_CRLF_ret == -1){
+    int CRLF_check_and_parse_attempt_ret = 
+        double_CRLF_check_and_enqueue_parse_task(
+            &new_request->incoming_msg_info,
+            data_buffer,
+            handle_request_data,
+            after_http_parse_request,
+            new_request
+        );
+    
+    if(CRLF_check_and_parse_attempt_ret != 0){
         return;
     }
-
-    async_thread_pool_create_task(
-        async_http_incoming_request_parse_task,
-        http_parser_interm,
-        new_request,
-        NULL
-    );
 
     http_request_init(new_request,   read_socket, new_request->http_server_ptr);
     http_response_init(new_response, read_socket, new_request->http_server_ptr);
 }
 
-//TODO: make async_http_incoming_message_parse function itself the thread task?
-void async_http_incoming_request_parse_task(void* http_info){
-    async_http_server_request* curr_request_info = (async_http_server_request*)http_info;
-    async_http_incoming_message_parse(&curr_request_info->incoming_msg_info);
-}
-
-void http_parser_interm(event_node* http_parser_node){
-    task_block* http_parse_task_block = (task_block*)http_parser_node->data_ptr;
-    async_http_server_request* http_request = (async_http_server_request*)http_parse_task_block->async_task_info;
+void after_http_parse_request(void* parse_data, void* arg){
+    async_http_server_request* http_request = (async_http_server_request*)arg;
     async_http_outgoing_response* http_response = (async_http_outgoing_response*)(http_request + 1);
 
     http_request->http_server_ptr->curr_num_requests++;
@@ -377,7 +323,8 @@ void async_http_server_emit_request(async_http_transaction* http_transaction_ptr
     );
 
     async_http_server_request* new_request_info = http_transaction_ptr->http_request_info;
-    http_request_emit_end(new_request_info);
+    
+    async_http_incoming_message_emit_end(&new_request_info->incoming_msg_info);
 }
 
 void async_http_server_request_routine(union event_emitter_callbacks curr_request_callback, void* data, void* arg){
@@ -433,29 +380,6 @@ void after_http_request_socket_close(async_socket* underlying_tcp_socket, int cl
     async_http_server_request* curr_closing_request = (async_http_server_request*)http_req_arg;
     curr_closing_request->is_socket_closed = 1;
     migrate_idle_to_polling_queue(curr_closing_request->event_queue_node);
-}
-
-/*
-void async_http_incoming_request_check_data(async_http_server_request* curr_http_request_info){
-    async_http_incoming_message_check_data(&curr_http_request_info->incoming_msg_info); 
-}
-*/
-
-void http_request_socket_data_handler(async_socket* socket, buffer* data, void* arg){
-    async_http_server_request* req_with_data = (async_http_server_request*)arg;    
-
-    //TODO: need mutex lock here?
-    async_stream_enqueue(
-        &req_with_data->incoming_msg_info.incoming_data_stream,
-        get_internal_buffer(data),
-        get_buffer_capacity(data),
-        NULL,
-        NULL 
-    );
-
-    destroy_buffer(data);
-
-    async_http_incoming_message_check_data(&req_with_data->incoming_msg_info);
 }
 
 void async_http_response_set_status_code(async_http_outgoing_response* curr_http_response, int status_code){
@@ -536,7 +460,7 @@ void async_http_response_end(async_http_outgoing_response* curr_http_response){
     }
 
     if(curr_http_response->outgoing_msg_info.incoming_msg_template_info.is_chunked){
-        //TODO: make a single global instance of this buffer so it's reuseable?
+        //TODO: make a single global instance of this buffer instead so it's reuseable?
         char chunked_termination_array[] = "0\r\n\r\n";
         
         async_socket_write(
@@ -551,4 +475,36 @@ void async_http_response_end(async_http_outgoing_response* curr_http_response){
 
 void async_http_outgoing_response_end_connection(async_http_outgoing_response* curr_http_response){
     async_socket_end(curr_http_response->outgoing_msg_info.incoming_msg_template_info.wrapped_tcp_socket);
+}
+
+void async_http_server_request_on_data(
+    async_http_server_request* incoming_request,
+    void(*request_data_handler)(buffer*, void*),
+    void* cb_arg,
+    int is_temp,
+    int num_times_listen
+){
+    async_http_incoming_message_on_data(
+        &incoming_request->incoming_msg_info,
+        request_data_handler,
+        cb_arg,
+        is_temp,
+        num_times_listen
+    );
+}
+
+void async_http_server_request_on_end(
+    async_http_server_request* incoming_request,
+    void(*request_end_handler)(void*),
+    void* cb_arg,
+    int is_temp,
+    int num_times_listen
+){
+    async_http_incoming_message_on_end(
+        &incoming_request->incoming_msg_info,
+        request_end_handler,
+        cb_arg,
+        is_temp,
+        num_times_listen
+    );
 }

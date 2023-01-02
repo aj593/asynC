@@ -142,7 +142,7 @@ void set_sqe_data(struct io_uring_sqe* incoming_sqe, event_node* uring_node){
 }
 */
 
-void after_uring_submit(event_node* uring_node){
+void after_uring_submit(void* data, void* arg){
     //TODO: put something in here?
 }
 

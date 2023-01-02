@@ -38,6 +38,11 @@ typedef struct async_outgoing_http_request {
 } async_outgoing_http_request;
 
 /*
+typedef struct response_and_buffer_data{
+    async_http_incoming_response* response_ptr;
+    buffer* curr_buffer;
+} response_and_buffer_data;
+
 typedef struct response_buffer_info {
     buffer* response_buffer;
     client_side_http_transaction_info* transaction_info;
@@ -59,8 +64,8 @@ typedef struct connect_attempt_info {
 
 void response_data_emit_data(async_http_incoming_response* res, buffer* curr_buffer);
 void http_parse_response_task(void* arg);
-void http_response_parser_interm(event_node* http_parse_node);
-void response_data_handler(async_socket*, buffer*, void*);
+void after_http_parse_response(void* parse_data, void* cb_arg);
+//void response_data_handler(async_socket*, buffer*, void*);
 void async_http_outgoing_request_write_head(async_outgoing_http_request* outgoing_request_ptr);
 void after_request_dns_callback(char** ip_list, int num_ips, void * arg);
 void http_request_connection_handler(async_socket* newly_connected_socket, void* arg);
@@ -359,24 +364,18 @@ void client_http_request_finish_handler(event_node* finished_http_request_node){
 void socket_data_handler(async_socket* socket, buffer* data_buffer, void* arg){
     client_side_http_transaction_info* client_http_info = (client_side_http_transaction_info*)arg;
 
-    int found_double_CRLF_ret = async_http_incoming_message_double_CRLF_check(
-        &client_http_info->response_info->incoming_response,
-        data_buffer,
-        socket_data_handler,
-        response_data_handler,
-        client_http_info->response_info
-    );
+    int CRLF_check_and_parse_attempt_ret = 
+        double_CRLF_check_and_enqueue_parse_task(
+            &client_http_info->response_info->incoming_response,
+            data_buffer,
+            socket_data_handler,
+            after_http_parse_response,
+            client_http_info
+        );
 
-    if(found_double_CRLF_ret == -1){
+    if(CRLF_check_and_parse_attempt_ret != 0){
         return;
     }
-
-    async_thread_pool_create_task(
-        http_parse_response_task,
-        http_response_parser_interm,
-        client_http_info,
-        NULL
-    );
 
     incoming_response_init(
         client_http_info->response_info, 
@@ -384,102 +383,50 @@ void socket_data_handler(async_socket* socket, buffer* data_buffer, void* arg){
     );
 }
 
-void http_parse_response_task(void* transaction_item_ptr){
-    client_side_http_transaction_info* curr_transaction_item = (client_side_http_transaction_info*)transaction_item_ptr;
-    async_http_incoming_response* new_incoming_http_response = curr_transaction_item->response_info;
-
-    async_http_incoming_message_parse(&new_incoming_http_response->incoming_response);
-}
-
-void http_response_parser_interm(event_node* http_parse_node){
-    task_block* curr_parser_task_block = (task_block*)http_parse_node->data_ptr;
+void after_http_parse_response(void* parser_data, void* arg){
     client_side_http_transaction_info* transaction_info = 
-        (client_side_http_transaction_info*)curr_parser_task_block->async_task_info;
+        (client_side_http_transaction_info*)arg;
 
+    //TODO: make separate emit_response function for this?
     void(*response_handler)(async_http_incoming_response*, void*) = transaction_info->request_info->response_handler;
     async_http_incoming_response* response = transaction_info->response_info;
-    void* arg = transaction_info->request_info->response_arg;
-    response_handler(response, arg);
+    void* response_cb_arg = transaction_info->request_info->response_arg;
+    response_handler(response, response_cb_arg);
+
+    //TODO: make wrapper function for this or just leave as using incoming_message type?
+    async_http_incoming_message_emit_end(&response->incoming_response);
 }
 
-typedef struct {
-    async_http_incoming_response* response_ptr;
-    buffer* curr_buffer;
-} response_and_buffer_data;
-
-void async_http_incoming_response_check_data(async_http_incoming_response* res_ptr){
-    async_stream* stream_ptr = &res_ptr->incoming_response.incoming_data_stream;
-
-    while(!is_async_stream_empty(stream_ptr)){
-        async_stream_ptr_data ptr_to_data = async_stream_get_buffer_stream_ptr(stream_ptr);
-        //TODO: need to create buffer in here, to do in emit_data function?
-        buffer* curr_buffer = buffer_from_array(ptr_to_data.ptr, ptr_to_data.num_bytes);
-
-        response_data_emit_data(res_ptr, curr_buffer);
-
-        destroy_buffer(curr_buffer);
-        async_stream_dequeue(stream_ptr, ptr_to_data.num_bytes);
-    }
-}
-
-void response_data_emit_data(async_http_incoming_response* res, buffer* curr_buffer){
-    response_and_buffer_data curr_res_and_buf = {
-        .response_ptr = res,
-        .curr_buffer = curr_buffer
-    };
-
-    async_event_emitter_emit_event(
-        res->incoming_response.incoming_msg_template_info.event_emitter_handler,
-        async_http_incoming_response_data_event,
-        &curr_res_and_buf
-    );
-}
-
-void response_data_converter(union event_emitter_callbacks res_data_callback, void* data, void* arg){
-    void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*) = res_data_callback.http_request_data_callback;
-    response_and_buffer_data* res_and_buffer_ptr = (response_and_buffer_data*)data;
-
-    http_request_data_callback(
-        res_and_buffer_ptr->response_ptr,
-        buffer_copy(res_and_buffer_ptr->curr_buffer),
-        arg
-    );
-}
-
-void async_http_response_on_data(async_http_incoming_response* res, void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*), void* arg, int is_temp, int num_listens){
-    union event_emitter_callbacks res_data_callback = { .http_request_data_callback = http_request_data_callback };
-
-    async_event_emitter_on_event(
-        &res->incoming_response.incoming_msg_template_info.event_emitter_handler,
-        async_http_incoming_response_data_event,
-        res_data_callback,
-        response_data_converter,
-        &res->num_data_listeners,
-        arg,
+void async_http_incoming_response_on_data(
+    async_http_incoming_response* response_ptr,
+    void(*incoming_response_data_handler)(buffer*, void*),
+    void* cb_arg,
+    int is_temp,
+    int num_times_listen
+){
+    async_http_incoming_message_on_data(
+        &response_ptr->incoming_response,
+        incoming_response_data_handler,
+        cb_arg,
         is_temp,
-        num_listens
+        num_times_listen
     );
+}   
 
-    async_http_incoming_response_check_data(res);
-}
-
-void response_data_handler(async_socket* socket_with_response, buffer* response_data, void* arg){
-    async_http_incoming_response* incoming_response = (async_http_incoming_response*)arg;
-
-    async_stream_enqueue(
-        &incoming_response->incoming_response.incoming_data_stream,
-        get_internal_buffer(response_data),
-        get_buffer_capacity(response_data),
-        NULL,
-        NULL
+void async_http_incoming_response_on_end(
+    async_http_incoming_response* response_ptr,
+    void(*incoming_response_end_handler)(void*),
+    void* cb_arg,
+    int is_temp,
+    int num_times_listen
+){
+    async_http_incoming_message_on_end(
+        &response_ptr->incoming_response,
+        incoming_response_end_handler,
+        cb_arg,
+        is_temp,
+        num_times_listen
     );
-
-    destroy_buffer(response_data);
-
-    //TODO: add is_flowing field and use that instead, and set is_flowing based on if num_data_listeners > 0?
-    if(incoming_response->num_data_listeners > 0){
-        async_http_incoming_response_check_data(incoming_response);
-    }
 }
 
 char* async_http_incoming_response_get(async_http_incoming_response* res_ptr, char* header_key_string){

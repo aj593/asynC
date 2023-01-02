@@ -5,6 +5,21 @@
 #include <pthread.h>
 #include <string.h>
 
+#ifndef TASK_THREAD_BLOCK
+#define TASK_THREAD_BLOCK
+
+typedef struct task_handler_block {
+    //event_node* event_node_ptr;
+    void(*task_handler)(void*);
+    void(*task_callback)(void*, void*);
+    void* async_task_info;
+    int task_type;
+    int is_done;
+    void* arg;
+} task_block;
+
+#endif
+
 pthread_t thread_id_array[NUM_THREADS];
 
 linked_list task_queue;
@@ -65,6 +80,15 @@ int is_thread_task_done(event_node* thread_task_node){
     return thread_task_block->is_done;
 }
 
+void after_task_finished(event_node* thread_event_node){
+    task_block* task_block_ptr = (task_block*)thread_event_node->data_ptr;
+
+    task_block_ptr->task_callback(
+        task_block_ptr->async_task_info,
+        task_block_ptr->arg
+    );
+}
+
 //TODO: take in params for task type and handler?
 //TODO: delete this?
 event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(void*)){
@@ -80,7 +104,7 @@ event_node* create_task_node(unsigned int task_struct_size, void(*task_handler)(
 
 void* async_thread_pool_create_task_copied(
     void(*thread_task_func)(void*), 
-    void(*post_task_handler)(event_node*), 
+    void(*post_task_callback)(void*, void*), 
     void* thread_task_data,
     size_t thread_task_size,
     void* arg 
@@ -94,7 +118,8 @@ void* async_thread_pool_create_task_copied(
     event_node* thread_task_node = event_queue_node + 1;
     task_block* curr_task_block  = (task_block*)(thread_task_node + 1);
     curr_task_block->async_task_info = (void*)(curr_task_block + 1);
-    curr_task_block->task_handler = thread_task_func;
+    curr_task_block->task_handler  = thread_task_func;
+    curr_task_block->task_callback = post_task_callback;
     curr_task_block->arg = arg;
 
     if(thread_task_data != NULL){
@@ -102,7 +127,7 @@ void* async_thread_pool_create_task_copied(
     }
 
     event_queue_node->event_checker = is_thread_task_done;
-    event_queue_node->callback_handler = post_task_handler;
+    event_queue_node->callback_handler = after_task_finished;
 
     event_queue_node->data_ptr = curr_task_block;
     thread_task_node->data_ptr = curr_task_block;
@@ -118,13 +143,13 @@ void* async_thread_pool_create_task_copied(
 //TODO: am i doing this right?
 void* async_thread_pool_create_task(
     void(*thread_task_func)(void*), 
-    void(*post_task_handler)(event_node*), 
+    void(*task_callback)(void*, void*), 
     void* thread_task_data, 
     void* arg
 ){
     return async_thread_pool_create_task_copied(
         thread_task_func,
-        post_task_handler,
+        task_callback,
         thread_task_data,
         sizeof(void*),
         arg

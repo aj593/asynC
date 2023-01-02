@@ -50,19 +50,19 @@ typedef struct async_fs_task_info {
 
 void async_fs_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg);
 void async_fs_open_thread_task(void* open_task);
-void async_fs_after_thread_open(event_node* exec_node);
+void async_fs_after_thread_open(void* open_info, void* arg);
 
 void async_fs_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg);
 void async_fs_close_thread_task(void* close_task);
-void async_fs_after_thread_close(event_node* exec_node);
+void async_fs_after_thread_close(void* close_info, void* arg);
 
 void async_fs_read(int read_fd, void* read_array, size_t num_bytes_to_read, void(*read_callback)(int, void*, size_t, void*), void* cb_arg);
 void async_fs_read_thread_task(void* read_task);
-void async_fs_after_thread_read(event_node* exec_node);
+void async_fs_after_thread_read(void* read_info, void* arg);
 
 void async_fs_buffer_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes_to_read, void(*read_callback)(int, buffer*, size_t, void*), void* cb_arg);
 void async_fs_buffer_read_thread_task(void* read_task);
-void async_fs_after_thread_buffer_read(event_node* exec_node);
+void async_fs_after_thread_buffer_read(void* buffer_read_info, void* arg);
 
 //TODO: find way to condense code for pread() with regular read()?
 void async_fs_buffer_pread(int pread_fd, buffer* pread_buffer_ptr, size_t num_bytes_to_read, int offset, void(*read_callback)(int, buffer*, size_t, void*), void* cb_arg);
@@ -70,11 +70,11 @@ void async_fs_buffer_pread_thread_task(void* async_pread_task_info);
 
 void async_fs_write(int write_fd, void* write_array, size_t num_bytes_to_write, void(*write_callback)(int, void*, size_t, void*), void* arg);
 void async_fs_write_thread_task(void* write_task);
-void async_fs_after_write(event_node* exec_node);
+void async_fs_after_write(void* write_info, void* arg);
 
 void async_fs_buffer_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes_to_write, void(*buffer_write_callback)(int, buffer*, size_t, void*), void* cb_arg);
 void async_fs_buffer_write_thread_task(void* write_task);
-void async_fs_after_buffer_write(event_node* exec_node);
+void async_fs_after_buffer_write(void* buffer_write, void* arg);
 
 void async_fs_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg){
     size_t filename_length = strnlen(filename, FILENAME_MAX) + 1;
@@ -107,13 +107,12 @@ void async_fs_open_thread_task(void* open_task){
     );
 }
 
-void async_fs_after_thread_open(event_node* exec_node){
-    task_block* open_task_block = (task_block*)exec_node->data_ptr; //(task_info*)exec_node->event_data;
-    async_fs_task_info* open_task_info = (async_fs_task_info*)open_task_block->async_task_info;
+void async_fs_after_thread_open(void* open_info, void* arg){
+    async_fs_task_info* open_task_info = (async_fs_task_info*)open_info;
 
     open_task_info->fs_callbacks.open_callback(
-        open_task_info->fs_task_fd,
-        open_task_block->arg
+        open_task_info->fs_task_fd, 
+        arg
     );
 }
 
@@ -137,13 +136,12 @@ void async_fs_close_thread_task(void* close_task){
     close_info->return_val = close(close_info->fs_task_fd);
 }
 
-void async_fs_after_thread_close(event_node* exec_node){
-    task_block* task_block_ptr = (task_block*)exec_node->data_ptr;
-    async_fs_task_info* close_data_ptr = (async_fs_task_info*)task_block_ptr->async_task_info;
+void async_fs_after_thread_close(void* close_info, void* arg){
+    async_fs_task_info* close_data_ptr = (async_fs_task_info*)close_info;
 
     close_data_ptr->fs_callbacks.close_callback(
         close_data_ptr->return_val,
-        task_block_ptr->arg
+        arg
     );
 }
 
@@ -174,15 +172,14 @@ void async_fs_read_thread_task(void* read_task){
     );
 }
 
-void async_fs_after_thread_read(event_node* exec_node){
-    task_block* read_task_block = (task_block*)exec_node->data_ptr;
-    async_fs_task_info* read_task_info = (async_fs_task_info*)read_task_block->async_task_info;
+void async_fs_after_thread_read(void* read_info, void* arg){
+    async_fs_task_info* read_task_info = (async_fs_task_info*)read_info;
 
     read_task_info->fs_callbacks.read_callback(
         read_task_info->fs_task_fd,
         read_task_info->array,
         read_task_info->return_val,
-        read_task_block->arg
+        arg
     );
 }
 
@@ -217,15 +214,14 @@ void async_fs_buffer_read_thread_task(void* read_task){
     set_buffer_length(read_info->buffer, read_info->return_val);
 }
 
-void async_fs_after_thread_buffer_read(event_node* exec_node){
-    task_block* read_task_block = (task_block*)exec_node->data_ptr;
-    async_fs_task_info* read_task_info = (async_fs_task_info*)read_task_block->async_task_info;
+void async_fs_after_thread_buffer_read(void* buffer_read_info, void* arg){
+    async_fs_task_info* read_task_info = (async_fs_task_info*)buffer_read_info;
 
     read_task_info->fs_callbacks.buffer_read_callback(
         read_task_info->fs_task_fd,
         read_task_info->buffer,
         read_task_info->return_val,
-        read_task_block->arg
+        arg
     );
 }
 
@@ -287,15 +283,14 @@ void async_fs_write_thread_task(void* write_task){
     );
 }
 
-void async_fs_after_write(event_node* exec_node){
-    task_block* write_task_block = (task_block*)exec_node->data_ptr;
-    async_fs_task_info* write_task_info = (async_fs_task_info*)write_task_block->async_task_info;
+void async_fs_after_write(void* write_info, void* arg){
+    async_fs_task_info* write_task_info = (async_fs_task_info*)write_info;
 
     write_task_info->fs_callbacks.write_callback(
         write_task_info->fs_task_fd,
         write_task_info->array,
         write_task_info->return_val,
-        write_task_block->arg
+        arg
     );
 }
 
@@ -334,15 +329,14 @@ void async_fs_buffer_write_thread_task(void* write_task){
     //set_buffer_length(write_task_info->buffer, write_task_info->return_val);
 }
 
-void async_fs_after_buffer_write(event_node* exec_node){
-    task_block* write_task_block = (task_block*)exec_node->data_ptr;
-    async_fs_task_info* write_task_info = (async_fs_task_info*)write_task_block->async_task_info;
+void async_fs_after_buffer_write(void* buffer_write_info, void* arg){
+    async_fs_task_info* write_task_info = (async_fs_task_info*)buffer_write_info;
 
     write_task_info->fs_callbacks.buffer_write_callback(
         write_task_info->fs_task_fd,
         write_task_info->buffer,
         write_task_info->return_val,
-        write_task_block->arg
+        arg
     );
 }
 

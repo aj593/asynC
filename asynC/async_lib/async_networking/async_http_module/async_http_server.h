@@ -20,8 +20,21 @@ char* async_http_server_request_method(async_http_server_request* http_req);
 char* async_http_server_request_url(async_http_server_request* http_req);
 char* async_http_server_request_http_version(async_http_server_request* http_req);
 
-void async_http_server_request_on_data(async_http_server_request* http_req, void(*req_data_handler)(buffer*, void*), void* arg);
-void async_http_server_request_on_end(async_http_server_request* http_req, void(*req_end_handler)(void*), void* arg);
+void async_http_server_request_on_data(
+    async_http_server_request* incoming_request,
+    void(*request_data_handler)(buffer*, void*),
+    void* cb_arg,
+    int is_temp,
+    int num_times_listen
+);
+
+void async_http_server_request_on_end(
+    async_http_server_request* incoming_request,
+    void(*request_end_handler)(void*),
+    void* cb_arg,
+    int is_temp,
+    int num_times_listen
+);
 
 void async_http_response_set_status_code(async_http_outgoing_response* curr_http_response, int status_code);
 void async_http_response_set_status_msg(async_http_outgoing_response* curr_http_response, char* status_msg);

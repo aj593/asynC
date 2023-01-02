@@ -2,9 +2,12 @@
 #include "async_http_message_template.h"
 
 #include "../../event_emitter_module/async_event_emitter.h"
+#include "../../../async_runtime/thread_pool.h"
 
 #include <string.h>
 #include <ctype.h>
+
+#include <stdio.h> //TODO: use this for debugging?
 
 typedef struct incoming_message_info {
     void* data_ptr;
@@ -13,10 +16,14 @@ typedef struct incoming_message_info {
 
 void req_end_converter(union event_emitter_callbacks curr_end_callback, void* data, void* arg);
 void async_http_incoming_message_emit_data(async_http_incoming_message* incoming_msg, void* data_ptr, unsigned int num_bytes);
-void request_data_converter(union event_emitter_callbacks incoming_req_callback, void* data, void* arg);
+void incoming_msg_data_converter(union event_emitter_callbacks incoming_req_callback, void* data, void* arg);
 void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info);
+void async_http_incoming_message_check_data(async_http_incoming_message* incoming_msg_ptr);
+void async_http_incoming_message_parse(void* incoming_msg_ptr_arg);
+void async_http_incoming_message_data_handler(async_socket* socket, buffer* data, void* arg);
 
 //TODO: use library function instead?
+/*
 int str_to_num(char* num_str){
     int content_len_num = 0;
     int curr_index = 0;
@@ -31,7 +38,7 @@ int str_to_num(char* num_str){
 }
 
 int is_number_str(char* num_str){
-    for(int i = 0; /*i < 20 &&*/ num_str[i] != '\0'; i++){
+    for(int i = 0; i < 20 && num_str[i] != '\0'; i++){
         if(!isdigit(num_str[i])){
             return 0;
         }
@@ -39,6 +46,7 @@ int is_number_str(char* num_str){
 
     return 1;
 }
+*/
 
 void async_http_incoming_message_init(
     async_http_incoming_message* incoming_msg,
@@ -56,14 +64,41 @@ void async_http_incoming_message_init(
     );
 
     incoming_msg->is_reading_chunk_size = 1;
-    
-    //TODO: initialize this here?
-    //async_stream_init(&incoming_msg->incoming_data_stream, DEFAULT_HTTP_BUFFER_SIZE);
 }
 
 void async_http_incoming_message_destroy(async_http_incoming_message* incoming_msg){
     async_http_message_template_destroy(&incoming_msg->incoming_msg_template_info);
     async_stream_destroy(&incoming_msg->incoming_data_stream);
+}
+
+int double_CRLF_check_and_enqueue_parse_task(
+    async_http_incoming_message* incoming_msg_ptr,
+    buffer* data_buffer,
+    void data_handler_to_remove(async_socket*, buffer*, void*),
+    void(*after_parse_task)(void*, void*),
+    void* thread_cb_arg
+){
+    int double_CRLF_ret = async_http_incoming_message_double_CRLF_check(
+        incoming_msg_ptr,
+        data_buffer,
+        data_handler_to_remove,
+        async_http_incoming_message_data_handler,
+        incoming_msg_ptr
+    );
+
+    if(double_CRLF_ret != 0){
+        //TODO: check kind of error here
+        return -1;
+    }
+
+    async_thread_pool_create_task(
+        async_http_incoming_message_parse,
+        after_parse_task,
+        &incoming_msg_ptr,
+        thread_cb_arg
+    );
+
+    return 0;
 }
 
 int async_http_incoming_message_double_CRLF_check(
@@ -75,6 +110,7 @@ int async_http_incoming_message_double_CRLF_check(
 ){
     if(incoming_message_ptr->found_double_CRLF){
         destroy_buffer(new_data_buffer);
+        printf("executing this though I shouldn't be??\n");
         return -1;
     }
 
@@ -122,7 +158,10 @@ int async_http_incoming_message_double_CRLF_check(
     return 0;
 }
 
-void async_http_incoming_message_parse(async_http_incoming_message* incoming_msg_ptr){
+void async_http_incoming_message_parse(void* incoming_msg_ptr_arg){
+    async_http_incoming_message* incoming_msg_ptr = 
+        (async_http_incoming_message*)incoming_msg_ptr_arg;
+
     char* header_string = (char*)get_internal_buffer(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
     //int buffer_capacity = get_buffer_capacity((*info_to_parse)->http_header_data);
     
@@ -160,8 +199,9 @@ void async_http_incoming_message_parse(async_http_incoming_message* incoming_msg
     }
 
     char* content_length_num_str = ht_get(template_ptr->header_table, "Content-Length");
-    if(content_length_num_str != NULL && is_number_str(content_length_num_str)){
-        incoming_msg_ptr->incoming_msg_template_info.content_length = str_to_num(content_length_num_str);
+    if(content_length_num_str != NULL /*&& is_number_str(content_length_num_str)*/){
+        incoming_msg_ptr->incoming_msg_template_info.content_length = 
+            strtoull(content_length_num_str, NULL, 10);
     }
 }
 
@@ -235,6 +275,46 @@ int async_http_incoming_message_chunk_handler(
     return is_set_to_emit;
 }
 
+void async_http_incoming_message_data_handler(async_socket* socket, buffer* data, void* arg){
+    async_http_incoming_message* incoming_msg_ptr = (async_http_incoming_message*)arg;    
+
+    //TODO: need mutex lock here?
+    async_stream_enqueue(
+        &incoming_msg_ptr->incoming_data_stream,
+        get_internal_buffer(data),
+        get_buffer_capacity(data),
+        NULL,
+        NULL 
+    );
+
+    destroy_buffer(data);
+
+    async_http_incoming_message_check_data(incoming_msg_ptr);
+}
+
+void async_http_incoming_message_on_data(
+    async_http_incoming_message* incoming_msg_ptr, 
+    void(*http_incoming_msg_data_callback)(buffer*, void*), 
+    void* arg, 
+    int is_temp, 
+    int num_listens
+){
+    union event_emitter_callbacks msg_data_callback = { .incoming_msg_data_handler = http_incoming_msg_data_callback };
+
+    async_event_emitter_on_event(
+        &incoming_msg_ptr->incoming_msg_template_info.event_emitter_handler,
+        async_http_incoming_message_data_event,
+        msg_data_callback,
+        incoming_msg_data_converter,
+        &incoming_msg_ptr->num_data_listeners,
+        arg,
+        is_temp,
+        num_listens
+    );
+
+    async_http_incoming_message_check_data(incoming_msg_ptr);
+}
+
 void async_http_incoming_message_check_data(async_http_incoming_message* incoming_msg_ptr){
     //emit data event only when request is flowing/request has data listeners
     if(incoming_msg_ptr->num_data_listeners == 0){
@@ -270,29 +350,6 @@ void async_http_incoming_message_check_data(async_http_incoming_message* incomin
     }
 }
 
-void async_http_incoming_message_on_data(
-    async_http_incoming_message* incoming_msg_ptr, 
-    void(*req_data_handler)(buffer*, void*), 
-    void* arg, 
-    int is_temp, 
-    int num_times_listen
-){
-    union event_emitter_callbacks curr_incoming_req_data_callback = { .incoming_req_data_handler = req_data_handler };
-
-    async_event_emitter_on_event(
-        &incoming_msg_ptr->incoming_msg_template_info.event_emitter_handler,
-        async_http_incoming_message_data_event,
-        curr_incoming_req_data_callback,
-        request_data_converter,
-        &incoming_msg_ptr->num_data_listeners,
-        arg,
-        is_temp,
-        num_times_listen
-    );
-
-    async_http_incoming_message_check_data(incoming_msg_ptr);
-}
-
 void async_http_incoming_message_emit_data(async_http_incoming_message* incoming_msg, void* data_ptr, unsigned int num_bytes){
     incoming_message_info new_req_and_buffer = {
         .data_ptr = data_ptr,
@@ -310,8 +367,8 @@ void async_http_incoming_message_emit_data(async_http_incoming_message* incoming
     async_http_incoming_message_emit_end(incoming_msg);
 }
 
-void request_data_converter(union event_emitter_callbacks incoming_req_callback, void* data, void* arg){
-    void(*incoming_msg_data_handler)(buffer*, void*) = incoming_req_callback.incoming_req_data_handler;
+void incoming_msg_data_converter(union event_emitter_callbacks incoming_req_callback, void* data, void* arg){
+    void(*incoming_msg_data_handler)(buffer*, void*) = incoming_req_callback.incoming_msg_data_handler;
     incoming_message_info* curr_http_incoming_info = (incoming_message_info*)data;
     
     incoming_msg_data_handler(
@@ -324,7 +381,7 @@ void request_data_converter(union event_emitter_callbacks incoming_req_callback,
 }
 
 void async_http_incoming_message_on_end(async_http_incoming_message* incoming_msg, void(*req_end_handler)(void*), void* arg, int is_temp, int num_listens){
-    union event_emitter_callbacks new_req_end_callback = { .req_end_handler = req_end_handler };
+    union event_emitter_callbacks new_req_end_callback = { .incoming_msg_end_handler = req_end_handler };
 
     async_event_emitter_on_event(
         &incoming_msg->incoming_msg_template_info.event_emitter_handler,
@@ -342,6 +399,7 @@ void async_http_incoming_message_on_end(async_http_incoming_message* incoming_ms
 
 void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info){
     async_http_message_template* template_ptr = &incoming_msg_info->incoming_msg_template_info;
+    //TODO: make # bytes >= not ==?
     if(
         incoming_msg_info->num_payload_bytes_read == template_ptr->content_length
         && !incoming_msg_info->has_emitted_end
@@ -357,8 +415,7 @@ void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_
 }
 
 void req_end_converter(union event_emitter_callbacks curr_end_callback, void* data, void* arg){
-    void(*req_end_handler)(void*) = curr_end_callback.req_end_handler;
-    //async_incoming_http_request* curr_req = (async_incoming_http_request*)data;
+    void(*req_end_handler)(void*) = curr_end_callback.incoming_msg_end_handler;
 
     req_end_handler(arg);
 }

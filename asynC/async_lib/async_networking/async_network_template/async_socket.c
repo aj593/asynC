@@ -30,7 +30,7 @@ void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, vo
 void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sent, void* arg);
 void shutdown_callback(int result_val, void* arg);
 void async_socket_on_connection(async_socket* connecting_socket, void(*connection_handler)(async_socket*, void*), void* arg, int is_temp_subscriber, int num_times_listen);
-void thread_connect_interm(event_node* connect_task_node);
+void thread_connect_interm(void* connect_info, void* cb_arg);
 void async_socket_emit_connection(async_socket* connected_socket);
 void socket_event_handler(event_node* curr_socket_node, uint32_t events);
 void async_socket_emit_data(async_socket* data_socket, buffer* socket_receive_buffer, int num_bytes);
@@ -97,9 +97,8 @@ void async_socket_future_send_task_enqueue_attempt(async_socket* connected_socke
     }
 }
 
-void thread_connect_interm(event_node* connect_task_node){
-    task_block* connect_task_block = (task_block*)connect_task_node->data_ptr;
-    async_connect_info* connect_info_ptr = (async_connect_info*)connect_task_block->async_task_info;
+void thread_connect_interm(void* connect_info, void* cb_arg){
+    async_connect_info* connect_info_ptr = (async_connect_info*)connect_info;
     async_socket* connected_socket = connect_info_ptr->connecting_socket;
 
     if(connect_info_ptr->socket_fd == -1){
@@ -336,7 +335,9 @@ void async_socket_on_close(async_socket* closing_socket, void(*socket_close_call
 void async_socket_end(async_socket* ending_socket){
     ending_socket->is_writable = 0;
     ending_socket->closed_self = 1;
+    //TODO: set is_readable to 0 also?
 
+    //check for if it's reading too? would also have to change code in async recv callback too
     if(!ending_socket->is_queued_for_writing){
         migrate_idle_to_polling_queue(ending_socket->socket_event_node_ptr);
     }

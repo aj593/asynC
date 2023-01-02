@@ -21,7 +21,7 @@ typedef struct async_getaddrinfo_dns_info {
 void async_dns_lookup(char* hostname, void(*dns_callback)(char**, int, void*), void* arg);
 void async_dns_lookup_task(void* async_dns_info);
 size_t format_ip_address(void** dbl_ptr, struct addrinfo* result_ptr, char* addrstr, int max_addr_bytes);
-void async_dns_lookup_interm(event_node* async_dns_lookup_node);
+void async_after_dns_lookup(void* dns_info, void* arg);
 
 void async_dns_lookup(char* hostname, void(*dns_callback)(char**, int, void*), void* arg){
     async_getaddrinfo_dns_info new_dns_thread_task_info = {
@@ -32,7 +32,7 @@ void async_dns_lookup(char* hostname, void(*dns_callback)(char**, int, void*), v
 
     async_thread_pool_create_task_copied(
         async_dns_lookup_task,
-        async_dns_lookup_interm,
+        async_after_dns_lookup,
         &new_dns_thread_task_info,
         sizeof(async_getaddrinfo_dns_info),
         arg
@@ -119,13 +119,12 @@ size_t format_ip_address(void** dbl_ptr, struct addrinfo* result_ptr, char* addr
     return strnlen(addrstr, max_addr_bytes);
 }
 
-void async_dns_lookup_interm(event_node* async_dns_lookup_node){
-    task_block* task_block_ptr = (task_block*)async_dns_lookup_node->data_ptr;
-    async_getaddrinfo_dns_info* dns_data = (async_getaddrinfo_dns_info*)task_block_ptr->async_task_info;
+void async_after_dns_lookup(void* dns_info, void* arg){
+    async_getaddrinfo_dns_info* dns_data = (async_getaddrinfo_dns_info*)dns_info;
 
     dns_data->dns_callback(
         dns_data->ip_addresses_array,
         dns_data->num_addresses,
-        task_block_ptr->arg
+        arg
     );
 }

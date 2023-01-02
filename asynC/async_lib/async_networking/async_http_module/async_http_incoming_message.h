@@ -18,11 +18,29 @@ typedef struct async_http_incoming_message {
     unsigned int num_data_listeners;
     unsigned int num_end_listeners;
     int has_emitted_end;
+
+    void(*get_incoming_msg_ptr)(void*);
+    struct async_http_incoming_message*(*after_parse_initiated)(void*, async_socket*);
 } async_http_incoming_message;
 
-//TODO: put this function in separate file for http utility tasks used by both http server and request?
-void async_http_incoming_message_parse(async_http_incoming_message* incoming_msg_ptr);
-void async_http_incoming_message_check_data(async_http_incoming_message* incoming_msg_ptr);
+void async_http_incoming_message_on_data(
+    async_http_incoming_message* incoming_msg_ptr, 
+    void(*http_incoming_msg_data_callback)(buffer*, void*), 
+    void* arg, 
+    int is_temp, 
+    int num_listens
+);
+
+void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info);
+void async_http_incoming_message_on_end(async_http_incoming_message* incoming_msg, void(*req_end_handler)(void*), void* arg, int is_temp, int num_listens);
+
+int double_CRLF_check_and_enqueue_parse_task(
+    async_http_incoming_message* incoming_msg_ptr,
+    buffer* data_buffer,
+    void data_handler_to_remove(async_socket*, buffer*, void*),
+    void(*after_parse_task)(void*, void*),
+    void* thread_cb_arg
+);
 
 int async_http_incoming_message_double_CRLF_check(
     async_http_incoming_message* incoming_msg_ptr,
@@ -42,6 +60,7 @@ void async_http_incoming_message_init(
 
 void async_http_incoming_message_destroy(async_http_incoming_message* incoming_msg);
 
+/*
 int async_http_incoming_message_chunk_handler(
     async_http_incoming_message* incoming_msg_ptr, 
     async_stream_ptr_data* ptr_to_data,
@@ -49,5 +68,6 @@ int async_http_incoming_message_chunk_handler(
     void** buffer_to_emit,
     int* num_bytes_to_emit
 );
+*/
 
 #endif
