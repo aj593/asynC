@@ -11,12 +11,12 @@
 void tcp_server_listen_task(void* listen_task);
 void tcp_server_accept_task(void* accept_task);
 
-async_tcp_server* async_tcp_server_create(void){
+async_server* async_tcp_server_create(void){
     //TODO: specify protocol or just leave as 0?
     return async_create_server(tcp_server_listen_task, tcp_server_accept_task);
 }
 
-void async_tcp_server_listen(async_tcp_server* listening_tcp_server, int port, char* ip_address, void(*listen_callback)(async_tcp_server*, void*), void* arg){
+void async_tcp_server_listen(async_server* listening_tcp_server, int port, char* ip_address, void(*listen_callback)(async_server*, void*), void* arg){
     async_listen_info listen_info;
     strncpy(listen_info.ip_address, ip_address, MAX_SOCKET_NAME_LEN);
     listen_info.port = port;
@@ -33,14 +33,17 @@ void tcp_server_listen_task(void* listen_task){
     async_listen_info* curr_listen_info = (async_listen_info*)listen_task;
     async_server* new_listening_server = curr_listen_info->listening_server;
     
-    new_listening_server->listening_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-    if(new_listening_server->listening_socket == -1){
+    
+    async_server_set_listening_socket(new_listening_server, socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0));
+    int listening_socket = async_server_get_listening_socket(new_listening_server);
+
+    if(listening_socket == -1){
         perror("socket()");
     }
 
     int opt = 1;
     int return_val = setsockopt(
-        new_listening_server->listening_socket,
+        listening_socket,
         SOL_SOCKET,
         SO_REUSEADDR,
         &opt,
@@ -59,7 +62,7 @@ void tcp_server_listen_task(void* listen_task){
     }
 
     return_val = bind(
-       new_listening_server->listening_socket,
+       listening_socket,
         (const struct sockaddr*)&server_addr,
         sizeof(server_addr)
     );
@@ -68,7 +71,7 @@ void tcp_server_listen_task(void* listen_task){
     }
 
     return_val = listen(
-        new_listening_server->listening_socket,
+        listening_socket,
         MAX_BACKLOG_COUNT
     );
     if(return_val == -1){
@@ -83,9 +86,11 @@ void tcp_server_accept_task(void* accept_task){
     struct sockaddr_in client_addr;
     socklen_t peer_addr_len = sizeof(client_addr);
 
-    accepting_server->newly_accepted_fd = accept(
-        accepting_server->listening_socket,
+    int newly_accepted_socket_fd = accept(
+        async_server_get_listening_socket(accepting_server),
         (struct sockaddr*)&client_addr,
         &peer_addr_len
     );
+
+    async_server_set_newly_accepted_socket(accepting_server, newly_accepted_socket_fd);
 }

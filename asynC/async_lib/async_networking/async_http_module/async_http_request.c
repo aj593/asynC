@@ -333,7 +333,8 @@ int client_http_request_event_checker(event_node* client_http_transaction_node){
     client_side_http_transaction_info* http_info = (client_side_http_transaction_info*)client_http_transaction_node->data_ptr;
 
     //TODO: make better to condition for when to close request
-    return !http_info->request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket->is_open; 
+    async_socket* is_socket_open_ptr = http_info->request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket;
+    return !async_socket_is_open(is_socket_open_ptr); 
 }
 
 void client_http_request_finish_handler(event_node* finished_http_request_node){

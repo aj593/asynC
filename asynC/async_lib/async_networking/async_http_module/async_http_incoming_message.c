@@ -66,7 +66,7 @@ void async_http_incoming_message_emit_data(
     unsigned int num_bytes
 );
 
-void incoming_msg_data_converter(union event_emitter_callbacks incoming_req_callback, void* data, void* arg);
+void incoming_msg_data_converter(void(*generic_callback)(void), void* data, void* arg);
 
 void async_http_incoming_message_on_end(
     async_http_incoming_message* incoming_msg, 
@@ -77,7 +77,7 @@ void async_http_incoming_message_on_end(
 );
 
 void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info);
-void req_end_converter(union event_emitter_callbacks curr_end_callback, void* data, void* arg);
+void req_end_converter(void(*generic_callback)(void), void* data, void* arg);
 
 void async_http_incoming_message_init(
     async_http_incoming_message* incoming_msg,
@@ -365,12 +365,10 @@ void async_http_incoming_message_on_data(
     int is_temp, 
     int num_listens
 ){
-    union event_emitter_callbacks msg_data_callback = { .incoming_msg_data_handler = http_incoming_msg_data_callback };
-
     async_event_emitter_on_event(
-        &incoming_msg_ptr->incoming_msg_template_info.event_emitter_handler,
+        &incoming_msg_ptr->incoming_msg_template_info.http_msg_event_emitter,
         async_http_incoming_message_data_event,
-        msg_data_callback,
+        (void(*)(void))http_incoming_msg_data_callback,
         incoming_msg_data_converter,
         &incoming_msg_ptr->num_data_listeners,
         arg,
@@ -388,7 +386,7 @@ void async_http_incoming_message_emit_data(async_http_incoming_message* incoming
     };
 
     async_event_emitter_emit_event(
-        incoming_msg->incoming_msg_template_info.event_emitter_handler,
+        &incoming_msg->incoming_msg_template_info.http_msg_event_emitter,
         async_http_incoming_message_data_event,
         &new_req_and_buffer
     );
@@ -398,8 +396,8 @@ void async_http_incoming_message_emit_data(async_http_incoming_message* incoming
     async_http_incoming_message_emit_end(incoming_msg);
 }
 
-void incoming_msg_data_converter(union event_emitter_callbacks incoming_req_callback, void* data, void* arg){
-    void(*incoming_msg_data_handler)(buffer*, void*) = incoming_req_callback.incoming_msg_data_handler;
+void incoming_msg_data_converter(void(*generic_callback)(void), void* data, void* arg){
+    void(*incoming_msg_data_handler)(buffer*, void*) = (void(*)(buffer*, void*))generic_callback;
     incoming_message_info* curr_http_incoming_info = (incoming_message_info*)data;
     
     incoming_msg_data_handler(
@@ -412,12 +410,10 @@ void incoming_msg_data_converter(union event_emitter_callbacks incoming_req_call
 }
 
 void async_http_incoming_message_on_end(async_http_incoming_message* incoming_msg, void(*req_end_handler)(void*), void* arg, int is_temp, int num_listens){
-    union event_emitter_callbacks new_req_end_callback = { .incoming_msg_end_handler = req_end_handler };
-
     async_event_emitter_on_event(
-        &incoming_msg->incoming_msg_template_info.event_emitter_handler,
+        &incoming_msg->incoming_msg_template_info.http_msg_event_emitter,
         async_http_incoming_message_end_event,
-        new_req_end_callback,
+        (void(*)(void))req_end_handler,
         req_end_converter,
         &incoming_msg->num_end_listeners,
         arg,
@@ -436,7 +432,7 @@ void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_
         && !incoming_msg_info->has_emitted_end
     ){
         async_event_emitter_emit_event(
-            template_ptr->event_emitter_handler,
+            &template_ptr->http_msg_event_emitter,
             async_http_incoming_message_end_event,
             NULL
         );
@@ -445,8 +441,8 @@ void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_
     }
 }
 
-void req_end_converter(union event_emitter_callbacks curr_end_callback, void* data, void* arg){
-    void(*req_end_handler)(void*) = curr_end_callback.incoming_msg_end_handler;
+void req_end_converter(void(*generic_callback)(void), void* data, void* arg){
+    void(*req_end_handler)(void*) = (void(*)(void*))generic_callback;
 
     req_end_handler(arg);
 }

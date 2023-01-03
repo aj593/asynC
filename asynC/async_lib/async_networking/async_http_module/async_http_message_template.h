@@ -23,7 +23,7 @@ typedef struct async_http_message_template {
     buffer* header_buffer;
     async_socket* wrapped_tcp_socket;
     size_t content_length;
-    async_container_vector* event_emitter_handler;
+    async_event_emitter http_msg_event_emitter;
     int is_chunked;
     
     char http_version[HTTP_VERSION_LEN];

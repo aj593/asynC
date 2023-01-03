@@ -2,11 +2,10 @@
 #define ASYNC_EVENT_EMITTER_TYPE_H
 
 #include "../../containers/async_container_vector.h"
-#include "../../containers/buffer.h"
-#include "../async_file_system/async_fs_readstream.h"
-#include "../async_networking/async_network_template/async_socket.h"
-#include "../async_networking/async_http_module/async_http_server.h"
-#include "../async_networking/async_http_module/async_http_request.h"
+
+typedef struct async_event_emitter {
+    async_container_vector* event_handler_vector;
+} async_event_emitter;
 
 enum emitter_events {
     //async_fs_readstream events
@@ -36,6 +35,7 @@ enum emitter_events {
     //async_http_incoming_response_data_event
 };
 
+/*
 union event_emitter_callbacks {
     //general callback used for comparisons?
     void(*generic_callback)(void);
@@ -65,26 +65,16 @@ union event_emitter_callbacks {
     //async_http_request event handlers
     void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*);
 };
+*/
 
-typedef struct event_emitter_handler {
-    enum emitter_events curr_event;
-    union event_emitter_callbacks curr_callback;
-    void(*generic_callback)();
-    void (*curr_event_converter)(union event_emitter_callbacks, void*, void*);
-    void* curr_arg;
-    int is_temp_subscriber;
-    int is_new_subscriber;
-    unsigned int num_listens_left;
-    unsigned int* num_listeners_ptr;
-} event_emitter_handler;
-
-async_container_vector* create_event_listener_vector(void);
+void async_event_emitter_init(async_event_emitter* event_emitter_ptr);
+void async_event_emitter_destroy(async_event_emitter* event_emitter_ptr);
 
 void async_event_emitter_on_event(
-    async_container_vector** event_listener_vector,
+    async_event_emitter* event_emitter,
     enum emitter_events curr_event,
-    union event_emitter_callbacks emitter_callback,
-    void (*curr_event_converter)(union event_emitter_callbacks, void*, void*),
+    void(*generic_callback)(),
+    void (*curr_event_converter)(void(*)(void), void*, void*),
     unsigned int* num_listeners_ptr,
     void* arg,
     int is_temp_subscriber,
@@ -92,13 +82,13 @@ void async_event_emitter_on_event(
 );
 
 void async_event_emitter_off_event(
-    async_container_vector* event_listener_vector,
+    async_event_emitter* event_emitter,
     enum emitter_events curr_event,
-    union event_emitter_callbacks emitter_callback
+    void(*generic_callback)()
 );
 
 void async_event_emitter_emit_event(
-    async_container_vector* event_vector, 
+    async_event_emitter* event_emitter, 
     enum emitter_events event, 
     void* data
 );

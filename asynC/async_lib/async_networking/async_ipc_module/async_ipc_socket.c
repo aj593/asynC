@@ -11,7 +11,7 @@
 
 void ipc_connect_task_handler(void* connect_task_info);
 
-async_ipc_socket* async_ipc_connect(async_socket* connecting_ipc_socket, char* server_socket_path, char* client_socket_path, void(*connection_handler)(async_ipc_socket*, void*), void* arg){
+async_socket* async_ipc_connect(async_socket* connecting_ipc_socket, char* server_socket_path, char* client_socket_path, void(*connection_handler)(async_socket*, void*), void* arg){
     async_connect_info curr_ipc_connect_info;
     strncpy(curr_ipc_connect_info.ipc_server_path, server_socket_path, MAX_SOCKET_NAME_LEN);
     strncpy(curr_ipc_connect_info.ipc_client_path, client_socket_path, MAX_SOCKET_NAME_LEN);

@@ -1,14 +1,36 @@
 #include "async_event_emitter.h"
 
+/*
 async_container_vector* create_event_listener_vector(void){
     return async_container_vector_create(5, 2, sizeof(event_emitter_handler));
 }
+*/
+
+typedef struct event_emitter_handler {
+    enum emitter_events curr_event;
+    //union event_emitter_callbacks curr_callback;
+    void(*generic_callback)();
+    void (*curr_event_converter)(void(*)(void), void*, void*);
+    void* curr_arg;
+    int is_temp_subscriber;
+    int is_new_subscriber;
+    unsigned int num_listens_left;
+    unsigned int* num_listeners_ptr;
+} event_emitter_handler;
+
+void async_event_emitter_init(async_event_emitter* event_emitter_ptr){
+    event_emitter_ptr->event_handler_vector = async_container_vector_create(5, 2, sizeof(event_emitter_handler));
+}
+
+void async_event_emitter_destroy(async_event_emitter* event_emitter_ptr){
+    async_container_vector_destroy(event_emitter_ptr->event_handler_vector);
+}
 
 void async_event_emitter_on_event(
-    async_container_vector** event_listener_vector,
+    async_event_emitter* event_emitter,
     enum emitter_events curr_event,
-    union event_emitter_callbacks emitter_callback,
-    void (*curr_event_converter)(union event_emitter_callbacks, void*, void*),
+    void(*generic_callback)(),
+    void (*curr_event_converter)(void(*)(), void*, void*),
     unsigned int* num_listeners_ptr,
     void* arg,
     int is_temp_subscriber,
@@ -20,7 +42,7 @@ void async_event_emitter_on_event(
 
     event_emitter_handler new_event_emitter_handler = {
         .curr_event = curr_event,
-        .curr_callback = emitter_callback,
+        .generic_callback = generic_callback,
         .curr_event_converter = curr_event_converter,
         .num_listeners_ptr = num_listeners_ptr,
         .curr_arg = arg,
@@ -29,7 +51,7 @@ void async_event_emitter_on_event(
         .is_new_subscriber = 1
     };
 
-    async_container_vector_add_last(event_listener_vector, &new_event_emitter_handler);
+    async_container_vector_add_last(&event_emitter->event_handler_vector, &new_event_emitter_handler);
 
     if(new_event_emitter_handler.num_listeners_ptr != NULL){
         (*new_event_emitter_handler.num_listeners_ptr)++;
@@ -37,11 +59,15 @@ void async_event_emitter_on_event(
 }
 
 void async_event_emitter_off_event(
-    async_container_vector* event_listener_vector,
+    async_event_emitter* event_emitter,
     enum emitter_events curr_event,
-    union event_emitter_callbacks emitter_callback
+    void(*generic_callback)()
 ){
-    event_emitter_handler* event_handler = async_container_vector_internal_array(event_listener_vector);
+    async_container_vector* event_listener_vector = event_emitter->event_handler_vector;
+
+    event_emitter_handler* event_handler = 
+        (event_emitter_handler*)async_container_vector_internal_array(event_listener_vector);
+        
     for(int i = 0; i < async_container_vector_size(event_listener_vector); i++){
         if(event_handler[i].curr_event != curr_event){
             continue;
@@ -49,8 +75,8 @@ void async_event_emitter_off_event(
 
         //TODO: is it safe to compare all function pointer types using this generic function signature for comparison?
         if(
-            emitter_callback.generic_callback != event_handler[i].curr_callback.generic_callback &&
-            emitter_callback.generic_callback != NULL
+            generic_callback != event_handler[i].generic_callback &&
+            generic_callback != NULL
         ){
             continue;
         }
@@ -58,6 +84,48 @@ void async_event_emitter_off_event(
         async_container_vector_remove(event_listener_vector, i, NULL);
 
         return;
+    }
+}
+
+void async_event_emitter_emit_event(
+    async_event_emitter* event_emitter, 
+    enum emitter_events event, 
+    void* data
+){
+    async_container_vector* event_vector = event_emitter->event_handler_vector;
+
+    event_emitter_handler* event_handler_array = 
+        (event_emitter_handler*)async_container_vector_internal_array(event_vector);
+    
+    for(int i = 0; i < async_container_vector_size(event_vector); i++){
+        event_handler_array[i].is_new_subscriber = 0;
+    }
+
+    event_emitter_handler curr_event_handler;
+    for(int i = 0; i < async_container_vector_size(event_vector); i++){
+        async_container_vector_get(event_vector, i, &curr_event_handler);
+        if(curr_event_handler.is_new_subscriber || curr_event_handler.curr_event != event){
+            continue;
+        }
+
+        curr_event_handler.curr_event_converter(
+            curr_event_handler.generic_callback,
+            data,
+            curr_event_handler.curr_arg
+        );
+
+        if(curr_event_handler.is_temp_subscriber){
+            curr_event_handler.num_listens_left--;
+
+            if(curr_event_handler.num_listens_left == 0){
+                async_container_vector_remove(event_vector, i--, NULL);
+
+                if(curr_event_handler.num_listeners_ptr != NULL){
+                    //TODO: need parantheses for this?
+                    (*curr_event_handler.num_listeners_ptr)--;
+                }
+            }
+        }
     }
 }
 
@@ -106,41 +174,3 @@ void async_event_emitter_once_event(
     );
 }
 */
-
-void async_event_emitter_emit_event(
-    async_container_vector* event_vector, 
-    enum emitter_events event, 
-    void* data
-){
-    event_emitter_handler* event_handler_array = (event_emitter_handler*)async_container_vector_internal_array(event_vector);
-    for(int i = 0; i < async_container_vector_size(event_vector); i++){
-        event_handler_array[i].is_new_subscriber = 0;
-    }
-
-    event_emitter_handler curr_event_handler;
-    for(int i = 0; i < async_container_vector_size(event_vector); i++){
-        async_container_vector_get(event_vector, i, &curr_event_handler);
-        if(curr_event_handler.is_new_subscriber || curr_event_handler.curr_event != event){
-            continue;
-        }
-
-        curr_event_handler.curr_event_converter(
-            curr_event_handler.curr_callback,
-            data,
-            curr_event_handler.curr_arg
-        );
-
-        if(curr_event_handler.is_temp_subscriber){
-            curr_event_handler.num_listens_left--;
-
-            if(curr_event_handler.num_listens_left == 0){
-                async_container_vector_remove(event_vector, i--, NULL);
-
-                if(curr_event_handler.num_listeners_ptr != NULL){
-                    //TODO: need parantheses for this?
-                    (*curr_event_handler.num_listeners_ptr)--;
-                }
-            }
-        }
-    }
-}

@@ -18,11 +18,56 @@
 
 #include "../../async_stream/async_stream.h"
 
+typedef struct async_socket {
+    int socket_fd;
+    //int domain;
+    //int type;
+    //int protocol;
+    int is_open;
+    //linked_list send_stream;
+    async_stream socket_send_stream;
+    atomic_int is_reading;
+    atomic_int is_writing;
+    atomic_int is_flowing;
+    int is_readable;
+    int is_writable;
+    int closed_self;
+    pthread_mutex_t send_stream_lock;
+    buffer* receive_buffer;
+    //int has_event_arr[2];
+    int data_available_to_read;
+    int peer_closed;
+    int set_to_destroy;
+    //int shutdown_flags;
+    async_server* server_ptr;
+    //pthread_mutex_t receive_lock;
+    //int able_to_write;
+    pthread_mutex_t data_handler_vector_mutex;
+    async_event_emitter socket_event_emitter;
+    event_node* socket_event_node_ptr;
+    unsigned int num_data_listeners;
+    unsigned int num_connection_listeners;
+    unsigned int num_end_listeners;
+    unsigned int num_close_listeners;
+    int is_queued_for_writing;
+    int is_queueable_for_writing;
+} async_socket;
+
 //this struct is used for both end and close events for async sockets
 typedef struct socket_end_info {
     async_socket* socket_ptr;
     int end_return_val;
 } socket_end_info;
+
+#ifndef SOCKET_INFO
+#define SOCKET_INFO
+
+//TODO: use this instead?
+typedef struct socket_info {
+    async_socket* socket;
+} socket_info;
+
+#endif
 
 int socket_event_checker(event_node* socket_event_node);
 void destroy_socket(event_node* socket_node);
@@ -53,7 +98,7 @@ async_socket* async_socket_create(void){
     new_socket->protocol = protocol;
     */
 
-    new_socket->event_listener_vector = create_event_listener_vector();
+    async_event_emitter_init(&new_socket->socket_event_emitter);
 
     //linked_list_init(&new_socket->send_stream);
     async_stream_init(&new_socket->socket_send_stream, DEFAULT_SEND_BUFFER_SIZE);
@@ -148,20 +193,22 @@ event_node* create_socket_node(async_socket** new_socket_dbl_ptr, int new_socket
     return socket_event_node;
 }
 
-void async_socket_connection_complete_routine(union event_emitter_callbacks callbacks, void* data, void* arg){
-    void(*async_socket_connected_handler)(async_socket*, void*) = callbacks.async_socket_connection_handler;
+void async_socket_connection_complete_routine(void(*connection_callback)(void), void* data, void* arg){
+    void(*async_socket_connected_handler)(async_socket*, void*) = 
+        (void(*)(async_socket*, void*))connection_callback;
+
     async_socket* new_socket = (async_socket*)data;
     
     async_socket_connected_handler(new_socket, arg);
 }
 
 void async_socket_on_connection(async_socket* connecting_socket, void(*connection_handler)(async_socket*, void*), void* arg, int is_temp_subscriber, int num_times_listen){
-    union event_emitter_callbacks connection_complete_callback = { .async_socket_connection_handler = connection_handler };
+    //void(*generic_callback)(void) = connection_handler;
 
     async_event_emitter_on_event(
-        &connecting_socket->event_listener_vector,
+        &connecting_socket->socket_event_emitter,
         async_socket_connect_event,
-        connection_complete_callback,
+        (void(*)(void))connection_handler,
         async_socket_connection_complete_routine,
         &connecting_socket->num_connection_listeners,
         arg,
@@ -172,7 +219,7 @@ void async_socket_on_connection(async_socket* connecting_socket, void(*connectio
 
 void async_socket_emit_connection(async_socket* connected_socket){
     async_event_emitter_emit_event(
-        connected_socket->event_listener_vector,
+        &connected_socket->socket_event_emitter,
         async_socket_connect_event,
         connected_socket
     );
@@ -260,15 +307,14 @@ void async_socket_emit_end(async_socket* ending_socket, int end_return_val){
     };
 
     async_event_emitter_emit_event(
-        ending_socket->event_listener_vector,
+        &ending_socket->socket_event_emitter,
         async_socket_end_event,
         &socket_ending_info
     );
 }
 
-void socket_end_routine(union event_emitter_callbacks end_callback, void* data, void* arg){
-    void(*socket_end_callback)(async_socket*, int, void*) = end_callback.async_socket_end_handler;
-
+void socket_end_routine(void(*end_callback)(void), void* data, void* arg){
+    void(*socket_end_callback)(async_socket*, int, void*) = (void(*)(async_socket*, int, void*))end_callback;
     socket_end_info* socket_end_info_ptr = (socket_end_info*)data;
 
     socket_end_callback(
@@ -279,12 +325,10 @@ void socket_end_routine(union event_emitter_callbacks end_callback, void* data, 
 }
 
 void async_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int, void*), void* arg, int is_temp_subscriber, int num_times_listen){
-    union event_emitter_callbacks new_socket_end_callback = { .async_socket_end_handler = socket_end_callback };
-
     async_event_emitter_on_event(
-        &ending_socket->event_listener_vector,
+        &ending_socket->socket_event_emitter,
         async_socket_end_event,
-        new_socket_end_callback,
+        (void(*)(void))socket_end_callback,
         socket_end_routine,
         &ending_socket->num_end_listeners,
         arg,
@@ -293,8 +337,8 @@ void async_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)
     );
 }
 
-void socket_close_routine(union event_emitter_callbacks socket_close_cb, void* data, void* arg){
-    void(*socket_close_callback)(async_socket*, int, void*) = socket_close_cb.async_socket_close_handler;
+void socket_close_routine(void(*generic_callback)(void), void* data, void* arg){
+    void(*socket_close_callback)(async_socket*, int, void*) = (void(*)(async_socket*, int, void*))generic_callback;
 
     socket_end_info* curr_socket_end_info = (socket_end_info*)data;
     socket_close_callback(
@@ -311,19 +355,17 @@ void async_socket_emit_close(async_socket* closed_socket, int close_return_val){
     };
 
     async_event_emitter_emit_event(
-        closed_socket->event_listener_vector,
+        &closed_socket->socket_event_emitter,
         async_socket_close_event,
         &new_socket_close_info
     );
 }
 
 void async_socket_on_close(async_socket* closing_socket, void(*socket_close_callback)(async_socket*, int, void*), void* arg, int is_temp_subscriber, int num_times_listen){
-    union event_emitter_callbacks new_socket_close_callback = { .async_socket_close_handler = socket_close_callback };
-
     async_event_emitter_on_event(
-        &closing_socket->event_listener_vector,
+        &closing_socket->socket_event_emitter,
         async_socket_close_event,
-        new_socket_close_callback,
+        (void(*)(void))socket_close_callback,
         socket_close_routine,
         &closing_socket->num_close_listeners,
         arg,
@@ -365,15 +407,11 @@ void after_socket_close(int success, void* arg){
 
     pthread_mutex_destroy(&closed_socket->send_stream_lock);
 
-    free(closed_socket->event_listener_vector);
+    async_event_emitter_destroy(&closed_socket->socket_event_emitter);
 
     async_server* server_ptr = closed_socket->server_ptr;
     if(server_ptr != NULL){
-        server_ptr->num_connections--;
-
-        if(!server_ptr->is_listening && server_ptr->num_connections == 0){
-            migrate_idle_to_polling_queue(server_ptr->event_node_ptr);
-        }
+        async_server_decrement_connection_and_check(server_ptr);
     }
 
     free(closed_socket);
@@ -415,8 +453,8 @@ typedef struct socket_data_info {
     size_t num_bytes_read;
 } socket_data_info;
 
-void socket_data_routine(union event_emitter_callbacks data_handler_callback, void* data , void* arg){
-    void(*curr_data_handler)(async_socket*, buffer*, void*) = data_handler_callback.async_socket_data_handler;
+void socket_data_routine(void(*data_callback)(void), void* data , void* arg){
+    void(*curr_data_handler)(async_socket*, buffer*, void*) = (void(*)(async_socket*, buffer*, void*))data_callback;
     
     socket_data_info* new_socket_data = (socket_data_info*)data;
     buffer* socket_buffer_copy = buffer_copy_num_bytes(new_socket_data->curr_buffer, new_socket_data->num_bytes_read);
@@ -431,12 +469,10 @@ void socket_data_routine(union event_emitter_callbacks data_handler_callback, vo
 //TODO: error handle if fcn ptr in second param is NULL?
 //TODO: add num_bytes param into data handler function pointer?
 void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_times_listen){
-    union event_emitter_callbacks socket_data_handler = { .async_socket_data_handler = new_data_handler };
-
     async_event_emitter_on_event(
-        &reading_socket->event_listener_vector,
+        &reading_socket->socket_event_emitter,
         async_socket_data_event,
-        socket_data_handler,
+        (void(*)(void))new_data_handler,
         socket_data_routine,
         &reading_socket->num_data_listeners,
         arg,
@@ -450,12 +486,10 @@ void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(
 }
 
 void async_socket_off_data(async_socket* reading_socket, void(*data_handler)(async_socket*, buffer*, void*)){
-    union event_emitter_callbacks socket_data_handler = { .async_socket_data_handler = data_handler };
-
     async_event_emitter_off_event(
-        reading_socket->event_listener_vector,
+        &reading_socket->socket_event_emitter,
         async_socket_data_event,
-        socket_data_handler
+        (void(*)(void))data_handler
     );
 }
 
@@ -467,7 +501,7 @@ void async_socket_emit_data(async_socket* data_socket, buffer* socket_receive_bu
     };
 
     async_event_emitter_emit_event(
-        data_socket->event_listener_vector,
+        &data_socket->socket_event_emitter,
         async_socket_data_event,
         &new_data_info
     );
@@ -555,4 +589,12 @@ void async_socket_write(async_socket* writing_socket, void* buffer_to_write, int
     );
 
     async_socket_future_send_task_enqueue_attempt(writing_socket);
+}
+
+void async_socket_set_server_ptr(async_socket* accepted_socket, async_server* server_ptr){
+    accepted_socket->server_ptr = server_ptr;
+}
+
+int async_socket_is_open(async_socket* checked_socket){
+    return checked_socket->is_open;
 }

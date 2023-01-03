@@ -18,9 +18,9 @@
 #define HEADER_BUFF_SIZE 50
 
 typedef struct async_http_server {
-    async_tcp_server* wrapped_tcp_server;
+    async_server* wrapped_tcp_server;
     //TODO: make vector to listen to general events
-    async_container_vector* event_listener_vector;
+    async_event_emitter http_server_event_emitter;
     unsigned int num_listen_listeners;
     unsigned int num_request_listeners;
     float header_timeout;
@@ -117,8 +117,8 @@ void async_http_server_on_listen(
 );
 
 void async_http_server_emit_listen(async_http_server* listening_server);
-void http_server_listen_routine(union event_emitter_callbacks curr_listen_callback, void* data, void* arg);
-void async_http_server_after_listen(async_tcp_server* http_server, void* cb_arg);
+void http_server_listen_routine(void(*generic_callback)(void), void* data, void* arg);
+void async_http_server_after_listen(async_server* http_server, void* cb_arg);
 
 void async_http_server_connection_handler(async_socket* new_http_socket, void* arg);
 void async_http_server_socket_data_handler(async_socket* read_socket, buffer* data_buffer, void* arg);
@@ -134,7 +134,7 @@ void async_http_server_on_request(
 );
 
 void async_http_server_emit_request(async_http_transaction* http_transaction_ptr);
-void async_http_server_request_routine(union event_emitter_callbacks curr_request_callback, void* data, void* arg);
+void async_http_server_request_routine(void(*generic_callback)(void), void* data, void* arg);
 
 int async_http_server_transaction_event_checker(event_node* http_node);
 void async_http_server_after_transaction_finish(event_node* http_node);
@@ -176,7 +176,7 @@ void async_http_server_request_on_end(
 async_http_server* async_create_http_server(void){
     async_http_server* new_http_server = (async_http_server*)calloc(1, sizeof(async_http_server));
     new_http_server->wrapped_tcp_server = async_tcp_server_create();
-    new_http_server->event_listener_vector = create_event_listener_vector();
+    async_event_emitter_init(&new_http_server->http_server_event_emitter);
     new_http_server->header_timeout = 10.0f;
     new_http_server->request_timeout = 60.0f;
 
@@ -184,7 +184,7 @@ async_http_server* async_create_http_server(void){
 }
 
 void async_http_server_destroy(async_http_server* http_server){
-    async_container_vector_destroy(http_server->event_listener_vector);
+    async_event_emitter_destroy(&http_server->http_server_event_emitter);
     free(http_server);
 }
 
@@ -311,12 +311,12 @@ void async_http_server_listen(async_http_server* listening_server, int port, cha
 }
 
 void async_http_server_on_listen(async_http_server* listening_http_server, void(*http_listen_callback)(async_http_server*, void*), void* arg, int is_temp_subscriber, int num_times_listen){
-    union event_emitter_callbacks http_server_listen_callback = { .http_server_listen_callback = http_listen_callback };
+    void(*generic_callback)(void) = (void(*)(void))http_listen_callback;
 
     async_event_emitter_on_event(
-        &listening_http_server->event_listener_vector,
+        &listening_http_server->http_server_event_emitter,
         async_http_server_listen_event,
-        http_server_listen_callback,
+        generic_callback,
         http_server_listen_routine,
         &listening_http_server->num_listen_listeners,
         arg,
@@ -327,20 +327,21 @@ void async_http_server_on_listen(async_http_server* listening_http_server, void(
 
 void async_http_server_emit_listen(async_http_server* listening_server){
     async_event_emitter_emit_event(
-        listening_server->event_listener_vector,
+        &listening_server->http_server_event_emitter,
         async_http_server_listen_event,
         &listening_server
     );
 }
 
-void http_server_listen_routine(union event_emitter_callbacks curr_listen_callback, void* data, void* arg){
-    void(*http_listen_callback)(async_http_server*, void*) = curr_listen_callback.http_server_listen_callback;
+void http_server_listen_routine(void(*generic_callback)(void), void* data, void* arg){
+    void(*http_listen_callback)(async_http_server*, void*) = 
+        (void(*)(async_http_server*, void*))generic_callback;
 
     async_http_server* listening_http_server = (async_http_server*)data;
     http_listen_callback(listening_http_server, arg);
 }
 
-void async_http_server_after_listen(async_tcp_server* http_server, void* cb_arg){
+void async_http_server_after_listen(async_server* http_server, void* cb_arg){
     async_http_server* listening_http_server = (async_http_server*)cb_arg;
     listening_http_server->is_listening = 1;
 
@@ -446,12 +447,12 @@ void async_http_server_on_request(
     int is_temp_subscriber, 
     int num_times_listen
 ){
-    union event_emitter_callbacks http_request_callback = { .request_handler = request_handler };
+    void(*generic_callback)(void) = (void(*)(void))request_handler;
 
     async_event_emitter_on_event(
-        &http_server->event_listener_vector,
+        &http_server->http_server_event_emitter,
         async_http_server_request_event,
-        http_request_callback,
+        generic_callback,
         async_http_server_request_routine,
         &http_server->num_request_listeners,
         arg,
@@ -462,7 +463,7 @@ void async_http_server_on_request(
 
 void async_http_server_emit_request(async_http_transaction* http_transaction_ptr){
     async_event_emitter_emit_event(
-        http_transaction_ptr->http_server_ptr->event_listener_vector,
+        &http_transaction_ptr->http_server_ptr->http_server_event_emitter,
         async_http_server_request_event,
         http_transaction_ptr
     );
@@ -472,8 +473,9 @@ void async_http_server_emit_request(async_http_transaction* http_transaction_ptr
     async_http_incoming_message_emit_end(&new_request_info->incoming_msg_info);
 }
 
-void async_http_server_request_routine(union event_emitter_callbacks curr_request_callback, void* data, void* arg){
-    void(*curr_request_handler)(async_http_server*, async_http_server_request*, async_http_server_response*, void*) = curr_request_callback.request_handler;
+void async_http_server_request_routine(void(*generic_callback)(void), void* data, void* arg){
+    void(*curr_request_handler)(async_http_server*, async_http_server_request*, async_http_server_response*, void*) = 
+        (void(*)(async_http_server*, async_http_server_request*, async_http_server_response*, void*))generic_callback;
 
     async_http_transaction* curr_http_info = (async_http_transaction*)data;
     curr_request_handler(

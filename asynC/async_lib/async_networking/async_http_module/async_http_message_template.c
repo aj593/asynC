@@ -1,3 +1,4 @@
+#include "async_http_message_template.h"
 #include "../../event_emitter_module/async_event_emitter.h"
 
 #include <stdlib.h>
@@ -25,8 +26,8 @@ void async_http_message_template_init(
         msg_template_ptr->header_table = ht_create();
     }
 
-    if(msg_template_ptr->event_emitter_handler == NULL){
-        msg_template_ptr->event_emitter_handler = create_event_listener_vector();
+    if(msg_template_ptr->http_msg_event_emitter.event_handler_vector == NULL){
+        async_event_emitter_init(&msg_template_ptr->http_msg_event_emitter);
     }
 
     msg_template_ptr->start_line_first_token  = start_line_first_token_ptr;
@@ -37,7 +38,7 @@ void async_http_message_template_init(
 void async_http_message_template_destroy(async_http_message_template* msg_template_ptr){
     destroy_buffer(msg_template_ptr->header_buffer);
     ht_destroy(msg_template_ptr->header_table);
-    async_container_vector_destroy(msg_template_ptr->event_emitter_handler);
+    async_event_emitter_destroy(&msg_template_ptr->http_msg_event_emitter);
 }
 
 int is_chunked_checker(hash_table* header_table){

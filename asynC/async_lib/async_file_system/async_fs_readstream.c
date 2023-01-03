@@ -24,7 +24,8 @@ typedef struct fs_readable_stream {
     int reached_EOF;
     int is_currently_reading;
     buffer* read_buffer;
-    async_container_vector* event_listener_vector;
+    //async_container_vector* event_listener_vector;
+    async_event_emitter readstream_event_emitter;
     size_t read_chunk_size;
     size_t curr_file_offset;
     unsigned int num_data_event_listeners;
@@ -52,7 +53,7 @@ async_fs_readstream* create_async_fs_readstream(char* filename){
     async_fs_readstream* new_readstream_ptr = calloc(1, sizeof(async_fs_readstream));
     new_readstream_ptr->read_chunk_size = DEFAULT_READSTREAM_CHUNK_SIZE;
     new_readstream_ptr->read_buffer = create_buffer(DEFAULT_READSTREAM_CHUNK_SIZE);
-    new_readstream_ptr->event_listener_vector = create_event_listener_vector();
+    async_event_emitter_init(&new_readstream_ptr->readstream_event_emitter);
 
     async_fs_open(filename, O_RDONLY, 0644, after_readstream_open, new_readstream_ptr);
 
@@ -110,8 +111,8 @@ void after_readstream_close(int success, void* arg){
     async_fs_readstream* closed_readstream = (async_fs_readstream*)arg;
     //TODO: emit close event here on this line
 
-    free(closed_readstream->event_listener_vector);
-    free(closed_readstream->read_buffer);
+    async_event_emitter_destroy(&closed_readstream->readstream_event_emitter);
+    destroy_buffer(closed_readstream->read_buffer);
     free(closed_readstream);
 }
 
@@ -149,11 +150,15 @@ void async_fs_readstream_emit_data(async_fs_readstream* readstream, buffer* data
         .num_bytes = num_bytes
     };
 
-    async_event_emitter_emit_event(readstream->event_listener_vector, async_fs_readstream_data_event, &curr_buffer_info);
+    async_event_emitter_emit_event(
+        &readstream->readstream_event_emitter, 
+        async_fs_readstream_data_event, 
+        &curr_buffer_info
+    );
 }
 
-void data_event_routine(union event_emitter_callbacks readstream_data_callback, void* data, void* arg){
-    void(*readstream_data_handler)(async_fs_readstream*, buffer*, void*) = readstream_data_callback.readstream_data_handler;
+void data_event_routine(void(*readstream_data_callback)(), void* data, void* arg){
+    void(*readstream_data_handler)(async_fs_readstream*, buffer*, void*) = readstream_data_callback;
 
     buffer_info* read_buffer_info = (buffer_info*)data;
     buffer* buffer_copy = buffer_copy_num_bytes(read_buffer_info->read_buffer, read_buffer_info->num_bytes);
@@ -167,12 +172,12 @@ void async_fs_readstream_on_data(
     int is_temp_subscriber,
     int num_times_listen
 ){
-    union event_emitter_callbacks readstream_callback = { .readstream_data_handler = data_handler };
+    void(*readstream_data_callback)() = data_handler;
 
     async_event_emitter_on_event(
-        &readstream->event_listener_vector,
+        &readstream->readstream_event_emitter,
         async_fs_readstream_data_event,
-        readstream_callback,
+        readstream_data_callback,
         data_event_routine,
         &readstream->num_data_event_listeners,
         arg,
@@ -182,11 +187,17 @@ void async_fs_readstream_on_data(
 }
 
 void async_fs_readstream_emit_end(async_fs_readstream* readstream){
-    async_event_emitter_emit_event(readstream->event_listener_vector, async_fs_readstream_end_event, readstream);
+    async_event_emitter_emit_event(
+        &readstream->readstream_event_emitter, 
+        async_fs_readstream_end_event, 
+        readstream
+    );
 }
 
-void async_fs_readstream_end_event_routine(union event_emitter_callbacks curr_callback, void * data, void * arg){
-    void(*readstream_end_handler)(async_fs_readstream*, void*) = curr_callback.readstream_end_handler;
+void async_fs_readstream_end_event_routine(void(*generic_callback)(void), void* data, void* arg){
+    void(*readstream_end_handler)(async_fs_readstream*, void*) = 
+        (void(*)(async_fs_readstream*, void*))generic_callback;
+        
     async_fs_readstream* readstream_ptr = (async_fs_readstream*)data;
 
     readstream_end_handler(readstream_ptr, arg);
@@ -199,12 +210,12 @@ void async_fs_readstream_on_end(
     int is_temp_subscriber,
     int num_times_listen
 ){
-    union event_emitter_callbacks readstream_end_callback_holder = { .readstream_end_handler = new_readstream_end_handler_cb };
+    void(*generic_callback)(void) = (void(*)(void))new_readstream_end_handler_cb;
     
     async_event_emitter_on_event(
-        &ending_readstream->event_listener_vector,
+        &ending_readstream->readstream_event_emitter,
         async_fs_readstream_end_event,
-        readstream_end_callback_holder,
+        generic_callback,
         async_fs_readstream_end_event_routine,
         &ending_readstream->num_end_event_listeners,
         arg,

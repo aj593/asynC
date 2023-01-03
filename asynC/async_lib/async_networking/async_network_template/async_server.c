@@ -4,7 +4,6 @@
 #include "../../../async_runtime/thread_pool.h"
 #include "../../../async_runtime/event_loop.h"
 #include "../../../async_runtime/io_uring_ops.h"
-#include "../../event_emitter_module/async_event_emitter.h"
 #include "../../../async_runtime/async_epoll_ops.h"
 
 #include <sys/epoll.h>
@@ -18,6 +17,32 @@
 
 #include <string.h>
 #include <stdio.h>
+
+#ifndef ASYNC_SERVER_TYPE
+#define ASYNC_SERVER_TYPE
+
+typedef struct async_server {
+    //int domain;
+    //int type;
+    //int protocol;
+    int newly_accepted_fd;
+    int listening_socket;
+    int has_connection_waiting;
+    int is_listening;
+    int is_currently_accepting;
+    int num_connections;
+    async_event_emitter server_event_emitter;
+    char ip_address[MAX_IP_STR_LEN];
+    int port;
+    char name[MAX_SOCKET_NAME_LEN];
+    void(*listen_task)(void*);
+    void(*accept_task)(void*);
+    unsigned int num_listen_event_listeners;
+    unsigned int num_connection_event_listeners;
+    event_node* event_node_ptr;
+} async_server;
+
+#endif
 
 #ifndef SERVER_INFO
 #define SERVER_INFO
@@ -58,7 +83,7 @@ async_server* async_create_server(void(*listen_task_handler)(void*), void(*accep
     async_server* new_server = (async_server*)calloc(1, sizeof(async_server));
     new_server->listen_task = listen_task_handler;
     new_server->accept_task = accept_task_handler;
-    new_server->event_listeners_vector = create_event_listener_vector();
+    async_event_emitter_init(&new_server->server_event_emitter);
     
     //new_server->domain = domain;
     //new_server->type = type;
@@ -142,7 +167,7 @@ void destroy_server(event_node* server_node){
     async_server* destroying_server = destroying_server_info->listening_server;
     //TODO: do other cleanups? remove items from each vector?
     
-    free(destroying_server->event_listeners_vector);
+    async_event_emitter_destroy(&destroying_server->server_event_emitter);
     free(destroying_server);
 }
 
@@ -173,7 +198,7 @@ void post_accept_interm(void* accept_info, void* arg){
     }
 
     accepting_server->num_connections++;
-    new_socket_ptr->server_ptr = accepting_server;
+    async_socket_set_server_ptr(new_socket_ptr, accepting_server);
 
     //TODO: emit connection event here
     async_server_emit_connection(accepting_server, new_socket_ptr);
@@ -195,40 +220,39 @@ void closing_server_callback(int result_val, void* cb_arg){
 
 void async_server_emit_connection(async_server* connected_server, async_socket* newly_connected_socket){
     async_event_emitter_emit_event(
-        connected_server->event_listeners_vector,
+        &connected_server->server_event_emitter,
         async_server_connection_event,
         newly_connected_socket
     );
 }
 
-void server_connection_event_routine(union event_emitter_callbacks event_callback, void* data, void* arg){
-    void(*async_server_connection_handler)(async_socket*, void*) = event_callback.async_server_connection_handler;
+void server_connection_event_routine(void(*connection_callback)(void), void* data, void* arg){
+    void(*async_server_connection_handler)(async_socket*, void*) = (void(*)(async_socket*, void*))connection_callback;
     async_socket* newly_connected_socket = (async_socket*)data;
+
     async_server_connection_handler(newly_connected_socket, arg);
 }
 
 void async_server_emit_listen(async_server* listening_server){
     async_event_emitter_emit_event(
-        listening_server->event_listeners_vector,
+        &listening_server->server_event_emitter,
         async_server_listen_event,
         listening_server
     );
 }
 
-void async_server_listen_event_routine(union event_emitter_callbacks listen_callback, void* data, void* arg){
-    void(*async_server_listen_handler)(async_server*, void*) = listen_callback.async_server_listen_handler;
+void async_server_listen_event_routine(void(*listen_callback)(void), void* data, void* arg){
+    void(*async_server_listen_handler)(async_server*, void*) = (void(*)(async_server*, void*))listen_callback;
     async_server* server_ptr = (async_server*)data;
 
     async_server_listen_handler(server_ptr, arg);
 }
 
 void async_server_on_listen(async_server* listening_server, void(*listen_handler)(async_server*, void*), void* arg, int is_temp_subscriber, int num_listens){
-    union event_emitter_callbacks listen_callback = { .async_server_listen_handler = listen_handler };
-
     async_event_emitter_on_event(
-        &listening_server->event_listeners_vector,
+        &listening_server->server_event_emitter,
         async_server_listen_event,
-        listen_callback,
+        (void(*)(void))listen_handler,
         async_server_listen_event_routine,
         &listening_server->num_listen_event_listeners,
         arg,
@@ -238,16 +262,42 @@ void async_server_on_listen(async_server* listening_server, void(*listen_handler
 }
 
 void async_server_on_connection(async_server* listening_server, void(*connection_handler)(async_socket*, void*), void* arg, int is_temp_subscriber, int num_listens){
-    union event_emitter_callbacks connection_callback = { .async_server_connection_handler = connection_handler };
-
     async_event_emitter_on_event(
-        &listening_server->event_listeners_vector,
+        &listening_server->server_event_emitter,
         async_server_connection_event,
-        connection_callback,
+        (void(*)(void))connection_handler,
         server_connection_event_routine,
         &listening_server->num_connection_event_listeners,
         arg,
         is_temp_subscriber,
         num_listens
     );
+}
+
+void async_server_decrement_connection_and_check(async_server* server_ptr){
+    server_ptr->num_connections--;
+
+    if(!server_ptr->is_listening && server_ptr->num_connections == 0){
+        migrate_idle_to_polling_queue(server_ptr->event_node_ptr);
+    }
+}
+
+void async_server_set_listening_socket(async_server* server_ptr, int listening_socket_fd){
+    server_ptr->listening_socket = listening_socket_fd;
+}
+
+int async_server_get_listening_socket(async_server* server_ptr){
+    return server_ptr->listening_socket;
+}
+
+void async_server_set_newly_accepted_socket(async_server* server_ptr, int new_socket_fd){
+    server_ptr->newly_accepted_fd = new_socket_fd;
+}
+
+char* async_server_get_name(async_server* server_ptr){
+    return server_ptr->name;
+}
+
+int async_server_get_num_connections(async_server* server_ptr){
+    return server_ptr->num_connections;
 }

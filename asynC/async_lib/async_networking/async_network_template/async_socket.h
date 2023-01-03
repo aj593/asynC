@@ -2,59 +2,18 @@
 #define ASYNC_SOCKET
 
 #include <stdatomic.h>
+#include <pthread.h>
 
+#include "async_server.h"
 #include "../../../containers/linked_list.h"
-#include "../../../containers/buffer.h"
 #include "../../../containers/async_container_vector.h"
 #include "../../../async_runtime/event_loop.h"
-#include "async_server.h"
 #include "../../async_stream/async_stream.h"
 
+typedef struct async_socket async_socket;
 typedef struct async_container_vector async_container_vector;
 typedef struct async_server async_server;
-
-#ifndef ASYNC_SOCKET_TYPE
-#define ASYNC_SOCKET_TYPE
-
-typedef struct async_socket {
-    int socket_fd;
-    //int domain;
-    //int type;
-    //int protocol;
-    int is_open;
-    //linked_list send_stream;
-    async_stream socket_send_stream;
-    atomic_int is_reading;
-    atomic_int is_writing;
-    atomic_int is_flowing;
-    int is_readable;
-    int is_writable;
-    int closed_self;
-    pthread_mutex_t send_stream_lock;
-    buffer* receive_buffer;
-    //int has_event_arr[2];
-    int data_available_to_read;
-    int peer_closed;
-    int set_to_destroy;
-    //int shutdown_flags;
-    async_server* server_ptr;
-    //pthread_mutex_t receive_lock;
-    //int able_to_write;
-    pthread_mutex_t data_handler_vector_mutex;
-    async_container_vector* event_listener_vector;
-    event_node* socket_event_node_ptr;
-    //async_container_vector* connection_handler_vector;
-    //async_container_vector* shutdown_vector;
-    //async_container_vector* data_handler_vector; //TODO: make other vectors for other event handlers
-    unsigned int num_data_listeners;
-    unsigned int num_connection_listeners;
-    unsigned int num_end_listeners;
-    unsigned int num_close_listeners;
-    int is_queued_for_writing;
-    int is_queueable_for_writing;
-} async_socket;
-
-#endif
+typedef struct event_buffer buffer;
 
 typedef struct connect_info {
     async_socket* connecting_socket;
@@ -80,5 +39,8 @@ void async_socket_end(async_socket* ending_socket);
 void async_socket_destroy(async_socket* socket_to_destroy);
 
 void async_socket_on_close(async_socket* closing_socket, void(*socket_close_callback)(async_socket*, int, void*), void* arg, int is_temp_subscriber, int num_times_listen);
+
+void async_socket_set_server_ptr(async_socket* accepted_socket, async_server* server_ptr);
+int async_socket_is_open(async_socket* checked_socket);
 
 #endif
