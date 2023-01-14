@@ -5,13 +5,13 @@
 #include <pthread.h>
 
 #include "async_server.h"
-#include "../../../containers/linked_list.h"
-#include "../../../containers/async_container_vector.h"
+#include "../../../util/async_util_vector.h"
 #include "../../../async_runtime/event_loop.h"
-#include "../../async_stream/async_stream.h"
+#include "../../../util/async_byte_stream.h"
+#include "../../../util/async_byte_buffer.h"
 
 typedef struct async_socket async_socket;
-typedef struct async_container_vector async_container_vector;
+typedef struct async_util_vector async_util_vector;
 typedef struct async_server async_server;
 typedef struct event_buffer buffer;
 
@@ -30,8 +30,8 @@ typedef struct connect_info {
 event_node* create_socket_node(async_socket** new_socket, int new_socket_fd);
 async_socket* async_socket_create(void);
 void async_socket_write(async_socket* writing_socket, void* buffer_to_write, int num_bytes_to_write, void (*send_callback)(void*), void* arg);
-void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_times_listen);
-void async_socket_off_data(async_socket* reading_socket, void(*data_handler)(async_socket*, buffer*, void*));
+void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, async_byte_buffer*, void*), void* arg, int is_temp_subscriber, int num_times_listen);
+void async_socket_off_data(async_socket* reading_socket, void(*data_handler)(async_socket*, async_byte_buffer*, void*));
 async_socket* async_connect(async_socket* connecting_socket, async_connect_info* connect_info_ptr, void(*connect_task_handler)(void*), void(*connection_handler)(async_socket*, void*), void* connection_arg);
 
 void async_socket_on_end(async_socket* ending_socket, void(*socket_end_callback)(async_socket*, int, void*), void* arg, int is_temp_subscriber, int num_times_listen);

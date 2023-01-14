@@ -6,7 +6,7 @@
 #define READSTREAM_DATA_INDEX 0
 
 #include "../async_types/event_emitter.h"
-#include "../containers/c_vector.h"
+#include "../util/c_vector.h"
 //#include "async_io.h"
 
 #include <unistd.h>
@@ -25,7 +25,7 @@ typedef struct readablestream {
     ssize_t num_bytes_per_read;
     int is_paused;
     event_emitter* emitter_ptr;
-    buffer* read_buffer;
+    async_byte_buffer* read_buffer;
     struct aiocb aio_block;
     callback_arg* cb_arg;
     //void(*readstream_data_interm)(event_node*);

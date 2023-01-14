@@ -40,7 +40,7 @@
         event_node* writestream_buffer_node = remove_first(&writestream->buffer_stream_list);
         writestream_buffer_item* removed_buffer_item = (writestream_buffer_item*)writestream_buffer_node->data_ptr;
         removed_buffer_item->writestream = writestream;
-        buffer* buffer_to_write = removed_buffer_item->writing_buffer;
+        async_byte_buffer* buffer_to_write = removed_buffer_item->writing_buffer;
 
         
         async_write(
@@ -56,7 +56,7 @@
 */
 
 /*
-void after_writestream_write(int writestream_fd, buffer* removed_buffer, int num_bytes_written, void* writestream_cb_arg){
+void after_writestream_write(int writestream_fd, async_byte_buffer* removed_buffer, int num_bytes_written, void* writestream_cb_arg){
     event_node* writestream_buffer_node = (event_node*)writestream_cb_arg;
     writestream_buffer_item* buffer_item = (writestream_buffer_item*)writestream_buffer_node->data_ptr;
     async_fs_writestream* writestream_ptr = buffer_item->writestream;

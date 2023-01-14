@@ -23,8 +23,8 @@ typedef struct fs_readable_stream {
     int read_fd;
     int reached_EOF;
     int is_currently_reading;
-    buffer* read_buffer;
-    //async_container_vector* event_listener_vector;
+    async_byte_buffer* read_buffer;
+    //async_util_vector* event_listener_vector;
     async_event_emitter readstream_event_emitter;
     size_t read_chunk_size;
     size_t curr_file_offset;
@@ -38,15 +38,15 @@ typedef struct readstream_ptr_data {
 
 typedef struct buffer_info {
     async_fs_readstream* readstream_ptr;
-    buffer* read_buffer;
+    async_byte_buffer* read_buffer;
     int num_bytes;
 } buffer_info;
 
 void readstream_finish_handler(event_node* readstream_node);
 int readstream_checker(event_node* readstream_node);
 void after_readstream_open(int readstream_fd, void* arg);
-void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg);
-void async_fs_readstream_emit_data(async_fs_readstream* readstream, buffer* data_buffer, size_t num_bytes);
+void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg);
+void async_fs_readstream_emit_data(async_fs_readstream* readstream, async_byte_buffer* data_buffer, size_t num_bytes);
 void async_fs_readstream_emit_end(async_fs_readstream* readstream);
 
 async_fs_readstream* create_async_fs_readstream(char* filename){
@@ -125,7 +125,7 @@ void readstream_finish_handler(event_node* readstream_node){
     async_fs_close(ending_readstream_ptr->read_fd, after_readstream_close, ending_readstream_ptr);
 }
 
-void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg){
+void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg){
     async_fs_readstream* readstream_ptr_arg = (async_fs_readstream*)buffer_cb_arg;
     
     if(num_bytes_read > 0){
@@ -143,7 +143,7 @@ void after_readstream_read(int readstream_fd, buffer* filled_readstream_buffer, 
     readstream_ptr_arg->is_currently_reading = 0;
 }
 
-void async_fs_readstream_emit_data(async_fs_readstream* readstream, buffer* data_buffer, size_t num_bytes){
+void async_fs_readstream_emit_data(async_fs_readstream* readstream, async_byte_buffer* data_buffer, size_t num_bytes){
     buffer_info curr_buffer_info = {
         .readstream_ptr = readstream,
         .read_buffer = data_buffer,
@@ -158,16 +158,16 @@ void async_fs_readstream_emit_data(async_fs_readstream* readstream, buffer* data
 }
 
 void data_event_routine(void(*readstream_data_callback)(), void* data, void* arg){
-    void(*readstream_data_handler)(async_fs_readstream*, buffer*, void*) = readstream_data_callback;
+    void(*readstream_data_handler)(async_fs_readstream*, async_byte_buffer*, void*) = readstream_data_callback;
 
     buffer_info* read_buffer_info = (buffer_info*)data;
-    buffer* buffer_copy = buffer_copy_num_bytes(read_buffer_info->read_buffer, read_buffer_info->num_bytes);
+    async_byte_buffer* buffer_copy = buffer_copy_num_bytes(read_buffer_info->read_buffer, read_buffer_info->num_bytes);
     readstream_data_handler(read_buffer_info->readstream_ptr, buffer_copy, arg);
 }
 
 void async_fs_readstream_on_data(
     async_fs_readstream* readstream, 
-    void(*data_handler)(async_fs_readstream*, buffer*, void*), 
+    void(*data_handler)(async_fs_readstream*, async_byte_buffer*, void*), 
     void* arg,
     int is_temp_subscriber,
     int num_times_listen

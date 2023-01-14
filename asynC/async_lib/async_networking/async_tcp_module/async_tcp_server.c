@@ -80,7 +80,7 @@ void tcp_server_listen_task(void* listen_task){
 }
 
 void tcp_server_accept_task(void* accept_task){
-    async_server* accepting_server = (async_server*)accept_task;
+    async_server* accepting_server = *(async_server**)accept_task;
 
     //TODO: get these structs and info from async_accept_info pointer instead of having local variables? 
     struct sockaddr_in client_addr;

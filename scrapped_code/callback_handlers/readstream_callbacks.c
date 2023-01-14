@@ -3,7 +3,7 @@
 void readstream_data_interm(event_node* readstream_data_node){
     readstream* old_readstream_data = &readstream_data_node->data_used.readstream_info; //(readstream*)readstream_data_node->event_data;
 
-    buffer* data_buffer = old_readstream_data->read_buffer;
+    async_byte_buffer* data_buffer = old_readstream_data->read_buffer;
     ssize_t num_bytes_read = aio_return(&old_readstream_data->aio_block);
     
     //TODO: exit 'end' event callbacks here if 0 bytes read here or if num bytes read less than num_bytes_per_read, instead of making aio requests?

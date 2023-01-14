@@ -8,7 +8,7 @@
 
 async_fs_writestream* output_file;
 
-void readstream_data_callback(async_fs_readstream* readstream, buffer* read_data, void* arg){
+void readstream_data_callback(async_fs_readstream* readstream, async_byte_buffer* read_data, void* arg){
     printf("%s\n", (char*)get_internal_buffer(read_data));
 
     async_fs_writestream_write(

@@ -12,7 +12,7 @@ int port = 3000;
 
 void server_listen_callback(async_tcp_server* tcp_server, void* arg);
 void upload_connection_handler(async_socket*, void*);
-void socket_on_data(async_socket*, buffer*, void*);
+void socket_on_data(async_socket*, async_byte_buffer*, void*);
 void socket_end_callback(async_socket* ending_socket, int result, void* arg);
 
 int main(void){
@@ -51,7 +51,7 @@ void upload_connection_handler(async_socket* new_socket, void* arg){
 
 void write_status(int);
 
-void socket_on_data(async_socket* socket_data, buffer* data_buffer, void* arg){
+void socket_on_data(async_socket* socket_data, async_byte_buffer* data_buffer, void* arg){
     //char* str_buf = (char*)get_internal_buffer(data_buffer);
     
     async_fs_writestream_write(

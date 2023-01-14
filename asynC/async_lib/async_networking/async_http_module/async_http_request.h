@@ -1,14 +1,12 @@
 #ifndef ASYNC_HTTP_REQUEST_H
 #define ASYNC_HTTP_REQUEST_H
 
-#include "../../../containers/hash_table.h"
-#include "../../../containers/buffer.h"
+#include "../../../util/async_byte_buffer.h"
 
 #include "async_http_outgoing_message.h"
 
 typedef struct http_request_options {
-    hash_table* table_ptr;
-    buffer* header_buffer;
+    int dummy_option;
 } http_request_options;
 
 typedef struct async_outgoing_http_request async_outgoing_http_request;
@@ -24,13 +22,20 @@ void async_outgoing_http_request_write(
 
 void async_http_request_end(async_outgoing_http_request* outgoing_request);
 
-void async_http_request_options_set_header(http_request_options* http_options_ptr, char* header_key, char* header_val);
+void async_http_client_request_set_header(async_outgoing_http_request* http_request_ptr, char* header_key, char* header_val);
 void async_http_request_options_init(http_request_options* http_options_ptr);
-async_outgoing_http_request* async_http_request(char* host_url, char* http_method, http_request_options* options, void(*response_handler)(async_http_incoming_response*, void*), void* arg);
+
+async_outgoing_http_request* async_http_request(
+    char* host_url, 
+    enum async_http_methods curr_http_method, 
+    http_request_options* options, 
+    void(*response_handler)(async_http_incoming_response*, void*), 
+    void* arg
+);
 
 void async_http_incoming_response_on_data(
     async_http_incoming_response* response_ptr,
-    void(*incoming_response_data_handler)(buffer*, void*),
+    void(*incoming_response_data_handler)(async_byte_buffer*, void*),
     void* cb_arg,
     int is_temp,
     int num_times_listen

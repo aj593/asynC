@@ -4,7 +4,7 @@
 #include "../../async_runtime/thread_pool.h"
 #include "../../async_runtime/event_loop.h"
 #include "../../async_runtime/io_uring_ops.h"
-#include "../async_stream/async_stream.h"
+#include "../../util/async_byte_stream.h"
 #include "../../async_runtime/thread_pool.h"
 
 #include <stdlib.h>
@@ -24,8 +24,7 @@ typedef struct fs_writable_stream {
     int is_open;
     int is_done;
     char filename[PATH_MAX]; //TODO: need this to be PATH_MAX, or need this at all, use strlen to find string length first?
-    //linked_list buffer_stream_list;
-    async_stream writestream;
+    async_byte_stream writestream;
     pthread_mutex_t buffer_stream_lock;
     //TODO: add event handler vectors? will have to be destroyed when writestream is closed
     int is_queueable_for_writing;
@@ -47,7 +46,7 @@ typedef struct async_basic_write_task_info {
 
 /*
 typedef struct buffer_holder {
-    buffer* writing_buffer;
+    async_byte_buffer* writing_buffer;
     async_fs_writestream* writestream;
     void(*writestream_write_callback)(int);
 } writestream_buffer_item;
@@ -76,8 +75,7 @@ async_fs_writestream* create_fs_writestream(char* filename){
 
     strncpy(new_writestream->filename, filename, PATH_MAX);
 
-    //linked_list_init(&new_writestream->buffer_stream_list);
-    async_stream_init(&new_writestream->writestream, DEFAULT_WRITE_BUFFER_SIZE);
+    async_byte_stream_init(&new_writestream->writestream, DEFAULT_WRITE_BUFFER_SIZE);
 
     pthread_mutex_init(&new_writestream->buffer_stream_lock, NULL);
     
@@ -119,7 +117,7 @@ void after_writestream_open(int new_writestream_fd, void* writestream_ptr){
 
     //TODO: check for queueable condition here even though it was set to 1 above?
     if(
-        !is_async_stream_empty(&fs_writestream_ptr->writestream) &&
+        !is_async_byte_stream_empty(&fs_writestream_ptr->writestream) &&
         !fs_writestream_ptr->is_queued_for_writing
     ){
         future_task_queue_enqueue(basic_async_write, fs_writestream_ptr);
@@ -132,7 +130,7 @@ void async_fs_writestream_write(async_fs_writestream* writestream, void* write_b
         return;
     }
 
-    async_stream_enqueue(
+    async_byte_stream_enqueue(
         &writestream->writestream,
         write_buffer,
         num_bytes_to_write,
@@ -156,7 +154,7 @@ int basic_async_write(void* arg){
         return -1;
     }
     
-    async_stream_ptr_data new_ptr_data = async_stream_get_buffer_stream_ptr(&writestream->writestream);
+    async_byte_stream_ptr_data new_ptr_data = async_byte_stream_get_buffer_stream_ptr(&writestream->writestream);
 
     async_fs_write(
         writestream->write_fd,
@@ -175,10 +173,10 @@ void after_async_write(int write_fd, void* array, size_t num_bytes_written, void
     async_fs_writestream* current_writestream = (async_fs_writestream*)arg;
     
     current_writestream->is_writing = 0;
-    async_stream_dequeue(&current_writestream->writestream, num_bytes_written);
+    async_byte_stream_dequeue(&current_writestream->writestream, num_bytes_written);
 
     //TODO: check for queueable condition here even though it was set to 1 above?
-    (!is_async_stream_empty(&current_writestream->writestream)) ?
+    (!is_async_byte_stream_empty(&current_writestream->writestream)) ?
         (future_task_queue_enqueue(basic_async_write, current_writestream)) : 
         (current_writestream->is_queued_for_writing = 0);
 
@@ -215,7 +213,7 @@ void writestream_finish_handler(event_node* writestream_node){
     
     //TODO: destroy internal writestream data structure here
 
-    //linked_list_destroy(&closing_writestream_ptr->buffer_stream_list);
+    async_byte_stream_destroy(&closing_writestream_ptr->writestream);
     pthread_mutex_destroy(&closing_writestream_ptr->buffer_stream_lock);
 
     free(closing_writestream_ptr);

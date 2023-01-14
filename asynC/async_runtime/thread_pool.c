@@ -1,6 +1,6 @@
 #include "thread_pool.h"
 
-#include "../containers/linked_list.h"
+#include "../util/linked_list.h"
 
 #include <pthread.h>
 #include <string.h>
@@ -141,7 +141,7 @@ void* async_thread_pool_create_task(
     return async_thread_pool_create_task_copied(
         thread_task_func,
         task_callback,
-        thread_task_data,
+        &thread_task_data,
         sizeof(void*),
         arg
     );

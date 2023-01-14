@@ -6,6 +6,7 @@
 typedef struct async_http_outgoing_message {
     async_http_message_template incoming_msg_template_info;
     int was_header_written;
+    int has_ended;
 } async_http_outgoing_message;
 
 void async_http_outgoing_message_init(
@@ -18,12 +19,14 @@ void async_http_outgoing_message_init(
 
 void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_msg);
 
+/*
 void async_http_outgoing_message_set_header(
     hash_table* table_ptr,
-    buffer** header_buffer,
+    async_byte_buffer** header_buffer,
     char* header_key, 
     char* header_val
 );
+*/
 
 void async_http_outgoing_message_write_head(async_http_outgoing_message* outgoing_msg_ptr);
 
@@ -32,7 +35,12 @@ void async_http_outgoing_message_write(
     void* response_data, 
     int num_bytes,
     void (*send_callback)(void*),
-    void* arg
+    void* arg,
+    int is_terminating_msg
 );
+
+void async_http_outgoing_message_end(async_http_outgoing_message* outgoing_msg_ptr);
+
+void async_http_outgoing_message_add_trailers(async_http_outgoing_message* outgoing_msg_ptr, ...);
 
 #endif

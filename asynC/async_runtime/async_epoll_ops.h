@@ -1,7 +1,7 @@
 #ifndef ASYNC_EPOLL_WRAPPER_OPS_H
 #define ASYNC_EPOLL_WRAPPER_OPS_H
 
-#include "../containers/linked_list.h"
+#include "../util/linked_list.h"
 
 void async_epoll_init(void);
 void async_epoll_destroy(void);

@@ -16,7 +16,7 @@
 #include "../../../async_runtime/async_epoll_ops.h"
 #include "../../event_emitter_module/async_event_emitter.h"
 
-#include "../../async_stream/async_stream.h"
+#include "../../../util/async_byte_stream.h"
 
 typedef struct async_socket {
     int socket_fd;
@@ -24,8 +24,7 @@ typedef struct async_socket {
     //int type;
     //int protocol;
     int is_open;
-    //linked_list send_stream;
-    async_stream socket_send_stream;
+    async_byte_stream socket_send_stream;
     atomic_int is_reading;
     atomic_int is_writing;
     atomic_int is_flowing;
@@ -33,8 +32,7 @@ typedef struct async_socket {
     int is_writable;
     int closed_self;
     pthread_mutex_t send_stream_lock;
-    buffer* receive_buffer;
-    //int has_event_arr[2];
+    async_byte_buffer* receive_buffer;
     int data_available_to_read;
     int peer_closed;
     int set_to_destroy;
@@ -78,7 +76,7 @@ void async_socket_on_connection(async_socket* connecting_socket, void(*connectio
 void thread_connect_interm(void* connect_info, void* cb_arg);
 void async_socket_emit_connection(async_socket* connected_socket);
 void socket_event_handler(event_node* curr_socket_node, uint32_t events);
-void async_socket_emit_data(async_socket* data_socket, buffer* socket_receive_buffer, int num_bytes);
+void async_socket_emit_data(async_socket* data_socket, async_byte_buffer* socket_receive_buffer, int num_bytes);
 
 //TODO: set to socket is_writing after async_socket_write(), not in async_send() call?
 int async_socket_send_initiator(void* socket_arg);
@@ -100,8 +98,7 @@ async_socket* async_socket_create(void){
 
     async_event_emitter_init(&new_socket->socket_event_emitter);
 
-    //linked_list_init(&new_socket->send_stream);
-    async_stream_init(&new_socket->socket_send_stream, DEFAULT_SEND_BUFFER_SIZE);
+    async_byte_stream_init(&new_socket->socket_send_stream, DEFAULT_SEND_BUFFER_SIZE);
     
     pthread_mutex_init(&new_socket->send_stream_lock, NULL);
     pthread_mutex_init(&new_socket->data_handler_vector_mutex, NULL);
@@ -135,7 +132,7 @@ void async_socket_future_send_task_enqueue_attempt(async_socket* connected_socke
         connected_socket->is_queueable_for_writing &&
         !connected_socket->is_queued_for_writing &&
         !connected_socket->set_to_destroy &&
-        !is_async_stream_empty(&connected_socket->socket_send_stream)
+        !is_async_byte_stream_empty(&connected_socket->socket_send_stream)
     ){
         future_task_queue_enqueue(async_socket_send_initiator, connected_socket);
         connected_socket->is_queued_for_writing = 1;
@@ -402,7 +399,7 @@ void after_socket_close(int success, void* arg){
     destroy_buffer(closed_socket->receive_buffer);
     
     while(closed_socket->socket_send_stream.buffer_list.size > 0){
-        async_container_linked_list_remove_first(&closed_socket->socket_send_stream.buffer_list, NULL);
+        async_util_linked_list_remove_first(&closed_socket->socket_send_stream.buffer_list, NULL);
     }
 
     pthread_mutex_destroy(&closed_socket->send_stream_lock);
@@ -449,15 +446,15 @@ void shutdown_callback(int shutdown_result, void* socket_arg){
 
 typedef struct socket_data_info {
     async_socket* curr_socket_ptr;
-    buffer* curr_buffer;
+    async_byte_buffer* curr_buffer;
     size_t num_bytes_read;
 } socket_data_info;
 
 void socket_data_routine(void(*data_callback)(void), void* data , void* arg){
-    void(*curr_data_handler)(async_socket*, buffer*, void*) = (void(*)(async_socket*, buffer*, void*))data_callback;
+    void(*curr_data_handler)(async_socket*, async_byte_buffer*, void*) = (void(*)(async_socket*, async_byte_buffer*, void*))data_callback;
     
     socket_data_info* new_socket_data = (socket_data_info*)data;
-    buffer* socket_buffer_copy = buffer_copy_num_bytes(new_socket_data->curr_buffer, new_socket_data->num_bytes_read);
+    async_byte_buffer* socket_buffer_copy = buffer_copy_num_bytes(new_socket_data->curr_buffer, new_socket_data->num_bytes_read);
 
     curr_data_handler(
         new_socket_data->curr_socket_ptr,
@@ -468,7 +465,7 @@ void socket_data_routine(void(*data_callback)(void), void* data , void* arg){
 
 //TODO: error handle if fcn ptr in second param is NULL?
 //TODO: add num_bytes param into data handler function pointer?
-void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, buffer*, void*), void* arg, int is_temp_subscriber, int num_times_listen){
+void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(async_socket*, async_byte_buffer*, void*), void* arg, int is_temp_subscriber, int num_times_listen){
     async_event_emitter_on_event(
         &reading_socket->socket_event_emitter,
         async_socket_data_event,
@@ -485,7 +482,7 @@ void async_socket_on_data(async_socket* reading_socket, void(*new_data_handler)(
     //add_socket_data_listener(reading_socket, new_data_handler, arg, 0);
 }
 
-void async_socket_off_data(async_socket* reading_socket, void(*data_handler)(async_socket*, buffer*, void*)){
+void async_socket_off_data(async_socket* reading_socket, void(*data_handler)(async_socket*, async_byte_buffer*, void*)){
     async_event_emitter_off_event(
         &reading_socket->socket_event_emitter,
         async_socket_data_event,
@@ -493,7 +490,7 @@ void async_socket_off_data(async_socket* reading_socket, void(*data_handler)(asy
     );
 }
 
-void async_socket_emit_data(async_socket* data_socket, buffer* socket_receive_buffer, int num_bytes){
+void async_socket_emit_data(async_socket* data_socket, async_byte_buffer* socket_receive_buffer, int num_bytes){
     socket_data_info new_data_info = {
         .curr_socket_ptr = data_socket,
         .curr_buffer = socket_receive_buffer,
@@ -525,7 +522,7 @@ int socket_event_checker(event_node* socket_event_node){
             checked_socket->closed_self &&
             !checked_socket->is_reading &&
             !checked_socket->is_writing &&
-            is_async_stream_empty(&checked_socket->socket_send_stream)
+            is_async_byte_stream_empty(&checked_socket->socket_send_stream)
         )
     ){
         checked_socket->is_open = 0;
@@ -539,7 +536,7 @@ int async_socket_send_initiator(void* socket_arg){
 
     sending_socket->is_writing = 1;
 
-    async_stream_ptr_data new_ptr_data = async_stream_get_buffer_stream_ptr(&sending_socket->socket_send_stream);
+    async_byte_stream_ptr_data new_ptr_data = async_byte_stream_get_buffer_stream_ptr(&sending_socket->socket_send_stream);
 
     async_io_uring_send(
         sending_socket->socket_fd,
@@ -557,7 +554,7 @@ void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sen
     async_socket* written_socket = (async_socket*)arg;
 
     written_socket->is_writing = 0;
-    async_stream_dequeue(&written_socket->socket_send_stream, num_bytes_sent);
+    async_byte_stream_dequeue(&written_socket->socket_send_stream, num_bytes_sent);
 
     written_socket->is_queued_for_writing = 0;
 
@@ -566,7 +563,7 @@ void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sen
 
     //TODO: check if written_socket not writable also?
     if(
-        is_async_stream_empty(&written_socket->socket_send_stream) &&
+        is_async_byte_stream_empty(&written_socket->socket_send_stream) &&
         written_socket->closed_self
     ){
         //move socket event node to polling queue
@@ -580,7 +577,7 @@ void async_socket_write(async_socket* writing_socket, void* buffer_to_write, int
         return;
     }
 
-    async_stream_enqueue(
+    async_byte_stream_enqueue(
         &writing_socket->socket_send_stream, 
         buffer_to_write, 
         num_bytes_to_write,

@@ -1,6 +1,6 @@
 CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic -fpic
-LIBRARY_OBJS = buffer.o async_container_vector.o event_loop.o hash_table.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_server.o async_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o async_dns.o async_http_request.o async_http_message_template.o async_tcp_server.o async_tcp_socket.o async_ipc_server.o async_ipc_socket.o async_child_process.o async_event_emitter.o async_container_linked_list.o async_stream.o async_http_incoming_message.o async_http_outgoing_message.o
-LIBRARY_OBJ_FOLDER = obj/buffer.o obj/async_container_vector.o obj/event_loop.o obj/hash_table.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_server.o obj/async_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o obj/async_dns.o obj/async_http_request.o obj/async_http_message_template.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/async_ipc_server.o obj/async_ipc_socket.o obj/async_child_process.o obj/async_event_emitter.o obj/async_container_linked_list.o obj/async_stream.o obj/async_http_incoming_message.o obj/async_http_outgoing_message.o
+LIBRARY_OBJS = async_byte_buffer.o async_util_vector.o event_loop.o linked_list.o thread_pool.o async_fs.o worker_thread.o async_server.o async_socket.o io_uring_ops.o async_epoll_ops.o async_http_server.o async_fs_readstream.o async_fs_writestream.o async_dns.o async_http_request.o async_http_message_template.o async_tcp_server.o async_tcp_socket.o async_ipc_server.o async_ipc_socket.o async_child_process.o async_event_emitter.o async_util_linked_list.o async_byte_stream.o async_http_incoming_message.o async_http_outgoing_message.o async_util_hash_map.o
+LIBRARY_OBJ_FOLDER = obj/async_byte_buffer.o obj/async_util_vector.o obj/event_loop.o obj/linked_list.o obj/thread_pool.o obj/async_fs.o obj/worker_thread.o obj/async_server.o obj/async_socket.o obj/io_uring_ops.o obj/async_epoll_ops.o obj/async_http_server.o obj/async_fs_readstream.o obj/async_fs_writestream.o obj/async_dns.o obj/async_http_request.o obj/async_http_message_template.o obj/async_tcp_server.o obj/async_tcp_socket.o obj/async_ipc_server.o obj/async_ipc_socket.o obj/async_child_process.o obj/async_event_emitter.o obj/async_util_linked_list.o obj/async_byte_stream.o obj/async_http_incoming_message.o obj/async_http_outgoing_message.o obj/async_util_hash_map.o
 ASYNC_SHARED_LIB_NAME = libasynC.so
 #TODO: add # -Wextra flag later
 
@@ -103,8 +103,8 @@ async_fs.o: asynC/async_lib/async_file_system/async_fs.c asynC/async_lib/async_f
 async_fs_readstream.o: asynC/async_lib/async_file_system/async_fs_readstream.c asynC/async_lib/async_file_system/async_fs_readstream.h
 	gcc -c asynC/async_lib/async_file_system/async_fs_readstream.c -o obj/async_fs_readstream.o $(CFLAGS)
 
-async_stream.o: asynC/async_lib/async_stream/async_stream.c asynC/async_lib/async_stream/async_stream.h
-	gcc -c asynC/async_lib/async_stream/async_stream.c -o obj/async_stream.o $(CFLAGS)
+async_byte_stream.o: asynC/util/async_byte_stream.c asynC/util/async_byte_stream.h
+	gcc -c asynC/util/async_byte_stream.c -o obj/async_byte_stream.o $(CFLAGS)
 
 async_fs_writestream.o: asynC/async_lib/async_file_system/async_fs_writestream.c asynC/async_lib/async_file_system/async_fs_writestream.h
 	gcc -c asynC/async_lib/async_file_system/async_fs_writestream.c -o obj/async_fs_writestream.o  $(CFLAGS)
@@ -130,24 +130,25 @@ async_ipc_server.o: asynC/async_lib/async_networking/async_ipc_module/async_ipc_
 async_ipc_socket.o: asynC/async_lib/async_networking/async_ipc_module/async_ipc_socket.c asynC/async_lib/async_networking/async_ipc_module/async_ipc_socket.h
 	gcc -c asynC/async_lib/async_networking/async_ipc_module/async_ipc_socket.c -o obj/async_ipc_socket.o $(CFLAGS)
 
-#asynC/containers
-buffer.o: asynC/containers/buffer.c asynC/containers/buffer.h
-	gcc -c asynC/containers/buffer.c -o obj/buffer.o $(CFLAGS)
+#asynC/util
+async_byte_buffer.o: asynC/util/async_byte_buffer.c asynC/util/async_byte_buffer.h
+	gcc -c asynC/util/async_byte_buffer.c -o obj/async_byte_buffer.o $(CFLAGS)
 
 async_event_emitter.o: asynC/async_lib/event_emitter_module/async_event_emitter.c asynC/async_lib/event_emitter_module/async_event_emitter.h
 	gcc -c asynC/async_lib/event_emitter_module/async_event_emitter.c -o obj/async_event_emitter.o $(CFLAGS)
 
-linked_list.o: asynC/containers/linked_list.c asynC/containers/linked_list.h
-	gcc -c asynC/containers/linked_list.c -o obj/linked_list.o $(CFLAGS)
+linked_list.o: asynC/util/linked_list.c asynC/util/linked_list.h
+	gcc -c asynC/util/linked_list.c -o obj/linked_list.o $(CFLAGS)
 
-async_container_linked_list.o: asynC/containers/async_container_linked_list.c asynC/containers/async_container_linked_list.h
-	gcc -c asynC/containers/async_container_linked_list.c -o obj/async_container_linked_list.o $(CFLAGS)
+async_util_linked_list.o: asynC/util/async_util_linked_list.c asynC/util/async_util_linked_list.h
+	gcc -c asynC/util/async_util_linked_list.c -o obj/async_util_linked_list.o $(CFLAGS)
 
-hash_table.o: asynC/containers/hash_table.c asynC/containers/hash_table.h
-	gcc -c asynC/containers/hash_table.c -o obj/hash_table.o $(CFLAGS)
 
-async_container_vector.o: asynC/containers/async_container_vector.c asynC/containers/async_container_vector.h
-	gcc -c asynC/containers/async_container_vector.c -o obj/async_container_vector.o $(CFLAGS)
+async_util_hash_map.o: asynC/util/async_util_hash_map.c asynC/util/async_util_hash_map.h
+	gcc -c asynC/util/async_util_hash_map.c -o obj/async_util_hash_map.o $(CFLAGS)
+
+async_util_vector.o: asynC/util/async_util_vector.c asynC/util/async_util_vector.h
+	gcc -c asynC/util/async_util_vector.c -o obj/async_util_vector.o $(CFLAGS)
 
 thread_pool.o: asynC/async_runtime/thread_pool.c asynC/async_runtime/thread_pool.h
 	gcc -c asynC/async_runtime/thread_pool.c -o obj/thread_pool.o $(CFLAGS)
@@ -175,6 +176,9 @@ async_http_request.o: asynC/async_lib/async_networking/async_http_module/async_h
 
 async_http_message_template.o: asynC/async_lib/async_networking/async_http_module/async_http_message_template.c asynC/async_lib/async_networking/async_http_module/async_http_message_template.h
 	gcc -c asynC/async_lib/async_networking/async_http_module/async_http_message_template.c -o obj/async_http_message_template.o $(CFLAGS)
+
+#async_http_header_info.o: asynC/async_lib/async_networking/async_http_module/async_http_header_info.c asynC/async_lib/async_networking/async_http_module/async_http_header_info.h
+#	gcc -c asynC/async_lib/async_networking/async_http_module/async_http_header_info.c -o obj/async_http_header_info.o $(CFLAGS)
 
 async_http_incoming_message.o: asynC/async_lib/async_networking/async_http_module/async_http_incoming_message.c asynC/async_lib/async_networking/async_http_module/async_http_incoming_message.h
 	gcc -c asynC/async_lib/async_networking/async_http_module/async_http_incoming_message.c -o obj/async_http_incoming_message.o $(CFLAGS)

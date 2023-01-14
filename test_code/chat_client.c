@@ -20,7 +20,7 @@ void listen_callback(){
     printf("listening on port %d\n", port);
 }
 
-void data_handler(async_socket* socket, buffer* read_buffer, void* arg){
+void data_handler(async_socket* socket, async_byte_buffer* read_buffer, void* arg){
     //printf("buffer is %ld bytes long\n", get_buffer_capacity(read_buffer));
     void* char_buff = get_internal_buffer(read_buffer);
 
@@ -30,7 +30,7 @@ void data_handler(async_socket* socket, buffer* read_buffer, void* arg){
     destroy_buffer(read_buffer);
 }
 
-buffer* file_copied_buffer;
+async_byte_buffer* file_copied_buffer;
 
 /*
 void connection_handler(async_socket* new_socket){
@@ -39,7 +39,7 @@ void connection_handler(async_socket* new_socket){
     char hello_str[] = "hi there";
     int hello_str_len = sizeof(hello_str);
 
-    buffer* new_buffer = create_buffer(hello_str_len, sizeof(char));
+    async_byte_buffer* new_buffer = create_buffer(hello_str_len, sizeof(char));
     char* char_buffer = (char*)get_internal_buffer(new_buffer);
     memcpy(char_buffer, hello_str, hello_str_len);
 
@@ -63,7 +63,7 @@ void connection_done_handler(async_socket* socket, void* arg){
         printf("connection done\n");
         char item[] = "mary had a little lamb as white as snow\n";
         int item_size = sizeof(item);
-        buffer* new_buffer = create_buffer(item_size, sizeof(char));
+        async_byte_buffer* new_buffer = create_buffer(item_size, sizeof(char));
         char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
         memcpy(str_internal_buffer, item, item_size);
         async_socket_on_data(socket, data_handler, NULL, 0, 0);
@@ -79,7 +79,7 @@ void write_callback(int num){
 
 /*
 void send_cb(async_socket* socket_ptr, void* cb_arg){
-    buffer* send_buffer = read_and_make_buffer();
+    async_byte_buffer* send_buffer = read_and_make_buffer();
 
     async_socket_write(
         socket_ptr, 
@@ -94,7 +94,7 @@ void send_cb(async_socket* socket_ptr, void* cb_arg){
 
 /*
 void read_chat_input(async_socket* socket_ptr){
-    //buffer* send_buffer = read_and_make_buffer();
+    //async_byte_buffer* send_buffer = read_and_make_buffer();
 
     async_socket_write(
         socket_ptr, 
@@ -107,7 +107,7 @@ void read_chat_input(async_socket* socket_ptr){
 }
 */
 
-void chat_data_handler(async_socket* data_socket, buffer* chat_buffer, void* arg){
+void chat_data_handler(async_socket* data_socket, async_byte_buffer* chat_buffer, void* arg){
     write(
         STDOUT_FILENO,
         get_internal_buffer(chat_buffer),
@@ -123,7 +123,7 @@ void chat_connection_handler(async_socket* socket, void* arg){
     async_socket_on_data(socket, chat_data_handler, NULL, 0, 0);
 
     //char mary[] = "mary had a little lamb as white as snow\n";
-    //buffer* mary_buffer = buffer_from_array(mary, sizeof(mary));
+    //async_byte_buffer* mary_buffer = buffer_from_array(mary, sizeof(mary));
     //async_socket_write(socket, mary_buffer, get_buffer_capacity(mary_buffer), NULL);
     //async_socket_end(socket);
     //async_socket_destroy(socket);
@@ -132,12 +132,12 @@ void chat_connection_handler(async_socket* socket, void* arg){
     //async_socket* new_socket = async_tcp_connect("127.0.0.1", 3000, chat_connection_handler, NULL);
 }
 
-buffer* read_and_make_buffer(){
+async_byte_buffer* read_and_make_buffer(){
     int max_num_bytes = 1000;
     char stdin_buffer[max_num_bytes];
     int num_bytes_read = read(STDIN_FILENO, stdin_buffer, max_num_bytes);
 
-    buffer* send_buffer = create_buffer(num_bytes_read);
+    async_byte_buffer* send_buffer = create_buffer(num_bytes_read);
     char* internal_dest_buffer = (char*)get_internal_buffer(send_buffer);
     memcpy(internal_dest_buffer, stdin_buffer, num_bytes_read);
 
@@ -169,7 +169,7 @@ void* chat_input(void* arg){
             break;
         }
 
-        buffer* send_buffer = buffer_from_array(stdin_buffer, num_bytes_read);
+        async_byte_buffer* send_buffer = buffer_from_array(stdin_buffer, num_bytes_read);
 
         async_socket_write(
             new_socket, 
@@ -212,7 +212,7 @@ int main(int argc, char* argv[]){
     /* from send_cb
     char end_str[] = "z\n";
     int end_str_size = sizeof(end_str);
-    buffer* end_buffer = create_buffer(end_str_size, sizeof(char));
+    async_byte_buffer* end_buffer = create_buffer(end_str_size, sizeof(char));
     char* end_str_buff = (char*)get_internal_buffer(end_buffer);
     memcpy(end_str_buff, end_str, end_str_size);
 
@@ -249,7 +249,7 @@ int main(int argc, char* argv[]){
     /*
     char item[] = "mary had a little lamb as white as snow\n";
     int item_size = sizeof(item);
-    buffer* new_buffer = create_buffer(item_size, sizeof(char));
+    async_byte_buffer* new_buffer = create_buffer(item_size, sizeof(char));
     char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
     memcpy(str_internal_buffer, item, item_size);
 

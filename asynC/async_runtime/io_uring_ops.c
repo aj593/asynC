@@ -183,15 +183,16 @@ void async_io_uring_create_task(
     io_uring_arg_ptr->is_done = 0;
 
     //TODO: make idle event soon?
-    async_event_loop_create_new_polling_event(
-        io_uring_arg_ptr,
-        sizeof(async_io_uring_task_args),
-        is_uring_done,
-        io_uring_arg_ptr->after_io_uring_event_handler
-    );
+    event_node* io_uring_event_node =
+        async_event_loop_create_new_polling_event(
+            io_uring_arg_ptr,
+            sizeof(async_io_uring_task_args),
+            is_uring_done,
+            io_uring_arg_ptr->after_io_uring_event_handler
+        );
 
     //TODO: make separate queue for io_uring future tasks
-    future_task_queue_enqueue(async_io_uring_sqe_and_prep_attempt, io_uring_arg_ptr);
+    future_task_queue_enqueue(async_io_uring_sqe_and_prep_attempt, io_uring_event_node->data_ptr);
 }
 
 int async_io_uring_sqe_and_prep_attempt(void* async_io_uring_args_ptr){

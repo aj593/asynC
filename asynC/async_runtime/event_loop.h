@@ -1,10 +1,10 @@
 #ifndef EVENT_LOOP
 #define EVENT_LOOP
 
-#include "../containers/linked_list.h"
+#include "../util/linked_list.h"
 #include <stddef.h>
-//#include "containers/hash_table.h"
-//#include "containers/async_types.h"
+//#include "util/hash_table.h"
+//#include "util/async_types.h"
 
 //typedef struct async_event_queue async_event_queue;
 typedef struct event_node event_node;

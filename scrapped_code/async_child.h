@@ -18,7 +18,7 @@ typedef struct child_data {
     pid_t child_pid;                    //process ID of child process
     int child_index;                    //index number corresponding to the type of asynchronous child process call made
     int status;                         //status of child process
-    buffer* child_stdout;               //buffer obtained for child's stdout stream (TODO: need this?)
+    async_byte_buffer* child_stdout;               //buffer obtained for child's stdout stream (TODO: need this?)
     grouped_child_cbs curr_callback;    //union type for callback executed after child process is done running
     void* callback_arg;         //callback argument provided for callback
 } async_child;

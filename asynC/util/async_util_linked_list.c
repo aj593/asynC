@@ -1,9 +1,9 @@
-#include "async_container_linked_list.h"
+#include "async_util_linked_list.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-void async_container_linked_list_init(async_container_linked_list* new_linked_list, unsigned int entry_size){
+void async_util_linked_list_init(async_util_linked_list* new_linked_list, unsigned int entry_size){
     new_linked_list->head.next = &new_linked_list->tail;
     new_linked_list->tail.prev = &new_linked_list->head;
 
@@ -18,20 +18,20 @@ void async_container_linked_list_init(async_container_linked_list* new_linked_li
     new_linked_list->size_per_entry = entry_size;
 }
 
-void async_container_linked_list_destroy(async_container_linked_list* destroyed_list){
+void async_util_linked_list_destroy(async_util_linked_list* destroyed_list){
     while(destroyed_list->size > 0){
-        async_container_linked_list_remove_first(destroyed_list, NULL);
+        async_util_linked_list_remove_first(destroyed_list, NULL);
     }
 }
 
 //TODO: make linked list destroy method
 
-unsigned int async_container_linked_list_size(async_container_linked_list* list_ptr){
+unsigned int async_util_linked_list_size(async_util_linked_list* list_ptr){
     return list_ptr->size;
 }
 
-async_container_linked_list_iterator async_container_linked_list_start_iterator(async_container_linked_list* list_ptr){
-    async_container_linked_list_iterator new_iterator = {
+async_util_linked_list_iterator async_util_linked_list_start_iterator(async_util_linked_list* list_ptr){
+    async_util_linked_list_iterator new_iterator = {
         .list_ptr = list_ptr,
         .node_ptr = &list_ptr->head
     };
@@ -39,8 +39,8 @@ async_container_linked_list_iterator async_container_linked_list_start_iterator(
     return new_iterator;
 }
 
-async_container_linked_list_iterator async_container_linked_list_end_iterator(async_container_linked_list* list_ptr){
-    async_container_linked_list_iterator new_iterator = {
+async_util_linked_list_iterator async_util_linked_list_end_iterator(async_util_linked_list* list_ptr){
+    async_util_linked_list_iterator new_iterator = {
         .list_ptr = list_ptr,
         .node_ptr = &list_ptr->tail
     };
@@ -48,14 +48,14 @@ async_container_linked_list_iterator async_container_linked_list_end_iterator(as
     return new_iterator;
 }
 
-int async_container_linked_list_iterator_has_next(async_container_linked_list_iterator* iterator){
+int async_util_linked_list_iterator_has_next(async_util_linked_list_iterator* iterator){
     //TODO: make condition based on current or next node being tail?
     return 
         iterator->node_ptr->next != &iterator->list_ptr->tail &&
         iterator->node_ptr->next != NULL;
 }
 
-void async_container_linked_list_iterator_next(async_container_linked_list_iterator* iterator, void* data){
+void async_util_linked_list_iterator_next(async_util_linked_list_iterator* iterator, void* data){
     if(
         iterator->node_ptr->next != &iterator->list_ptr->tail &&
         iterator->node_ptr->next != NULL
@@ -72,13 +72,13 @@ void async_container_linked_list_iterator_next(async_container_linked_list_itera
     }
 }
 
-int async_container_linked_list_iterator_has_prev(async_container_linked_list_iterator* iterator){
+int async_util_linked_list_iterator_has_prev(async_util_linked_list_iterator* iterator){
     return 
         iterator->node_ptr->prev != &iterator->list_ptr->head &&
         iterator->node_ptr->prev != NULL;
 }
 
-void async_container_linked_list_iterator_prev(async_container_linked_list_iterator* iterator, void* data){
+void async_util_linked_list_iterator_prev(async_util_linked_list_iterator* iterator, void* data){
     if(
         iterator->node_ptr->prev != &iterator->list_ptr->head &&
         iterator->node_ptr->prev != NULL
@@ -95,7 +95,7 @@ void async_container_linked_list_iterator_prev(async_container_linked_list_itera
     }
 }
 
-void async_container_linked_list_iterator_get_copy(async_container_linked_list_iterator* iterator, void* data){
+void async_util_linked_list_iterator_get_copy(async_util_linked_list_iterator* iterator, void* data){
     if(
         data != NULL &&
         iterator->node_ptr != &iterator->list_ptr->tail &&
@@ -105,7 +105,7 @@ void async_container_linked_list_iterator_get_copy(async_container_linked_list_i
     }
 }
 
-void* async_container_linked_list_iterator_get(async_container_linked_list_iterator* iterator){
+void* async_util_linked_list_iterator_get(async_util_linked_list_iterator* iterator){
     if(
         iterator->node_ptr != &iterator->list_ptr->tail &&
         iterator->node_ptr != &iterator->list_ptr->head
@@ -116,7 +116,7 @@ void* async_container_linked_list_iterator_get(async_container_linked_list_itera
     return NULL;
 }
 
-void async_container_linked_list_iterator_set(async_container_linked_list_iterator* iterator, void* new_data){
+void async_util_linked_list_iterator_set(async_util_linked_list_iterator* iterator, void* new_data){
     if(new_data != NULL){
         memcpy(iterator->node_ptr->data, new_data, iterator->list_ptr->size_per_entry);
     }
@@ -136,7 +136,7 @@ async_container_list_node* async_container_list_node_create(async_container_list
 */
 
 /*
-void async_container_linked_list_connect_nodes(async_container_list_node* before_node, async_container_list_node* middle_node, async_container_list_node* after_node){
+void async_util_linked_list_connect_nodes(async_container_list_node* before_node, async_container_list_node* middle_node, async_container_list_node* after_node){
     before_node->next = middle_node;
     middle_node->next = after_node;
 
@@ -145,7 +145,7 @@ void async_container_linked_list_connect_nodes(async_container_list_node* before
 }
 */
 
-void async_container_linked_list_add(async_container_linked_list* list_ptr, async_container_list_node* before_node, async_container_list_node* after_node, void* new_data){
+void async_util_linked_list_add(async_util_linked_list* list_ptr, async_container_list_node* before_node, async_container_list_node* after_node, void* new_data){
     async_container_list_node* new_node = (async_container_list_node*)malloc(sizeof(async_container_list_node) + list_ptr->size_per_entry);
     if(new_node == NULL){
         return; //TODO: make actual return value for error checking?
@@ -166,32 +166,32 @@ void async_container_linked_list_add(async_container_linked_list* list_ptr, asyn
     list_ptr->size++;
 }
 
-void async_container_linked_list_add_next(async_container_linked_list* list_ptr, async_container_list_node* curr_node, void* new_data){
-    async_container_linked_list_add(list_ptr, curr_node, curr_node->next, new_data);
+void async_util_linked_list_add_next(async_util_linked_list* list_ptr, async_container_list_node* curr_node, void* new_data){
+    async_util_linked_list_add(list_ptr, curr_node, curr_node->next, new_data);
 }
 
-void async_container_linked_list_add_prev(async_container_linked_list* list_ptr, async_container_list_node* curr_node, void* new_data){
-    async_container_linked_list_add(list_ptr, curr_node->prev, curr_node, new_data);
+void async_util_linked_list_add_prev(async_util_linked_list* list_ptr, async_container_list_node* curr_node, void* new_data){
+    async_util_linked_list_add(list_ptr, curr_node->prev, curr_node, new_data);
 }
 
-void async_container_linked_list_iterator_add_next(async_container_linked_list_iterator* iterator, void* data){
-    async_container_linked_list_add_next(iterator->list_ptr, iterator->node_ptr, data);
+void async_util_linked_list_iterator_add_next(async_util_linked_list_iterator* iterator, void* data){
+    async_util_linked_list_add_next(iterator->list_ptr, iterator->node_ptr, data);
 }
 
-void async_container_linked_list_iterator_add_prev(async_container_linked_list_iterator* iterator, void* data){
-    async_container_linked_list_add_prev(iterator->list_ptr, iterator->node_ptr, data);
+void async_util_linked_list_iterator_add_prev(async_util_linked_list_iterator* iterator, void* data){
+    async_util_linked_list_add_prev(iterator->list_ptr, iterator->node_ptr, data);
 }
 
-void async_container_linked_list_prepend(async_container_linked_list* list_ptr, void* new_data){
-    async_container_linked_list_add_next(list_ptr, &list_ptr->head, new_data);
+void async_util_linked_list_prepend(async_util_linked_list* list_ptr, void* new_data){
+    async_util_linked_list_add_next(list_ptr, &list_ptr->head, new_data);
 }
 
-void async_container_linked_list_append(async_container_linked_list* list_ptr, void* new_data){
-    async_container_linked_list_add_prev(list_ptr, &list_ptr->tail, new_data);
+void async_util_linked_list_append(async_util_linked_list* list_ptr, void* new_data){
+    async_util_linked_list_add_prev(list_ptr, &list_ptr->tail, new_data);
 }
 
 //TODO: have return value based on success?
-int async_container_linked_list_remove_curr(async_container_linked_list* list_ptr, async_container_list_node* curr_node, void* data){
+int async_util_linked_list_remove_curr(async_util_linked_list* list_ptr, async_container_list_node* curr_node, void* data){
     //TODO: checking if about to remove head, tail node, or if list size is 0?
     if(list_ptr->size == 0 || curr_node == &list_ptr->head || curr_node == &list_ptr->tail){
         return -1;
@@ -217,10 +217,10 @@ int async_container_linked_list_remove_curr(async_container_linked_list* list_pt
     return 0;
 }
 
-void async_container_linked_list_iterator_remove(async_container_linked_list_iterator* iterator, void* data){
+void async_util_linked_list_iterator_remove(async_util_linked_list_iterator* iterator, void* data){
     async_container_list_node* prev_node = iterator->node_ptr->prev;
     //TODO: use return value of function to decide if function progresses?
-    int remove_ret_val = async_container_linked_list_remove_curr(iterator->list_ptr, iterator->node_ptr, data);
+    int remove_ret_val = async_util_linked_list_remove_curr(iterator->list_ptr, iterator->node_ptr, data);
     if(remove_ret_val == -1){
         return;
     }
@@ -228,12 +228,12 @@ void async_container_linked_list_iterator_remove(async_container_linked_list_ite
     iterator->node_ptr = prev_node;
 }
 
-void async_container_linked_list_remove_first(async_container_linked_list* list_ptr, void* data){
+void async_util_linked_list_remove_first(async_util_linked_list* list_ptr, void* data){
     async_container_list_node* first_node = list_ptr->head.next;
-    async_container_linked_list_remove_curr(list_ptr, first_node, data);
+    async_util_linked_list_remove_curr(list_ptr, first_node, data);
 }
 
-void async_container_linked_list_remove_last(async_container_linked_list* list_ptr, void* data){
+void async_util_linked_list_remove_last(async_util_linked_list* list_ptr, void* data){
     async_container_list_node* last_node = list_ptr->tail.prev;
-    async_container_linked_list_remove_curr(list_ptr, last_node, data);
+    async_util_linked_list_remove_curr(list_ptr, last_node, data);
 }

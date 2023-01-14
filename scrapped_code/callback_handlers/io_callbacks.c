@@ -17,7 +17,7 @@
     read_callback read_cb = io_data->io_callback.read_cb;
 
     int read_fd = io_data->aio_block.aio_fildes;
-    buffer* read_buff = io_data->buff_ptr;
+    async_byte_buffer* read_buff = io_data->buff_ptr;
     ssize_t num_bytes_read = aio_return(&io_data->aio_block);
     callback_arg* cb_arg = io_data->callback_arg;
 
@@ -30,7 +30,7 @@
     write_callback write_cb = io_data->io_callback.write_cb;
 
     int write_fd = io_data->aio_block.aio_fildes;
-    buffer* write_buff = io_data->buff_ptr;
+    async_byte_buffer* write_buff = io_data->buff_ptr;
     ssize_t num_bytes_written = aio_return(&io_data->aio_block);
     callback_arg* cb_arg = io_data->callback_arg;
 
@@ -43,7 +43,7 @@ void read_file_cb_interm(event_node* exec_node){
     
     readfile_callback rf_callback = io_data->io_callback.rf_cb;
               
-    buffer* read_file_buffer = io_data->buff_ptr;
+    async_byte_buffer* read_file_buffer = io_data->buff_ptr;
     ssize_t num_bytes_read = aio_return(&io_data->aio_block);
     callback_arg* cb_arg = io_data->callback_arg;
 
@@ -56,7 +56,7 @@ void write_file_cb_interm(event_node* exec_node){
 
     writefile_callback wf_callback = io_data->io_callback.wf_cb;
 
-    buffer* write_file_buffer = io_data->buff_ptr;
+    async_byte_buffer* write_file_buffer = io_data->buff_ptr;
     ssize_t num_bytes_written = aio_return(&io_data->aio_block); //TODO: need this param in writefile callback?
     callback_arg* cb_arg = io_data->callback_arg;
 

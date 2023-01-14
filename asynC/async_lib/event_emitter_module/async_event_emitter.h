@@ -1,10 +1,10 @@
 #ifndef ASYNC_EVENT_EMITTER_TYPE_H
 #define ASYNC_EVENT_EMITTER_TYPE_H
 
-#include "../../containers/async_container_vector.h"
+#include "../../util/async_util_vector.h"
 
 typedef struct async_event_emitter {
-    async_container_vector* event_handler_vector;
+    async_util_vector* event_handler_vector;
 } async_event_emitter;
 
 enum emitter_events {
@@ -30,6 +30,7 @@ enum emitter_events {
     //async_http_incoming_message events
     async_http_incoming_message_data_event,
     async_http_incoming_message_end_event,
+    async_http_incoming_message_trailers_event,
 
     //async_http_outgoing_request events
     //async_http_incoming_response_data_event
@@ -41,7 +42,7 @@ union event_emitter_callbacks {
     void(*generic_callback)(void);
 
     //async_fs_readstream event handlers
-    void(*readstream_data_handler)(async_fs_readstream*, buffer*, void*);
+    void(*readstream_data_handler)(async_fs_readstream*, async_byte_buffer*yte_buffer*, void*);
     void(*readstream_end_handler)(async_fs_readstream*, void*);
 
     //async_server event handlers
@@ -50,7 +51,7 @@ union event_emitter_callbacks {
 
     //async_socket event handlers
     void(*async_socket_connection_handler)(async_socket*, void*);
-    void(*async_socket_data_handler)(async_socket*, buffer*, void*);
+    void(*async_socket_data_handler)(async_socket*, async_byte_buffer*yte_buffer*, void*);
     void(*async_socket_end_handler)(async_socket*, int, void*);
     void(*async_socket_close_handler)(async_socket*, int, void*);
 
@@ -59,11 +60,11 @@ union event_emitter_callbacks {
     void(*request_handler)(async_http_server*, async_http_server_request*, async_http_server_response*, void*);
 
     //async_http_incoming_message event handlers
-    void(*incoming_msg_data_handler)(buffer*, void*);
+    void(*incoming_msg_data_handler)(async_byte_buffer*yte_buffer*, void*);
     void(*incoming_msg_end_handler)(void*);
 
     //async_http_request event handlers
-    void(*http_request_data_callback)(async_http_incoming_response*, buffer*, void*);
+    void(*http_request_data_callback)(async_http_incoming_response*, async_byte_buffer*yte_buffer*, void*);
 };
 */
 

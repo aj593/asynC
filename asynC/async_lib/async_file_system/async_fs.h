@@ -5,11 +5,10 @@
 #include <liburing.h>
 
 //#include "../async_types/callback_arg.h"
-#include "../../containers/buffer.h"
+#include "../../util/async_byte_buffer.h"
 //#include "async_tcp_server.h"
 #include "../../async_lib/async_networking/async_network_template/async_socket.h"
-#include "../../containers/linked_list.h"
-#include "../../containers/async_container_vector.h"
+#include "../../util/async_util_vector.h"
 
 void async_fs_open(char* filename, int flags, int mode, void(*open_callback)(int, void*), void* cb_arg);
 void async_fs_close(int close_fd, void(*close_callback)(int, void*), void* cb_arg);
@@ -24,18 +23,18 @@ void async_fs_read(
 
 void async_fs_buffer_read(
     int read_fd, 
-    buffer* buff_ptr, 
+    async_byte_buffer* buff_ptr, 
     size_t num_bytes_to_read, 
-    void(*read_callback)(int, buffer*, size_t, void*), 
+    void(*read_callback)(int, async_byte_buffer*, size_t, void*), 
     void* cb_arg
 );
 
 void async_fs_buffer_pread(
     int pread_fd, 
-    buffer* pread_buffer_ptr, 
+    async_byte_buffer* pread_buffer_ptr, 
     size_t num_bytes_to_read, 
     int offset, 
-    void(*read_callback)(int, buffer*, size_t, void*), 
+    void(*read_callback)(int, async_byte_buffer*, size_t, void*), 
     void* cb_arg
 );
 
@@ -49,9 +48,9 @@ void async_fs_write(
 
 void async_fs_buffer_write(
     int write_fd, 
-    buffer* buff_ptr, 
+    async_byte_buffer* buff_ptr, 
     size_t num_bytes_to_write, 
-    void(*write_callback)(int, buffer*, size_t, void*), 
+    void(*write_callback)(int, async_byte_buffer*, size_t, void*), 
     void* cb_arg
 );
 

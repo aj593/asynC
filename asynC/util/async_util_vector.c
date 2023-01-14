@@ -1,28 +1,19 @@
-#include "async_container_vector.h"
+#include "async_util_vector.h"
 
 #include <string.h>
 
-/*
-void vector_init(vector* my_vector, size_t capacity, int resize_factor){
-    my_vector->array = (void**)malloc(capacity * sizeof(void*));
-    my_vector->size = 0;
-    my_vector->capacity = capacity;
-    my_vector->resize_factor = resize_factor;
-}
-*/
-
-typedef struct async_container_vector {
+typedef struct async_util_vector {
     void* array;
     size_t size;
     size_t capacity;
     int resize_factor;
     size_t element_size;
-} async_container_vector;
+} async_util_vector;
 
-async_container_vector* async_container_vector_create(size_t capacity, int resize_factor, size_t size_of_each_element){
-    size_t initial_vector_size = sizeof(async_container_vector) + (capacity * size_of_each_element);
+async_util_vector* async_util_vector_create(size_t capacity, int resize_factor, size_t size_of_each_element){
+    size_t initial_vector_size = sizeof(async_util_vector) + (capacity * size_of_each_element);
     void* whole_vector_block = calloc(1, initial_vector_size);
-    async_container_vector* new_vector = (async_container_vector*)whole_vector_block;
+    async_util_vector* new_vector = (async_util_vector*)whole_vector_block;
     new_vector->capacity = capacity;
     new_vector->resize_factor = resize_factor;
     new_vector->element_size = size_of_each_element;
@@ -31,12 +22,12 @@ async_container_vector* async_container_vector_create(size_t capacity, int resiz
     return new_vector;
 }
 
-void async_container_vector_destroy(async_container_vector* vector){
+void async_util_vector_destroy(async_util_vector* vector){
     free(vector);
 }
 
 //TODO: realloc() array if size is too small compared to capacity, based on resize factor?
-int async_container_vector_remove(async_container_vector* vector, size_t index, void* item_buffer){
+int async_util_vector_remove(async_util_vector* vector, size_t index, void* item_buffer){
     if(index < 0 || index >= vector->size){
         return -1;
     }
@@ -59,22 +50,22 @@ int async_container_vector_remove(async_container_vector* vector, size_t index, 
     return 0;
 }
 
-int async_container_vector_remove_first(async_container_vector* vector, void* item_buffer){
-    return async_container_vector_remove(vector, 0, item_buffer);
+int async_util_vector_remove_first(async_util_vector* vector, void* item_buffer){
+    return async_util_vector_remove(vector, 0, item_buffer);
 }
 
-int async_container_vector_remove_last(async_container_vector* vector, void* item_buffer){
-    return async_container_vector_remove(vector, vector->size - 1, item_buffer);
+int async_util_vector_remove_last(async_util_vector* vector, void* item_buffer){
+    return async_util_vector_remove(vector, vector->size - 1, item_buffer);
 }
 
 //TODO: finish implementing this
-int async_container_vector_add(async_container_vector** vector, void* new_item, size_t index){
-    async_container_vector* original_vector = *vector;
+int async_util_vector_add(async_util_vector** vector, void* new_item, size_t index){
+    async_util_vector* original_vector = *vector;
     size_t size_per_element = original_vector->element_size;
     if(original_vector->size == original_vector->capacity){
         //TODO: check if this returns NULL? shouldn't assign vector->array based on realloc() value if it has a possibility of being NULL
-        size_t new_vector_size = sizeof(async_container_vector) + (original_vector->size * original_vector->resize_factor * size_per_element);
-        async_container_vector* new_array_ptr = (async_container_vector*)realloc(*vector, new_vector_size);
+        size_t new_vector_size = sizeof(async_util_vector) + (original_vector->size * original_vector->resize_factor * size_per_element);
+        async_util_vector* new_array_ptr = (async_util_vector*)realloc(*vector, new_vector_size);
         if(new_array_ptr == NULL){
             return 0;
         }
@@ -84,7 +75,7 @@ int async_container_vector_add(async_container_vector** vector, void* new_item, 
         (*vector)->capacity = (*vector)->capacity * (*vector)->resize_factor;
     }
 
-    async_container_vector* vector_ptr = *vector;
+    async_util_vector* vector_ptr = *vector;
     char* vector_array_base_ptr = (char*)vector_ptr->array;
     //TODO: is this for-loop's start and end conditions correct?
     for(int i = vector_ptr->size; i > index; i--){
@@ -101,19 +92,19 @@ int async_container_vector_add(async_container_vector** vector, void* new_item, 
     return 1;
 }
 
-int async_container_vector_add_first(async_container_vector** vector, void* new_item){
-    return async_container_vector_add(vector, new_item, 0);
+int async_util_vector_add_first(async_util_vector** vector, void* new_item){
+    return async_util_vector_add(vector, new_item, 0);
 }
 
-int async_container_vector_add_last(async_container_vector** vector, void* new_item){
-    return async_container_vector_add(vector, new_item, (*vector)->size);
+int async_util_vector_add_last(async_util_vector** vector, void* new_item){
+    return async_util_vector_add(vector, new_item, (*vector)->size);
 }
 
-size_t async_container_vector_size(async_container_vector* vector){
+size_t async_util_vector_size(async_util_vector* vector){
     return vector->size;
 }
 
-void async_container_vector_set(async_container_vector* vector, size_t index, void* item_to_set){
+void async_util_vector_set(async_util_vector* vector, size_t index, void* item_to_set){
     if(item_to_set == NULL){
         return;
     }
@@ -122,7 +113,7 @@ void async_container_vector_set(async_container_vector* vector, size_t index, vo
     memcpy(destination_mem_ptr, item_to_set, vector->element_size);
 }
 
-void async_container_vector_get(async_container_vector* vector, size_t index, void* obtained_item){
+void async_util_vector_get(async_util_vector* vector, size_t index, void* obtained_item){
     if(obtained_item == NULL){
         return;
     }
@@ -131,6 +122,6 @@ void async_container_vector_get(async_container_vector* vector, size_t index, vo
     memcpy(obtained_item, source_mem_ptr, vector->element_size);
 }
 
-void* async_container_vector_internal_array(async_container_vector* vector){
+void* async_util_vector_internal_array(async_util_vector* vector){
     return vector->array;
 }

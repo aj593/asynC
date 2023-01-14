@@ -15,9 +15,9 @@
 
 typedef union async_fs_callbacks {
     void(*open_callback)(int, void*);
-    void(*buffer_read_callback)(int, buffer*, size_t, void*);
+    void(*buffer_read_callback)(int, async_byte_buffer*, size_t, void*);
     void(*read_callback)(int, void*, size_t, void*);
-    void(*buffer_write_callback)(int, buffer*, size_t, void*);
+    void(*buffer_write_callback)(int, async_byte_buffer*, size_t, void*);
     void(*write_callback)(int, void*, size_t, void*);
     void(*chmod_callback)(int, void*);
     void(*chown_callback)(int, void*);
@@ -36,7 +36,7 @@ typedef struct async_fs_task_info {
     mode_t mode;
 
     void* array;
-    buffer* buffer; //use void* instead?
+    async_byte_buffer* buffer; //use void* instead?
     unsigned long max_num_bytes;
     int offset;
 
@@ -60,19 +60,19 @@ void async_fs_read(int read_fd, void* read_array, size_t num_bytes_to_read, void
 void async_fs_read_thread_task(void* read_task);
 void async_fs_after_thread_read(void* read_info, void* arg);
 
-void async_fs_buffer_read(int read_fd, buffer* read_buff_ptr, size_t num_bytes_to_read, void(*read_callback)(int, buffer*, size_t, void*), void* cb_arg);
+void async_fs_buffer_read(int read_fd, async_byte_buffer* read_buff_ptr, size_t num_bytes_to_read, void(*read_callback)(int, async_byte_buffer*, size_t, void*), void* cb_arg);
 void async_fs_buffer_read_thread_task(void* read_task);
 void async_fs_after_thread_buffer_read(void* buffer_read_info, void* arg);
 
 //TODO: find way to condense code for pread() with regular read()?
-void async_fs_buffer_pread(int pread_fd, buffer* pread_buffer_ptr, size_t num_bytes_to_read, int offset, void(*read_callback)(int, buffer*, size_t, void*), void* cb_arg);
+void async_fs_buffer_pread(int pread_fd, async_byte_buffer* pread_buffer_ptr, size_t num_bytes_to_read, int offset, void(*read_callback)(int, async_byte_buffer*, size_t, void*), void* cb_arg);
 void async_fs_buffer_pread_thread_task(void* async_pread_task_info);
 
 void async_fs_write(int write_fd, void* write_array, size_t num_bytes_to_write, void(*write_callback)(int, void*, size_t, void*), void* arg);
 void async_fs_write_thread_task(void* write_task);
 void async_fs_after_write(void* write_info, void* arg);
 
-void async_fs_buffer_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes_to_write, void(*buffer_write_callback)(int, buffer*, size_t, void*), void* cb_arg);
+void async_fs_buffer_write(int write_fd, async_byte_buffer* write_buff_ptr, size_t num_bytes_to_write, void(*buffer_write_callback)(int, async_byte_buffer*, size_t, void*), void* cb_arg);
 void async_fs_buffer_write_thread_task(void* write_task);
 void async_fs_after_buffer_write(void* buffer_write, void* arg);
 
@@ -183,10 +183,10 @@ void async_fs_after_thread_read(void* read_info, void* arg){
     );
 }
 
-void async_fs_buffer_read(int read_fd, buffer* read_buff_ptr, unsigned long num_bytes_to_read, void(*read_callback)(int, buffer*, size_t, void*), void* cb_arg){
+void async_fs_buffer_read(int read_fd, async_byte_buffer* read_buff_ptr, unsigned long num_bytes_to_read, void(*read_callback)(int, async_byte_buffer*, size_t, void*), void* cb_arg){
     async_fs_task_info read_task_info = {
         .fs_task_fd = read_fd,
-        .buffer  = read_buff_ptr,
+        .buffer = read_buff_ptr,
         .max_num_bytes = num_bytes_to_read,
         .fs_callbacks.buffer_read_callback = read_callback
     };
@@ -225,10 +225,10 @@ void async_fs_after_thread_buffer_read(void* buffer_read_info, void* arg){
     );
 }
 
-void async_fs_buffer_pread(int pread_fd, buffer* pread_buffer_ptr, size_t num_bytes_to_read, int offset, void(*buffer_pread_callback)(int, buffer*, size_t, void*), void* cb_arg){
+void async_fs_buffer_pread(int pread_fd, async_byte_buffer* pread_buffer_ptr, size_t num_bytes_to_read, int offset, void(*buffer_pread_callback)(int, async_byte_buffer*, size_t, void*), void* cb_arg){
     async_fs_task_info new_pread_info = {
         .fs_task_fd = pread_fd,
-        .buffer  = pread_buffer_ptr,
+        .buffer = pread_buffer_ptr,
         .max_num_bytes = num_bytes_to_read,
         .offset = offset,
         .fs_callbacks.buffer_read_callback = buffer_pread_callback,
@@ -295,7 +295,7 @@ void async_fs_after_write(void* write_info, void* arg){
 }
 
 //TODO: finish implementing this
-void async_fs_buffer_write(int write_fd, buffer* write_buff_ptr, size_t num_bytes_to_write, void(*buffer_write_callback)(int, buffer*, size_t, void*), void* cb_arg){
+void async_fs_buffer_write(int write_fd, async_byte_buffer* write_buff_ptr, size_t num_bytes_to_write, void(*buffer_write_callback)(int, async_byte_buffer*, size_t, void*), void* cb_arg){
     async_fs_task_info new_write_task_info = {
         .fs_task_fd = write_fd,
         .buffer = write_buff_ptr,

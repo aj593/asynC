@@ -74,7 +74,7 @@ typedef struct readablestream {
     ssize_t num_bytes_per_read;
     int is_paused;
     event_emitter* emitter_ptr;
-    buffer* read_buffer;
+    async_byte_buffer* read_buffer;
     struct aiocb aio_block;
     callback_arg* cb_arg;
     //void(*readstream_data_interm)(event_node*);

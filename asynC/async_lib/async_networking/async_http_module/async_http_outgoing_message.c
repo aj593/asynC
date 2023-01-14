@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 void async_http_outgoing_message_init(
     async_http_outgoing_message* outgoing_msg,
@@ -14,25 +15,30 @@ void async_http_outgoing_message_init(
 
 void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_msg);
 
-void async_http_outgoing_message_set_header(
-    hash_table* table_ptr,
-    buffer** header_buffer,
-    char* header_key, 
-    char* header_val
-);
-
 void async_http_outgoing_message_write_head(async_http_outgoing_message* outgoing_msg_ptr);
-buffer* async_http_outgoing_message_get_header_buffer(hash_table* header_table_ptr, int* request_header_length);
-void async_http_outgoing_message_write_start_line(async_http_message_template* msg_template);
-void async_http_outgoing_message_write_all_headers(async_http_message_template* msg_template_ptr);
-void async_http_outgoing_message_write_single_header(buffer* destination_buffer, const char* key, char* value);
 
 void async_http_outgoing_message_write(
     async_http_outgoing_message* outgoing_msg_ptr,
     void* response_data, 
     int num_bytes,
     void (*send_callback)(void*),
-    void* arg
+    void* arg,
+    int is_terminating_msg
+);
+
+int async_http_outgoing_message_start_line_length(async_http_outgoing_message* outgoing_msg_ptr);
+int async_http_outgoing_message_headers_length(async_http_outgoing_message* outgoing_msg_ptr);
+
+void async_http_outgoing_message_start_line_copy(
+    async_http_outgoing_message* outgoing_msg_ptr,
+    char header_array_buffer[],
+    int* running_header_length_ptr
+);
+
+void async_http_outgoing_message_headers_copy(
+    async_http_outgoing_message* outgoing_msg_ptr,
+    char header_array_buffer[],
+    int* running_header_length_ptr
 );
 
 void async_http_outgoing_message_init(
@@ -55,66 +61,79 @@ void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_m
     async_http_message_template_destroy(&outgoing_msg->incoming_msg_template_info);
 }
 
-void async_http_outgoing_message_set_header(
-    hash_table* table_ptr,
-    buffer** header_buffer,
-    char* header_key, 
-    char* header_val
-){
-    size_t key_len = strlen(header_key);
-    size_t val_len = strlen(header_val);
-
-    size_t header_buffer_length = key_len + val_len + 2;
-    char whole_header_buffer[header_buffer_length];
-
-    snprintf(
-        whole_header_buffer,
-        header_buffer_length,
-        "%s %s ",
-        header_key,
-        header_val
-    );
-
-    whole_header_buffer[key_len] = '\0';
-    whole_header_buffer[header_buffer_length - 1] = '\0';
-
-    size_t buffer_length_before_key_appended = get_buffer_length(*header_buffer);
-    size_t buffer_length_after_key_appended = buffer_length_before_key_appended + key_len + 1;
-    buffer_append_bytes(header_buffer, whole_header_buffer, header_buffer_length);
-
-    char* buffer_internal_array = (char*)get_internal_buffer(*header_buffer);
-    char* buffer_key_ptr = buffer_internal_array + buffer_length_before_key_appended;
-    char* buffer_val_ptr = buffer_internal_array + buffer_length_after_key_appended;
-
-    ht_set(table_ptr, buffer_key_ptr, buffer_val_ptr);
-}
-
 void async_http_outgoing_message_write_head(async_http_outgoing_message* outgoing_msg_ptr){
     if(outgoing_msg_ptr->was_header_written){
         return;
     }
 
     async_http_message_template* msg_template = &outgoing_msg_ptr->incoming_msg_template_info;
-    int header_length = 
-        strlen(msg_template->start_line_first_token) +
-        strlen(msg_template->start_line_second_token) + 
-        strlen(msg_template->start_line_third_token) + 
-        START_LINE_COLON_SPACES_LEN +
-        (CRLF_LEN * 2);
 
-    msg_template->header_buffer = async_http_outgoing_message_get_header_buffer(msg_template->header_table, &header_length);
-    async_http_outgoing_message_write_start_line(msg_template);
-    async_http_outgoing_message_write_all_headers(msg_template);
+    int header_length = 
+        async_http_outgoing_message_start_line_length(outgoing_msg_ptr) +
+        async_http_outgoing_message_headers_length(outgoing_msg_ptr) +
+        CRLF_LEN;
+
+    char header_array_buffer[header_length];
+    int running_header_length = 0;
+
+    async_http_outgoing_message_start_line_copy(outgoing_msg_ptr, header_array_buffer, &running_header_length);
+    async_http_outgoing_message_headers_copy(outgoing_msg_ptr, header_array_buffer, &running_header_length);
 
     async_socket_write(
         msg_template->wrapped_tcp_socket,
-        get_internal_buffer(msg_template->header_buffer),
-        get_buffer_length(msg_template->header_buffer),
+        header_array_buffer,
+        header_length,
         NULL,
         NULL
     );
 
+    msg_template->is_chunked = is_chunked_checker(msg_template);
+
     outgoing_msg_ptr->was_header_written = 1;
+}
+
+void async_http_outgoing_message_write_trailers(async_http_message_template* msg_template){
+    char** string_array = (char**)async_util_vector_internal_array(msg_template->trailer_vector);
+    for(int i = 0; i < async_util_vector_size(msg_template->trailer_vector); i++){
+        char* key = string_array[i];
+        char* value = async_util_hash_map_get(&msg_template->header_map, key);
+
+        size_t whole_header_len = strlen(key) + HEADER_COLON_SPACE_LEN + strlen(value) + CRLF_LEN;
+        char header_buffer[whole_header_len];
+        snprintf(header_buffer, whole_header_len, "%s: %s%s", key, value, CRLF_STR);
+
+        async_socket_write(
+            msg_template->wrapped_tcp_socket,
+            header_buffer,
+            whole_header_len,
+            NULL,
+            NULL
+        );
+    }
+}
+
+void async_http_outgoing_message_add_trailers(async_http_outgoing_message* outgoing_msg_ptr, ...){
+    va_list trailer_list;
+    va_start(trailer_list, outgoing_msg_ptr);
+
+    async_http_message_template* msg_template = &outgoing_msg_ptr->incoming_msg_template_info;
+
+    while(1){
+        char* key   = va_arg(trailer_list, char*);
+        if(key == NULL){
+            break;
+        }
+
+        char* value = va_arg(trailer_list, char*);
+        if(value == NULL){
+            break;
+        }
+
+        async_util_hash_map_set(&msg_template->header_map, key, value);
+        async_util_vector_add_last(&msg_template->trailer_vector, key);
+    }
+
+    va_end(trailer_list);
 }
 
 void async_http_outgoing_message_write(
@@ -122,7 +141,8 @@ void async_http_outgoing_message_write(
     void* response_data, 
     int num_bytes,
     void (*send_callback)(void*),
-    void* arg
+    void* arg,
+    int is_terminating_msg
 ){
     async_http_outgoing_message_write_head(outgoing_msg_ptr);
 
@@ -156,36 +176,66 @@ void async_http_outgoing_message_write(
     );
 
     if(template_ptr->is_chunked){
-        async_socket_write(template_ptr->wrapped_tcp_socket, CRLF_STR, 2, NULL, NULL);
+        if(num_bytes == 0 && is_terminating_msg){
+            async_http_outgoing_message_write_trailers(template_ptr);
+        }
+
+        async_socket_write(template_ptr->wrapped_tcp_socket, CRLF_STR, CRLF_LEN, NULL, NULL);
     }
 }
 
-buffer* async_http_outgoing_message_get_header_buffer(hash_table* header_table_ptr, int* request_header_length){
-    hti request_header_iterator = ht_iterator(header_table_ptr);
-    while(ht_next(&request_header_iterator)){
-        int key_len = strlen(request_header_iterator.key);
-        int val_len = strlen((char*)request_header_iterator.value);
-        *request_header_length += key_len + val_len + 4;
+//TODO: make it so outgoing message isn't writable anymore?
+void async_http_outgoing_message_end(async_http_outgoing_message* outgoing_msg_ptr){
+    if(!outgoing_msg_ptr->has_ended){
+        async_http_outgoing_message_write(outgoing_msg_ptr, "", 0, NULL, NULL, 1);
+        outgoing_msg_ptr->has_ended = 1;
     }
-
-    buffer* http_request_header_buffer = create_buffer(*request_header_length);
-    return http_request_header_buffer;
 }
 
-void async_http_outgoing_message_write_start_line(async_http_message_template* msg_template){
-    //copy start line into buffer
-    int start_line_len = 
+int async_http_outgoing_message_start_line_length(async_http_outgoing_message* outgoing_msg_ptr){
+    async_http_message_template* msg_template = &outgoing_msg_ptr->incoming_msg_template_info;
+
+    int header_length = 
         strlen(msg_template->start_line_first_token) + 
         strlen(msg_template->start_line_second_token) + 
         strlen(msg_template->start_line_third_token) +
-        START_LINE_COLON_SPACES_LEN +
+        START_LINE_SPACES_LEN +
         CRLF_LEN;
-    
-    buffer* header_buffer = msg_template->header_buffer;
-    char* start_line_buffer = get_internal_buffer(header_buffer);
-    int num_bytes_formatted = snprintf(
-        start_line_buffer, 
-        start_line_len,
+
+    return header_length;
+}
+
+int async_http_outgoing_message_headers_length(async_http_outgoing_message* outgoing_msg_ptr){
+    int header_length = 0;
+
+    async_util_hash_map* hash_map_ptr = &outgoing_msg_ptr->incoming_msg_template_info.header_map;
+    async_util_hash_map_iterator new_iterator = async_util_hash_map_iterator_init(hash_map_ptr);
+    async_util_hash_map_iterator_entry* curr_entry;
+    char* http_trailers_value = async_util_hash_map_get(hash_map_ptr, "Trailer");
+
+    while((curr_entry = async_util_hash_map_iterator_next(&new_iterator)) != NULL){
+        if(http_trailers_value != NULL && strstr(http_trailers_value, curr_entry->key) != NULL){
+            continue;
+        }
+
+        int key_len = strlen(curr_entry->key);
+        int val_len = strlen(curr_entry->value);
+        header_length += key_len + val_len + HEADER_COLON_SPACE_LEN + CRLF_LEN;
+    }
+
+    return header_length;
+}
+
+void async_http_outgoing_message_start_line_copy(
+    async_http_outgoing_message* outgoing_msg_ptr,
+    char header_array_buffer[],
+    int* running_header_length_ptr
+){
+    async_http_message_template* msg_template = &outgoing_msg_ptr->incoming_msg_template_info;
+
+    //copy start line into buffer, should be fine to use sprintf instead of snprintf because buffer is guaranteed to at least be big enough for it
+    int num_bytes_formatted = sprintf(
+        header_array_buffer + *running_header_length_ptr, 
         "%s %s %s%s",
         msg_template->start_line_first_token,
         msg_template->start_line_second_token,
@@ -193,40 +243,47 @@ void async_http_outgoing_message_write_start_line(async_http_message_template* m
         CRLF_STR
     );
 
-    set_buffer_length(header_buffer, num_bytes_formatted);
+    *running_header_length_ptr += num_bytes_formatted;
 }
 
-void async_http_outgoing_message_write_all_headers(async_http_message_template* msg_template_ptr){
-    hti header_writer_iterator = ht_iterator(msg_template_ptr->header_table);
-    while(ht_next(&header_writer_iterator)){
-        async_http_outgoing_message_write_single_header(
-            msg_template_ptr->header_buffer, 
-            header_writer_iterator.key,
-            (char*)header_writer_iterator.value
+void async_http_outgoing_message_headers_copy(
+    async_http_outgoing_message* outgoing_msg_ptr,
+    char header_array_buffer[],
+    int* running_header_length_ptr
+){
+    async_util_hash_map* header_map = &outgoing_msg_ptr->incoming_msg_template_info.header_map;
+
+    async_util_hash_map_iterator header_writer_iterator = 
+        async_util_hash_map_iterator_init(header_map);
+
+    char* http_trailers_value = async_util_hash_map_get(header_map, "Trailer");
+
+    async_util_hash_map_iterator_entry* curr_entry;
+    while((curr_entry = async_util_hash_map_iterator_next(&header_writer_iterator)) != NULL){
+        char* key = curr_entry->key;
+        char* value = curr_entry->value;
+
+        if(http_trailers_value != NULL && strstr(http_trailers_value, curr_entry->key) != NULL){
+            continue;
+        }
+
+        int single_entry_length = 
+            strlen(key) + 
+            strlen(value) + 
+            HEADER_COLON_SPACE_LEN + 
+            CRLF_LEN;
+
+        int num_bytes_formatted = snprintf(
+            header_array_buffer + *running_header_length_ptr, 
+            single_entry_length + 1, 
+            "%s: %s%s",
+            key,
+            value,
+            CRLF_STR
         );
+
+        *running_header_length_ptr += num_bytes_formatted;
     }
 
-    buffer_append_bytes(&msg_template_ptr->header_buffer, CRLF_STR, CRLF_LEN);
-}
-
-void async_http_outgoing_message_write_single_header(buffer* destination_buffer, const char* key, char* value){
-    int single_entry_length = 
-        strlen(key) + 
-        strlen(value) + 
-        START_LINE_COLON_SPACES_LEN + 
-        CRLF_LEN;
-
-    char* buffer_to_format = (char*)get_internal_buffer(destination_buffer) + get_buffer_length(destination_buffer);
-    
-    int num_bytes_formatted = snprintf(
-        buffer_to_format, 
-        single_entry_length, 
-        "%s: %s%s",
-        key,
-        value,
-        CRLF_STR
-    );
-
-    size_t original_buffer_length = get_buffer_length(destination_buffer);
-    set_buffer_length(destination_buffer, original_buffer_length + num_bytes_formatted);
+    memcpy(header_array_buffer + *running_header_length_ptr, CRLF_STR, CRLF_LEN);
 }

@@ -1,9 +1,7 @@
 #ifndef ASYNC_HTTP_SERVER_LIB_H
 #define ASYNC_HTTP_SERVER_LIB_H
 
-#include "../../../containers/buffer.h"
-#include "../../../containers/hash_table.h"
-#include "../../../containers/linked_list.h"
+#include "../../../util/async_byte_buffer.h"
 
 typedef struct async_http_server async_http_server;
 typedef struct async_http_server_request async_http_server_request;
@@ -36,7 +34,7 @@ char* async_http_server_request_http_version(async_http_server_request* http_req
 
 void async_http_server_request_on_data(
     async_http_server_request* incoming_request,
-    void(*request_data_handler)(buffer*, void*),
+    void(*request_data_handler)(async_byte_buffer*, void*),
     void* cb_arg,
     int is_temp,
     int num_times_listen

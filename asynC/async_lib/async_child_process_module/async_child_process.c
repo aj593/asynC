@@ -22,7 +22,7 @@
 typedef struct async_child_process {
     pid_t subprocess_pid;
     async_server* ipc_server;
-    buffer* child_info_buffer;
+    async_byte_buffer* child_info_buffer;
     int curr_max_connections;
 
     //each socket's index in this array corresponds to a file descriptor number or custom socket for ipc 
@@ -111,8 +111,8 @@ int sync_connect_ipc_socket(char* server_name, int duping_fd, pid_t child_pid){
 
 void after_child_process_server_listen(async_server* ipc_server, void* arg);
 void async_ipc_socket_connection_handler(async_socket*, void* arg);
-void async_ipc_socket_data_handler(async_socket* ipc_socket, buffer* data_buffer, void* arg);
-void after_fork_pipe_write(int pipe_fd, buffer* child_info_buffer, size_t num_bytes_written, void* arg);
+void async_ipc_socket_data_handler(async_socket* ipc_socket, async_byte_buffer* data_buffer, void* arg);
+void after_fork_pipe_write(int pipe_fd, async_byte_buffer* child_info_buffer, size_t num_bytes_written, void* arg);
 
 void exec_task(void);
 void fork_task(char* server_name);
@@ -260,24 +260,24 @@ void exec_task(void){
     char* command_name = strtok(NULL, period_delimiter);
     char* command_args = strtok(NULL, period_delimiter); 
 
-    async_container_vector* arg_vector = async_container_vector_create(DEFAULT_NUM_ARGS, 2, sizeof(char*));
+    async_util_vector* arg_vector = async_util_vector_create(DEFAULT_NUM_ARGS, 2, sizeof(char*));
     char* curr_token = strtok(command_args, space_delimiter);
     while(curr_token != NULL){
         int curr_token_len = strlen(curr_token) + 1;
         char* new_cmd_arg = malloc(curr_token_len * sizeof(char));
         strncpy(new_cmd_arg, curr_token, curr_token_len);
 
-        async_container_vector_add_last(&arg_vector, &new_cmd_arg);
+        async_util_vector_add_last(&arg_vector, &new_cmd_arg);
 
         curr_token = strtok(NULL, space_delimiter);
     }
 
-    int num_args = async_container_vector_size(arg_vector) + 1;
+    int num_args = async_util_vector_size(arg_vector) + 1;
     char* args_array[num_args];
 
-    //async_container_vector_add_last(&arg_vector, NULL);
-    for(int i = 0; i < async_container_vector_size(arg_vector); i++){
-        async_container_vector_get(arg_vector, i, &args_array[i]);
+    //async_util_vector_add_last(&arg_vector, NULL);
+    for(int i = 0; i < async_util_vector_size(arg_vector); i++){
+        async_util_vector_get(arg_vector, i, &args_array[i]);
         //printf("curr token is %s\n", args_array[i]);
     }
 
@@ -447,7 +447,7 @@ void after_child_process_server_listen(async_server* ipc_server, void* arg){
     );
 }
 
-void after_fork_pipe_write(int pipe_fd, buffer* child_info_buffer, size_t num_bytes_written, void* arg){
+void after_fork_pipe_write(int pipe_fd, async_byte_buffer* child_info_buffer, size_t num_bytes_written, void* arg){
     destroy_buffer(child_info_buffer);
 
     //TODO: need to set this to NULL?
@@ -481,7 +481,7 @@ void async_child_process_on_custom_connection(async_child_process* child_process
     async_child_process_on_socket_connection(child_process, ipc_socket_custom_connection_handler, custom_arg, CUSTOM_IPC_SOCKET_FLAG);
 }
 
-void async_ipc_socket_data_handler(async_socket* ipc_socket, buffer* data_buffer, void* arg){
+void async_ipc_socket_data_handler(async_socket* ipc_socket, async_byte_buffer* data_buffer, void* arg){
     async_child_process* new_child_process = (async_child_process*)arg;
 
     char* internal_socket_buffer = get_internal_buffer(data_buffer);
@@ -491,12 +491,14 @@ void async_ipc_socket_data_handler(async_socket* ipc_socket, buffer* data_buffer
 
     int buffer_first_char_index = internal_socket_buffer[0];
     char array[] = { buffer_first_char_index };
-    //buffer* resume_signal_buffer = buffer_from_array(array, 1);
+    //async_byte_buffer* resume_signal_buffer = buffer_from_array(array, 1);
     async_socket_write(ipc_socket, array, 1, NULL, NULL);
     //destroy_buffer(resume_signal_buffer);
 
     new_child_process->async_ipc_sockets[buffer_first_char_index] = ipc_socket;
-    void(*curr_ipc_socket_connection_handler)(async_socket*, void*) = new_child_process->ipc_socket_connection_handlers[buffer_first_char_index];
+    void(*curr_ipc_socket_connection_handler)(async_socket*, void*) = 
+        new_child_process->ipc_socket_connection_handlers[buffer_first_char_index];
+    
     if(curr_ipc_socket_connection_handler != NULL){
         void* curr_arg = new_child_process->extra_args[buffer_first_char_index];
         curr_ipc_socket_connection_handler(

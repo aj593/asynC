@@ -1,6 +1,5 @@
 #include "async_server.h"
 #include "../../async_file_system/async_fs.h"
-#include "../../../containers/linked_list.h"
 #include "../../../async_runtime/thread_pool.h"
 #include "../../../async_runtime/event_loop.h"
 #include "../../../async_runtime/io_uring_ops.h"
@@ -57,7 +56,7 @@ typedef struct server_info {
 #define SOCKET_BUFFER_INFO
 
 typedef struct socket_send_buffer {
-    buffer* buffer_data;
+    async_byte_buffer* buffer_data;
     void(*send_callback)(async_socket*, void*);
 } socket_buffer_info;
 
@@ -176,13 +175,13 @@ void async_accept(async_server* accepting_server){
     async_thread_pool_create_task(
         accepting_server->accept_task,
         post_accept_interm,
-        &accepting_server,
+        accepting_server,
         NULL
     );
 }
 
 void post_accept_interm(void* accept_info, void* arg){
-    async_server* accepting_server = (async_server*)accept_info;
+    async_server* accepting_server = *(async_server**)accept_info;
 
     accepting_server->is_currently_accepting = 0;
     accepting_server->has_connection_waiting = 0;

@@ -79,7 +79,7 @@ void async_dns_lookup_task(void* async_dns_info){
         return;
     }
 
-    dns_info->ip_addresses_array = (char**)calloc(1, sizeof(char) * total_array_byte_size);
+    dns_info->ip_addresses_array = (char**)calloc(total_array_byte_size, sizeof(char));
     char* copy_string_into_ip_addresses = (char*)(dns_info->ip_addresses_array + (dns_info->num_addresses + 1));
     
     result_copy = result;

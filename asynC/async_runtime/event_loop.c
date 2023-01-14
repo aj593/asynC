@@ -2,9 +2,8 @@
 
 //#include "async_types/event_emitter.h"
 
-#include "../containers/hash_table.h"
-#include "../containers/async_container_vector.h"
-#include "../containers/async_container_linked_list.h"
+#include "../util/async_util_vector.h"
+#include "../util/async_util_linked_list.h"
 
 #include "thread_pool.h"
 #include "io_uring_ops.h"
@@ -38,7 +37,7 @@ async_event_queue idle_queue;
 async_event_queue execute_queue;
 async_event_queue defer_queue;
 
-async_container_linked_list future_task_queue;
+async_util_linked_list future_task_queue;
 
 void future_task_queue_check(void);
 
@@ -117,7 +116,7 @@ void asynC_init(){
     async_event_queue_init(&execute_queue);
     async_event_queue_init(&defer_queue);
 
-    async_container_linked_list_init(&future_task_queue, sizeof(async_queue_task));
+    async_util_linked_list_init(&future_task_queue, sizeof(async_queue_task));
 
     //TODO: add error checking with this
     child_process_creator_init();
@@ -261,22 +260,22 @@ int future_task_queue_enqueue(int(*queue_task)(void*), void* arg){
         .arg = arg
     };
 
-    async_container_linked_list_append(&future_task_queue, &new_task);
+    async_util_linked_list_append(&future_task_queue, &new_task);
 
-    return 0; //TODO: make return value based on async_container_linked_list_append's return val
+    return 0; //TODO: make return value based on async_util_linked_list_append's return val
 }
 
 void future_task_queue_check(void){
-    async_container_linked_list_iterator task_queue_iterator = async_container_linked_list_start_iterator(&future_task_queue);
+    async_util_linked_list_iterator task_queue_iterator = async_util_linked_list_start_iterator(&future_task_queue);
 
-    while(async_container_linked_list_iterator_has_next(&task_queue_iterator)){
-        async_container_linked_list_iterator_next(&task_queue_iterator, NULL);
+    while(async_util_linked_list_iterator_has_next(&task_queue_iterator)){
+        async_util_linked_list_iterator_next(&task_queue_iterator, NULL);
 
-        async_queue_task* queue_task_info = async_container_linked_list_iterator_get(&task_queue_iterator);
+        async_queue_task* queue_task_info = async_util_linked_list_iterator_get(&task_queue_iterator);
         int queue_task_ret_val = queue_task_info->queue_task(queue_task_info->arg);
 
         if(queue_task_ret_val == 0){
-            async_container_linked_list_iterator_remove(&task_queue_iterator, NULL);
+            async_util_linked_list_iterator_remove(&task_queue_iterator, NULL);
         }
     }
 }

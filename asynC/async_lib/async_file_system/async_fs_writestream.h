@@ -1,7 +1,7 @@
 #ifndef ASYNC_FS_WRITESTREAM_TYPE_H
 #define ASYNC_FS_WRITESTREAM_TYPE_H
 
-#include "../../containers/buffer.h"
+#include "../../util/async_byte_buffer.h"
 
 typedef struct fs_writable_stream async_fs_writestream;
 

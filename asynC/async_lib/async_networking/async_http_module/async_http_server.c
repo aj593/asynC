@@ -1,7 +1,6 @@
 #include "async_http_server.h"
 
 #include "../async_tcp_module/async_tcp_server.h"
-#include "../async_tcp_module/async_tcp_socket.h"
 #include "../../../async_runtime/thread_pool.h"
 #include "../../event_emitter_module/async_event_emitter.h"
 #include "async_http_incoming_message.h"
@@ -36,9 +35,7 @@ typedef struct async_http_server_request {
     async_http_server* http_server_ptr;
     
     int is_socket_closed;
-    //async_container_vector* event_emitter_handler;
     event_node* event_queue_node;
-    
 } async_http_server_request;
 
 typedef struct async_http_server_response {
@@ -49,6 +46,7 @@ typedef struct async_http_server_response {
     int status_code;
     char status_code_str[MAX_STATUS_CODE_STR_LEN];
     char status_message[MAX_IP_STR_LEN];
+    int has_decremented_request_counter;
 } async_http_server_response;
 
 typedef struct async_http_transaction {
@@ -121,7 +119,7 @@ void http_server_listen_routine(void(*generic_callback)(void), void* data, void*
 void async_http_server_after_listen(async_server* http_server, void* cb_arg);
 
 void async_http_server_connection_handler(async_socket* new_http_socket, void* arg);
-void async_http_server_socket_data_handler(async_socket* read_socket, buffer* data_buffer, void* arg);
+void async_http_server_socket_data_handler(async_socket* read_socket, async_byte_buffer* data_buffer, void* arg);
 
 void async_http_server_after_request_parsed(void* parse_data, void* arg);
 
@@ -159,7 +157,7 @@ void async_http_server_response_end_connection(async_http_server_response* curr_
 
 void async_http_server_request_on_data(
     async_http_server_request* incoming_request,
-    void(*request_data_handler)(buffer*, void*),
+    void(*request_data_handler)(async_byte_buffer*, void*),
     void* cb_arg,
     int is_temp,
     int num_times_listen
@@ -291,7 +289,10 @@ char* async_http_server_request_http_version(async_http_server_request* http_req
 }
 
 char* async_http_server_request_get(async_http_server_request* http_req, char* header_key_name){
-    return ht_get(http_req->incoming_msg_info.incoming_msg_template_info.header_table, header_key_name);
+    async_util_hash_map* header_map = 
+        &http_req->incoming_msg_info.incoming_msg_template_info.header_map;
+
+    return (char*)async_util_hash_map_get(header_map, header_key_name);
 }
 
 //TODO: add async_http_server* and void* arg in listen callback
@@ -385,13 +386,14 @@ void async_http_server_connection_handler(async_socket* new_http_socket, void* a
 }
 
 //TODO: remove this data handler using off_data() after implementing it?
-void async_http_server_socket_data_handler(async_socket* read_socket, buffer* data_buffer, void* arg){
+void async_http_server_socket_data_handler(async_socket* read_socket, async_byte_buffer* data_buffer, void* arg){
     async_http_server_request* new_request = (async_http_server_request*)arg;
     async_http_server_response* new_response = (async_http_server_response*)(new_request + 1);
 
     int CRLF_check_and_parse_attempt_ret = 
         double_CRLF_check_and_enqueue_parse_task(
             &new_request->incoming_msg_info,
+            read_socket,
             data_buffer,
             async_http_server_socket_data_handler,
             async_http_server_after_request_parsed,
@@ -413,6 +415,13 @@ void async_http_server_socket_data_handler(async_socket* read_socket, buffer* da
 void async_http_server_after_request_parsed(void* parse_data, void* arg){
     async_http_server_request* http_request = (async_http_server_request*)arg;
     async_http_server_response* http_response = (async_http_server_response*)(http_request + 1);
+
+    async_http_message_template* msg_template = &http_request->incoming_msg_info.incoming_msg_template_info;
+
+    strncpy(msg_template->request_method, msg_template->start_line_first_token, REQUEST_METHOD_STR_LEN);
+    msg_template->current_method = async_http_method_binary_search(msg_template->request_method);
+
+    msg_template->request_url = msg_template->start_line_second_token;
 
     http_request->http_server_ptr->curr_num_requests++;
 
@@ -527,27 +536,17 @@ void async_http_server_response_set_status_msg(async_http_server_response* curr_
 }
 
 void async_http_server_response_set_header(async_http_server_response* curr_http_response, char* header_key, char* header_val){
-    async_http_message_template* template_ptr =
-        &curr_http_response->outgoing_msg_info.incoming_msg_template_info;
+    async_util_hash_map* header_map =
+        &curr_http_response->outgoing_msg_info.incoming_msg_template_info.header_map;
     
-    async_http_outgoing_message_set_header(
-        template_ptr->header_table,
-        &template_ptr->header_buffer,
-        header_key,
-        header_val
-    );
+    async_util_hash_map_set(header_map, header_key, header_val);
 }
 
 void async_http_server_response_write_head(async_http_server_response* curr_http_response, int status_code, char* status_msg){
-    async_http_outgoing_message* outgoing_msg_ptr = &curr_http_response->outgoing_msg_info;
-    async_http_message_template* msg_template_ptr = &outgoing_msg_ptr->incoming_msg_template_info;
-
     async_http_server_response_set_status_code(curr_http_response, status_code);
     async_http_server_response_set_status_msg(curr_http_response, status_msg);
 
     async_http_outgoing_message_write_head(&curr_http_response->outgoing_msg_info);
-
-    msg_template_ptr->is_chunked = is_chunked_checker(msg_template_ptr->header_table);
 
     //TODO: need to destroy this here?
     //destroy_buffer(msg_template_ptr->header_buffer);
@@ -567,17 +566,18 @@ void async_http_server_response_write(
         response_data,
         num_bytes,
         send_callback,
-        arg
+        arg,
+        0
     );
 }
 
-//TODO: make it so response isn't writable anymore?
 void async_http_server_response_end(async_http_server_response* curr_http_response){
-    //TODO: does this work also? will this write "0\r\n\r\n" if chunked?
-    async_http_server_response_write(curr_http_response, "", 0, NULL, NULL);
+    async_http_outgoing_message_end(&curr_http_response->outgoing_msg_info);
 
-    //TODO: add extra if statement condition for this
-    curr_http_response->http_server_ptr->curr_num_requests--;
+    if(!curr_http_response->has_decremented_request_counter){
+        curr_http_response->http_server_ptr->curr_num_requests--;
+        curr_http_response->has_decremented_request_counter = 1;
+    }
 }
 
 void async_http_server_response_end_connection(async_http_server_response* curr_http_response){
@@ -586,7 +586,7 @@ void async_http_server_response_end_connection(async_http_server_response* curr_
 
 void async_http_server_request_on_data(
     async_http_server_request* incoming_request,
-    void(*request_data_handler)(buffer*, void*),
+    void(*request_data_handler)(async_byte_buffer*, void*),
     void* cb_arg,
     int is_temp,
     int num_times_listen

@@ -3,7 +3,7 @@
 
 typedef struct event_node event_node;
 #include "../async_lib/async_file_system/async_fs.h"
-#include "../containers/buffer.h"
+#include "../util/async_byte_buffer.h"
 
 #ifndef LIBURING_STATS_INFO
 #define LIBURING_STATS_INFO
@@ -11,7 +11,7 @@ typedef struct event_node event_node;
 /*
 typedef struct liburing_stats {
     int fd;
-    buffer* buffer;
+    async_byte_buffer* buffer;
     int return_val;
     int is_done;
     //grouped_fs_cbs fs_cb;

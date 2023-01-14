@@ -5,7 +5,7 @@
 
 typedef struct async_http_incoming_message {
     async_http_message_template incoming_msg_template_info;
-    async_stream incoming_data_stream;
+    async_byte_stream incoming_data_stream;
     int found_double_CRLF;
     size_t num_payload_bytes_read;
 
@@ -14,13 +14,19 @@ typedef struct async_http_incoming_message {
     char chunk_size_str[CHUNK_SIZE_STR_CAPACITY + 1];
     int chunk_size_len;
     unsigned int chunk_size_left_to_read;
+    int is_reading_trailers;
 
     unsigned int num_data_listeners;
     unsigned int num_end_listeners;
+    unsigned int num_trailer_listeners;
     int has_emitted_end;
 
     void(*get_incoming_msg_ptr)(void*);
     struct async_http_incoming_message*(*after_parse_initiated)(void*, async_socket*);
+
+    async_byte_buffer* header_buffer;
+    
+    size_t trailer_buffer_start_index;
 } async_http_incoming_message;
 
 void async_http_incoming_message_init(
@@ -35,15 +41,16 @@ void async_http_incoming_message_destroy(async_http_incoming_message* incoming_m
 
 int double_CRLF_check_and_enqueue_parse_task(
     async_http_incoming_message* incoming_msg_ptr,
-    buffer* data_buffer,
-    void data_handler_to_remove(async_socket*, buffer*, void*),
+    async_socket* read_socket,
+    async_byte_buffer* data_buffer,
+    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*),
     void(*after_parse_task)(void*, void*),
     void* thread_cb_arg
 );
 
 void async_http_incoming_message_on_data(
     async_http_incoming_message* incoming_msg_ptr, 
-    void(*http_incoming_msg_data_callback)(buffer*, void*), 
+    void(*http_incoming_msg_data_callback)(async_byte_buffer*, void*), 
     void* arg, 
     int is_temp, 
     int num_listens

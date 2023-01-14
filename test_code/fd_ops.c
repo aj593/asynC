@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <asynC/asynC.h>
 
+/*
 void after_open(int fd, void* cb_arg);
 
 void after_chmod(int ret, void* arg){
@@ -28,39 +30,23 @@ void after_dns(char** ip_list, int num_ips, void* arg){
     free(ip_list);
 }
 
-void response_data_handler(async_http_incoming_response* response, buffer* buffer, void* arg){
-    printf("got part of response\n");
-
-    write(STDOUT_FILENO, get_internal_buffer(buffer), get_buffer_capacity(buffer));
-}
-
-void response_handler(async_http_incoming_response* response, void* arg){
-    char* content_length_string = async_http_incoming_response_get(response, "Content-Length");
-
-    printf("got my response of length %s bytes\n", content_length_string);
-
-    async_http_response_on_data(response, response_data_handler, NULL, 0, 0);
-}
-
-void data_handler(async_ipc_socket* ipc_socket, buffer* buffer, void* arg){
+void data_handler(async_ipc_socket* ipc_socket, async_byte_buffer* buffer, void* arg){
     //char* internal_buffer = get_internal_buffer(buffer);
     //printf("data from child is %s\n", internal_buffer);
 
-    /*
     write(
         STDOUT_FILENO,
         internal_buffer,
         get_buffer_capacity(buffer)
     );
-    */
 
     destroy_buffer(buffer);
     //async_socket_end(ipc_socket);
 }
-/*
+
 void child_func_example(async_ipc_socket* socket){
     char array_msg[] = "hello world\n";
-    buffer* write_buffer = buffer_from_array(array_msg, sizeof(array_msg));
+    async_byte_buffer* write_buffer = buffer_from_array(array_msg, sizeof(array_msg));
     async_socket_write(
         socket, 
         write_buffer, 
@@ -71,7 +57,6 @@ void child_func_example(async_ipc_socket* socket){
     free(write_buffer);
     async_socket_end(socket);
 }
-*/
 
 void ipc_connection_handler(async_ipc_socket* socket, void* arg){
     async_socket_on_data(socket, data_handler, NULL, 0, 0);
@@ -81,13 +66,43 @@ typedef struct {
     int a;
     int b;
 } custom_struct;
+*/
+
+size_t total_num_bytes = 0;
+
+void response_data_handler(async_byte_buffer* buffer, void* arg){
+    size_t num_bytes = get_buffer_capacity(buffer);
+    total_num_bytes += num_bytes;
+    printf("got response data of %ld bytes, total of %ld bytes so far\n", num_bytes, total_num_bytes);
+
+    async_fs_writestream* writestream_arg = (async_fs_writestream*)arg;
+    async_fs_writestream_write(
+        writestream_arg,
+        get_internal_buffer(buffer),
+        num_bytes,
+        NULL,
+        NULL
+    );
+
+    destroy_buffer(buffer);
+    //printf("got part of response\n");
+
+    //write(STDOUT_FILENO, get_internal_buffer(buffer), get_buffer_capacity(buffer));
+}
+
+void response_handler(async_http_incoming_response* response, void* arg){
+    printf("got my response\n");
+    
+    async_fs_writestream* new_writestream = create_fs_writestream("../test_files/youtube_response.html");
+    async_http_incoming_response_on_data(response, response_data_handler, new_writestream, 0, 0);
+}
 
 int main(){
     asynC_init();
 
     /*
     hash_table* new_table = ht_create();
-    buffer* new_buffer = create_buffer(2);
+    async_byte_buffer* new_buffer = create_buffer(2);
     async_http_set_header("foo", "bar", &new_buffer, new_table);
     */
 
@@ -104,48 +119,106 @@ int main(){
     */
 
     /*
-    async_container_linked_list new_list;
-    async_container_linked_list_init(&new_list, sizeof(int));
+    async_util_linked_list new_list;
+    async_util_linked_list_init(&new_list, sizeof(int));
     int x = 3;
-    async_container_linked_list_append(&new_list, &x);
+    async_util_linked_list_append(&new_list, &x);
     x = 5;
-    async_container_linked_list_append(&new_list, &x);
+    async_util_linked_list_append(&new_list, &x);
     x = 7;
-    async_container_linked_list_append(&new_list, &x);
+    async_util_linked_list_append(&new_list, &x);
 
-    async_container_linked_list_iterator new_iterator = async_container_linked_list_start_iterator(&new_list);
-    while(async_container_linked_list_iterator_has_next(&new_iterator)){
+    async_util_linked_list_iterator new_iterator = async_util_linked_list_start_iterator(&new_list);
+    while(async_util_linked_list_iterator_has_next(&new_iterator)){
         int curr_num;
         
-        async_container_linked_list_iterator_next(&new_iterator, &curr_num);
+        async_util_linked_list_iterator_next(&new_iterator, &curr_num);
 
         printf("curr num is %d\n", curr_num);
     }
 
-    while(async_container_linked_list_size(&new_list) > 0){
+    while(async_util_linked_list_size(&new_list) > 0){
         int curr_num;
         
-        async_container_linked_list_iterator_remove(&new_iterator, &curr_num);
+        async_util_linked_list_iterator_remove(&new_iterator, &curr_num);
 
         printf("curr num removed is %d\n", curr_num);
     }
     */
 
     //async_dns_lookup("www.tire.com", after_dns, NULL);
+
+    /*
+    int string_size = 10;
+    int max_ascii = 26;
+    char last_letter = 'Z' + 1;
+
+    time_t timer;
+    srand((unsigned)time(&timer));
+
+    async_util_hash_map new_map;
+    async_util_hash_map_init(
+        &new_map, 
+        sizeof(int), 
+        string_size, 
+        DEFAULT_STARTING_CAPACITY, 
+        DEFAULT_LOAD_FACTOR,
+        async_util_Fowler_Noll_Vo_hash_function,
+        strncpy_wrapper,
+        strncmp_wrapper,
+        NULL
+    );
+
+    char key[string_size];
+    key[string_size - 1] = '\0';
+
+    char value[string_size];
+    value[string_size - 1] = '\0';
+
+    for(int i = 0; i < 5; i++){
+        for(int i = 0; i < string_size - 1; i++){
+            key[i] = (rand() % max_ascii) + last_letter;
+        }
+
+        for(int i = 0; i < string_size - 1; i++){
+            value[i] = (rand() % max_ascii) + last_letter;
+        }
+
+        async_util_hash_map_set(&new_map, &i, &i);
+    }
+
+    int key_removed = 3;
+    async_util_hash_map_remove(&new_map, &key_removed);
     
+    key_removed = 5;
+    async_util_hash_map_remove(&new_map, &key_removed);
+
+    async_util_hash_map_iterator new_iterator = async_util_hash_map_iterator_init(&new_map);
+    async_util_hash_map_iterator_entry* entry_ptr; 
+    while((entry_ptr = async_util_hash_map_iterator_next(&new_iterator)) != NULL){
+        printf(
+            "key %d and val %d\n", 
+            *(int*)entry_ptr->key, 
+            *(int*)entry_ptr->value
+        );
+    }
+
+    async_util_hash_map_destroy(&new_map);
+    */
+
     http_request_options options;
-    async_http_request_options_init(&options);
+    async_outgoing_http_request* new_request = async_http_request("youtube.com", GET, &options, response_handler, NULL);
     char foo[] = "foofhfhfhjfhjfjhfhjfhjfhjfjhfhjfkjhfhjfk";
     char bar[] = "barghjfhjkfhjkfgjhhjfjhfjhfkjhkfjhfjk";
-    async_http_request_options_set_header(&options, foo, bar);
-    async_http_request_options_set_header(&options, "spaghetti", "meatball");
+    async_http_client_request_set_header(new_request, foo, bar);
+    async_http_client_request_set_header(new_request, "spaghetti", "meatball");
+
     int num_bytes = 100;
     char custom_url[num_bytes];
     //printf("input a url:\n");
     //fgets(custom_url, num_bytes, stdin);
     int url_len = strnlen(custom_url, num_bytes);
     custom_url[url_len - 1] = '\0';
-    async_outgoing_http_request* new_request = async_http_request("youtube.com", "GET", &options, response_handler, NULL);
     
     /*
     for(int i = 0; i < 5; i++){
@@ -171,18 +244,18 @@ int main(){
     //call_async_open();
     //callchmod();
     /*
-    async_container_vector* int_vector = async_container_vector_create(1, 10, sizeof(int));
+    async_util_vector* int_vector = async_util_vector_create(1, 10, sizeof(int));
     int num = 3;
-    async_container_vector_add_first(&int_vector, &num);
+    async_util_vector_add_first(&int_vector, &num);
     num = 4;
-    async_container_vector_add_first(&int_vector, &num);
+    async_util_vector_add_first(&int_vector, &num);
     num = 5;
-    async_container_vector_add_last(&int_vector, &num);
+    async_util_vector_add_last(&int_vector, &num);
     num = 6;
-    async_container_vector_add(&int_vector, &num, 1);
-    for(int i = 0; i < async_container_vector_size(int_vector); i++){
+    async_util_vector_add(&int_vector, &num, 1);
+    for(int i = 0; i < async_util_vector_size(int_vector); i++){
         int curr_num;
-        async_container_vector_get(int_vector, i, &curr_num);
+        async_util_vector_get(int_vector, i, &curr_num);
         printf("curr num is %d\n", curr_num);
     }
     */
@@ -192,7 +265,8 @@ int main(){
     return 0;
 }
 
-void after_read(int, buffer*, int, void*);
+/*
+void after_read(int, async_byte_buffer*, int, void*);
 
 void after_open(int fd, void* cb_arg){
     printf("my fd is %d\n", fd);
@@ -200,7 +274,8 @@ void after_open(int fd, void* cb_arg){
     async_read(fd, create_buffer(num_buff_bytes), num_buff_bytes, after_read, NULL);
 }
 
-void after_read(int fd, buffer* read_buffer, int num_bytes_read, void* arg){
+void after_read(int fd, async_byte_buffer* read_buffer, int num_bytes_read, void* arg){
     char* read_buff = (char*)get_internal_buffer(read_buffer);
     printf("%s\n", read_buff);
 }
+*/

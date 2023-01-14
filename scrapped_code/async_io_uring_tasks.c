@@ -42,9 +42,9 @@ void async_fs_after_uring_open(event_node* open_event_node){
 void uring_read_interm(event_node* read_event_node){
     uring_stats* uring_info = (uring_stats*)read_event_node->data_ptr;
 
-    void(*read_callback)(int, buffer*, int, void*) = uring_info->fs_cb.read_callback;
+    void(*read_callback)(int, async_byte_buffer*, int, void*) = uring_info->fs_cb.read_callback;
     int read_fd = uring_info->fd;
-    buffer* read_buffer = uring_info->buffer;
+    async_byte_buffer* read_buffer = uring_info->buffer;
     int num_bytes_read = uring_info->return_val;
     void* cb_arg = uring_info->cb_arg;
 
@@ -198,9 +198,9 @@ void uring_close_interm(event_node* close_event_node){
 void uring_write_interm(event_node* write_event_node){
     uring_stats* uring_info = (uring_stats*)write_event_node->data_ptr;
 
-    void(*write_callback)(int, buffer*, int, void*) = uring_info->fs_cb.write_callback;
+    void(*write_callback)(int, async_byte_buffer*, int, void*) = uring_info->fs_cb.write_callback;
     int write_fd = uring_info->fd;
-    buffer* write_buffer = uring_info->buffer;
+    async_byte_buffer* write_buffer = uring_info->buffer;
     int num_bytes_written = uring_info->return_val;
     void* cb_arg = uring_info->cb_arg;
 
@@ -307,7 +307,7 @@ int async_send(void* sending_socket_ptr){
 
     sending_socket->is_writing = 1;
 
-    async_stream_ptr_data new_ptr_data = async_stream_get_buffer_stream_ptr(&sending_socket->socket_send_stream);
+    async_byte_stream_ptr_data new_ptr_data = async_byte_stream_get_buffer_stream_ptr(&sending_socket->socket_send_stream);
     
     event_node* send_uring_node = create_event_node(sizeof(uring_stats), uring_send_interm, is_uring_done);
 

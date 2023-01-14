@@ -1,22 +1,22 @@
 /*
 void async_http_incoming_response_check_data(async_http_incoming_response* res_ptr){
-    async_stream* stream_ptr = &res_ptr->incoming_response.incoming_data_stream;
+    async_byte_stream* stream_ptr = &res_ptr->incoming_response.incoming_data_stream;
 
-    while(!is_async_stream_empty(stream_ptr)){
-        async_stream_ptr_data ptr_to_data = async_stream_get_buffer_stream_ptr(stream_ptr);
+    while(!is_async_byte_stream_empty(stream_ptr)){
+        async_byte_stream_ptr_data ptr_to_data = async_byte_stream_get_buffer_stream_ptr(stream_ptr);
         //TODO: need to create buffer in here, to do in emit_data function?
-        buffer* curr_buffer = buffer_from_array(ptr_to_data.ptr, ptr_to_data.num_bytes);
+        async_byte_buffer* curr_buffer = buffer_from_array(ptr_to_data.ptr, ptr_to_data.num_bytes);
 
         response_data_emit_data(res_ptr, curr_buffer);
 
         destroy_buffer(curr_buffer);
-        async_stream_dequeue(stream_ptr, ptr_to_data.num_bytes);
+        async_byte_stream_dequeue(stream_ptr, ptr_to_data.num_bytes);
     }
 }
 */
 
 /*
-void response_data_emit_data(async_http_incoming_response* res, buffer* curr_buffer){
+void response_data_emit_data(async_http_incoming_response* res, async_byte_buffer* curr_buffer){
     response_and_buffer_data curr_res_and_buf = {
         .response_ptr = res,
         .curr_buffer = curr_buffer
@@ -31,10 +31,10 @@ void response_data_emit_data(async_http_incoming_response* res, buffer* curr_buf
 */
 
 /*
-void response_data_handler(async_socket* socket_with_response, buffer* response_data, void* arg){
+void response_data_handler(async_socket* socket_with_response, async_byte_buffer* response_data, void* arg){
     async_http_incoming_response* incoming_response = (async_http_incoming_response*)arg;
 
-    async_stream_enqueue(
+    async_byte_stream_enqueue(
         &incoming_response->incoming_response.incoming_data_stream,
         get_internal_buffer(response_data),
         get_buffer_capacity(response_data),

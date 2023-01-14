@@ -4,7 +4,7 @@ async_socket* connecting_socket;
 async_fs_readstream* new_readstream;
 
 void connection_handler(async_socket*, void*);
-void readstream_data_handler(async_fs_readstream* readstream, buffer* read_buffer, void* arg);
+void readstream_data_handler(async_fs_readstream* readstream, async_byte_buffer* read_buffer, void* arg);
 void readstream_end_handler(async_fs_readstream* ending_readstream, void* arg);
 
 int main(){
@@ -23,7 +23,7 @@ void connection_handler(async_socket* socket, void* cb_arg){
     async_fs_readstream_on_end(new_readstream, readstream_end_handler, NULL, 0, 0);
 }
 
-void readstream_data_handler(async_fs_readstream* readstream, buffer* read_buffer, void* arg){
+void readstream_data_handler(async_fs_readstream* readstream, async_byte_buffer* read_buffer, void* arg){
     char* str_buf = (char*)get_internal_buffer(read_buffer);
     async_socket_write(
         connecting_socket, 

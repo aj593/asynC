@@ -1,5 +1,5 @@
 //#include "async_io.h"
-//#include "../containers/linked_list.h"
+//#include "../util/linked_list.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -23,7 +23,7 @@
 
 //initialize the I/O event we're going to perform by creating an event node for it, which will later be enqueued into the event queue
 //this will be used repeatedly in our different asynchronous I/O operations
-/*event_node* io_event_init(int io_index, buffer* io_buffer, void(*io_callback_handler)(event_node*), callback_arg* cb_arg){
+/*event_node* io_event_init(int io_index, async_byte_buffer* io_buffer, void(*io_callback_handler)(event_node*), callback_arg* cb_arg){
     //create the event node, and also allocate a block of data for its respective piece of data, the size of an async_io struct
     event_node* new_io_event = create_event_node(IO_EVENT_INDEX, sizeof(async_io));
     
@@ -65,7 +65,7 @@ void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for
     event_node* new_open_event = 
         io_event_init(
             OPEN_INDEX, //we're using the intermediate function that handles the async_open's callback
-            NULL,       //this operation doesn't do any reading or writing, we're only opening a file, so no buffer* needed
+            NULL,       //this operation doesn't do any reading or writing, we're only opening a file, so no async_byte_buffer* needed
             //open_cb, 
             cb_arg      //assign callback argument from passed-in cb_arg
         );
@@ -81,13 +81,13 @@ void make_aio_request(struct aiocb* aio_ptr, int file_descriptor, void* buff_for
 }
 
 //TODO: throw exception or error handle if num_bytes_to_read > read_buff_ptr capacity, or make it so read is automatically minimum of of two?
-//asynchronously read the specified number of bytes into file and fill it into buffer*'s data pointer, and also assign callback information for it
-void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
+//asynchronously read the specified number of bytes into file and fill it into async_byte_buffer*'s data pointer, and also assign callback information for it
+void async_read(int read_fd, async_byte_buffer* read_buff_ptr, int num_bytes_to_read, read_callback read_cb, callback_arg* cb_arg){
     //create event node and assign it proper fields in its async_io struct pointer
     event_node* new_read_event = 
         io_event_init(
             READ_INDEX,     //we're using the intermediate function that handles the async_read's callback
-            read_buff_ptr,  //buffer* that will have its data pointer filled with bytes
+            read_buff_ptr,  //async_byte_buffer* that will have its data pointer filled with bytes
             read_cb_interm, 
             cb_arg          //callback argument from passed-in cb_arg
         );
@@ -115,8 +115,8 @@ void async_read(int read_fd, buffer* read_buff_ptr, int num_bytes_to_read, read_
 
 //TODO: check if this works
 //TODO: throw exception or error handle if num_bytes_to_write > read_buff_ptr capacity?
-//asynchronously write the specified number of bytes from the buffer* to the file given by the file descriptor, and later executes callback with provided argument
-void async_write(int write_fd, buffer* write_buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg){
+//asynchronously write the specified number of bytes from the async_byte_buffer* to the file given by the file descriptor, and later executes callback with provided argument
+void async_write(int write_fd, async_byte_buffer* write_buff_ptr, int num_bytes_to_write, write_callback write_cb, callback_arg* cb_arg){
     //make new event node for this async write and assign it proper index, passed-in buffer, and callback argument
     event_node* new_write_event = 
         io_event_init(
@@ -188,8 +188,8 @@ void read_file(char* file_name, readfile_callback rf_callback, callback_arg* cb_
 
 //TODO: make file creation async?
 //TODO: throw exception or error handle if num_bytes_to_write > read_buff_ptr capacity?
-//asynchronously write to a file with a buffer* and specify the number of bytes, also allow options for flags and the mode, will execute callback with callback arg later
-void write_file(char* file_name, buffer* write_buff, int num_bytes_to_write, int mode, int flags, writefile_callback wf_cb, callback_arg* cb_arg){
+//asynchronously write to a file with a async_byte_buffer* and specify the number of bytes, also allow options for flags and the mode, will execute callback with callback arg later
+void write_file(char* file_name, async_byte_buffer* write_buff, int num_bytes_to_write, int mode, int flags, writefile_callback wf_cb, callback_arg* cb_arg){
     //make new event node to write to file
     event_node* new_writefile_event = 
         io_event_init(
@@ -207,7 +207,7 @@ void write_file(char* file_name, buffer* write_buff, int num_bytes_to_write, int
     make_aio_request(
         &io_wf_block->aio_block,            //aiocb pointer we're using to make aio request
         open(file_name, flags, mode),       //file descriptor we're using to write to file
-        get_internal_buffer(write_buff),    //void* data in buffer* write_buff that we copy bytes from into file
+        get_internal_buffer(write_buff),    //void* data in async_byte_buffer* write_buff that we copy bytes from into file
         num_bytes_to_write,                 //number of bytes to write from the buffer to the file
         0,                                  //starting offset for file for where we're writing
         aio_write                           //aio_op we're passing in as function pointer to make async request
