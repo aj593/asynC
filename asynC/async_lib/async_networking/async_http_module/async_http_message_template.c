@@ -114,6 +114,33 @@ void async_http_message_template_destroy(async_http_message_template* msg_templa
     async_util_vector_destroy(msg_template_ptr->trailer_vector);
 }
 
+void async_http_message_template_clear(async_http_message_template* msg_template_ptr){
+    msg_template_ptr->content_length = 0;
+    msg_template_ptr->is_chunked = 0;
+    msg_template_ptr->request_url = "/";
+
+    msg_template_ptr->current_method = GET;
+    strncpy(
+        msg_template_ptr->request_method, 
+        async_http_method_enum_find(msg_template_ptr->current_method), 
+        sizeof(msg_template_ptr->request_method)
+    );
+
+    //TODO: change capacity for some of these data structures too? like for buffer, map, vectors
+
+    //TODO: make and use faster way to clear hash map, maybe with iterator_clear() or iterator_remove()?
+    async_util_hash_map_iterator new_iterator = 
+        async_util_hash_map_iterator_init(&msg_template_ptr->header_map);
+    async_util_hash_map_iterator_entry* curr_entry;
+    while((curr_entry = async_util_hash_map_iterator_next(&new_iterator)) != NULL){
+        async_util_hash_map_remove(&msg_template_ptr->header_map, curr_entry->key);
+    }
+
+    //TODO: make and use clear() method instead?
+    async_util_vector_set_size(msg_template_ptr->http_msg_event_emitter.event_handler_vector, 0);    
+    async_util_vector_set_size(msg_template_ptr->trailer_vector, 0);
+}
+
 int is_chunked_checker(async_http_message_template* msg_template_ptr){
     async_util_hash_map* hash_map_ptr = &msg_template_ptr->header_map;
 

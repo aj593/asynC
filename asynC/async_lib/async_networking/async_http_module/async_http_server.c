@@ -382,6 +382,10 @@ void async_http_server_connection_handler(async_socket* new_http_socket, void* a
     async_http_server_request* new_http_request = (async_http_server_request*)http_req_res_single_block;
     new_http_request->http_server_ptr = http_server_arg;
 
+    async_http_incoming_message* incoming_msg_ptr = &new_http_request->incoming_msg_info;
+    incoming_msg_ptr->header_data_handler = async_http_server_socket_data_handler;
+    incoming_msg_ptr->header_data_handler_arg = http_req_res_single_block;
+
     async_socket_on_data(new_http_socket, async_http_server_socket_data_handler, http_req_res_single_block, 0, 0);
 }
 

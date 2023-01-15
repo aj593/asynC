@@ -16,7 +16,6 @@
 #define HEADER_BUFFER_CAPACITY 50
 #define LONGEST_ALLOWED_URL 2048
 char localhost_str[] = "localhost";
-char* http_version_string_ptr = "HTTP/1.1";
 
 typedef struct client_side_http_transaction_info client_side_http_transaction_info;
 
@@ -25,7 +24,6 @@ typedef struct async_http_incoming_response {
     int status_code;
     char* status_code_str;
     char* status_message;
-    unsigned int num_data_listeners;
 } async_http_incoming_response;
 
 typedef struct async_outgoing_http_request {
@@ -123,12 +121,6 @@ void async_http_incoming_response_destroy(async_http_incoming_response* response
 }
 
 void async_http_client_request_set_header(async_outgoing_http_request* http_request_ptr, char* header_key, char* header_val){
-    /* TODO: need this?
-    if(strncmp(header_key, "Host", 20) == 0){
-        return;
-    }
-    */
-
     async_util_hash_map* header_map_ptr = 
         &http_request_ptr->outgoing_message_info.incoming_msg_template_info.header_map;
 
@@ -144,7 +136,6 @@ typedef struct buffer_holder_t {
     async_byte_buffer* buffer_to_write;
 } buffer_holder_t;
 
-//TODO: make extra callback param?
 void async_outgoing_http_request_write(
     async_outgoing_http_request* writing_request, 
     void* buffer, 
@@ -152,6 +143,10 @@ void async_outgoing_http_request_write(
     void(*send_callback)(void*),
     void* arg
 ){
+    if(!writing_request->outgoing_message_info.was_header_written){
+        async_http_client_request_set_header(writing_request, "Host", writing_request->host);
+    }
+
     async_http_outgoing_message_write(
         &writing_request->outgoing_message_info,
         buffer,
@@ -160,6 +155,19 @@ void async_outgoing_http_request_write(
         arg,
         0
     );
+}
+
+void async_http_request_set_method_and_url(async_outgoing_http_request* http_request, enum async_http_methods curr_method, char* url){
+    async_http_message_template* template_ptr = &http_request->outgoing_message_info.incoming_msg_template_info;
+
+    template_ptr->current_method = curr_method;
+    strncpy(
+        template_ptr->request_method, 
+        async_http_method_enum_find(curr_method), 
+        sizeof(template_ptr->request_method)
+    );
+
+    template_ptr->request_url = url;
 }
 
 char* async_http_request_parse(async_outgoing_http_request* new_http_request, char* host_url, int* bytes_ptr){
@@ -252,8 +260,6 @@ async_outgoing_http_request* async_http_request(
     msg_template_ptr->current_method = curr_http_method;
     strncpy(msg_template_ptr->request_method, async_http_method_enum_find(curr_http_method), REQUEST_METHOD_STR_LEN);
     
-    strncpy(msg_template_ptr->http_version, http_version_string_ptr, HTTP_VERSION_LEN);
-
     int host_str_len;
     char* host_str = async_http_request_parse(new_http_request, host_url, &host_str_len);
 
@@ -269,6 +275,10 @@ async_outgoing_http_request* async_http_request(
 }
 
 void async_http_outgoing_request_write_head(async_outgoing_http_request* outgoing_request_ptr){
+    if(!outgoing_request_ptr->outgoing_message_info.was_header_written){
+        async_http_client_request_set_header(outgoing_request_ptr, "Host", outgoing_request_ptr->host);
+    }
+    
     async_http_outgoing_message_write_head(&outgoing_request_ptr->outgoing_message_info);
 }
 
@@ -317,11 +327,13 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
             client_http_request_event_checker,
             client_http_request_finish_handler
         );
-    
-    client_side_http_transaction_info* http_client_transaction_ptr = 
-        (client_side_http_transaction_info*)new_http_transaction_node->data_ptr;
 
-    async_socket_on_data(newly_connected_socket, socket_data_handler, http_client_transaction_ptr, 0, 0);
+    async_http_incoming_message* incoming_msg_ptr = 
+        &transaction_info.response_info->incoming_response;
+    incoming_msg_ptr->header_data_handler = socket_data_handler;
+    incoming_msg_ptr->header_data_handler_arg = new_http_transaction_node->data_ptr;
+
+    async_socket_on_data(newly_connected_socket, socket_data_handler, new_http_transaction_node->data_ptr, 0, 0);
 }
 
 int client_http_request_event_checker(event_node* client_http_transaction_node){

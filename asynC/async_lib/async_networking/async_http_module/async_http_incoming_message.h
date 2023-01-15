@@ -19,14 +19,13 @@ typedef struct async_http_incoming_message {
     unsigned int num_data_listeners;
     unsigned int num_end_listeners;
     unsigned int num_trailer_listeners;
-    int has_emitted_end;
-
-    void(*get_incoming_msg_ptr)(void*);
-    struct async_http_incoming_message*(*after_parse_initiated)(void*, async_socket*);
 
     async_byte_buffer* header_buffer;
     
     size_t trailer_buffer_start_index;
+
+    void(*header_data_handler)(async_socket*, async_byte_buffer*, void*);
+    void* header_data_handler_arg;
 } async_http_incoming_message;
 
 void async_http_incoming_message_init(

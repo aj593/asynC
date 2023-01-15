@@ -37,9 +37,7 @@ int async_http_incoming_message_double_CRLF_check(
     async_http_incoming_message* incoming_msg_ptr,
     async_socket* read_socket,
     async_byte_buffer* new_data_buffer,
-    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*),
-    void data_handler_to_add(async_socket*, async_byte_buffer*, void*),
-    void* arg
+    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*)
 );
 
 void async_http_incoming_message_parse(void* incoming_msg_ptr_arg);
@@ -121,9 +119,7 @@ int double_CRLF_check_and_enqueue_parse_task(
         incoming_msg_ptr,
         read_socket,
         data_buffer,
-        data_handler_to_remove,
-        async_http_incoming_message_data_handler,
-        incoming_msg_ptr
+        data_handler_to_remove
     );
 
     if(double_CRLF_ret != 0){
@@ -145,9 +141,7 @@ int async_http_incoming_message_double_CRLF_check(
     async_http_incoming_message* incoming_message_ptr,
     async_socket* read_socket,
     async_byte_buffer* new_data_buffer,
-    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*),
-    void data_handler_to_add(async_socket*, async_byte_buffer*, void*),
-    void* arg
+    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*)
 ){
     if(incoming_message_ptr->found_double_CRLF){
         destroy_buffer(new_data_buffer);
@@ -186,8 +180,8 @@ int async_http_incoming_message_double_CRLF_check(
 
     async_socket_on_data(
         read_socket,
-        data_handler_to_add,
-        arg,
+        async_http_incoming_message_data_handler,
+        incoming_message_ptr,
         0,
         0
     );
@@ -585,12 +579,25 @@ void async_http_incoming_message_on_end(async_http_incoming_message* incoming_ms
     //TODO: emit end event here?
 }
 
+void async_http_incoming_message_clear(async_http_incoming_message* incoming_msg_info){
+    incoming_msg_info->chunk_size_len = 0;
+    incoming_msg_info->found_double_CRLF = 0;
+    incoming_msg_info->is_reading_chunk_size = 1; //TODO: need this part?
+    incoming_msg_info->is_reading_trailers = 0;
+    incoming_msg_info->num_data_listeners = 0;
+    incoming_msg_info->num_end_listeners = 0;
+    incoming_msg_info->num_trailer_listeners = 0;
+    incoming_msg_info->num_payload_bytes_read = 0;
+    incoming_msg_info->reached_end_of_chunk = 0; //TODO: need this part?
+    incoming_msg_info->trailer_buffer_start_index = 0;
+    
+    //TODO: change capacity for some of these data structures too? like for buffer, map, vectors
+    set_buffer_length(incoming_msg_info->header_buffer, 0);
+    async_byte_stream_destroy(&incoming_msg_info->incoming_data_stream); //TODO: does this clear byte stream?
+}
+
 //TODO: also emit end event when connection ends even if not full payload received?
 void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info){
-    if(incoming_msg_info->has_emitted_end){
-        return;
-    }
-
     async_http_message_template* template_ptr = &incoming_msg_info->incoming_msg_template_info;
     
     async_event_emitter_emit_event(
@@ -599,7 +606,18 @@ void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_
         NULL
     );
 
-    incoming_msg_info->has_emitted_end = 1;
+    async_http_incoming_message_clear(incoming_msg_info);
+    async_http_message_template_clear(template_ptr);
+
+    async_socket_off_data(template_ptr->wrapped_tcp_socket, async_http_incoming_message_data_handler);
+    
+    async_socket_on_data(
+        template_ptr->wrapped_tcp_socket,
+        incoming_msg_info->header_data_handler,
+        incoming_msg_info->header_data_handler_arg,
+        0,
+        0
+    );
 }
 
 void req_end_converter(void(*generic_callback)(void), void* data, void* arg){

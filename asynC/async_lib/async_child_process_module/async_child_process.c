@@ -8,6 +8,7 @@
 #include "../../async_runtime/io_uring_ops.h"
 #include "../event_emitter_module/async_event_emitter.h"
 
+#include <sys/epoll.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -16,11 +17,14 @@
 #include <sys/un.h>
 #include <signal.h>
 
+#include <syscall.h>
+
 #define MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS 5
 
 //TODO: make event queue node for this type and put in event queue with event checker and event cleaner up handler
 typedef struct async_child_process {
     pid_t subprocess_pid;
+    int pid_fd;
     async_server* ipc_server;
     async_byte_buffer* child_info_buffer;
     int curr_max_connections;
@@ -30,6 +34,7 @@ typedef struct async_child_process {
     async_socket* async_ipc_sockets[MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS];
     void(*ipc_socket_connection_handlers[MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS])(async_socket*, void*);
     void* extra_args[MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS];
+    int has_terminated;
 } async_child_process;
 
 //TODO: make it in /tmp/ directory?
@@ -67,6 +72,14 @@ typedef struct func_ptr_holder {
 void SIGCHLD_handler(int signal_number){
     while(waitpid(-1, NULL, WNOHANG) > 0);
 }
+
+int pidfd_open(pid_t pid, unsigned int flags){
+    return syscall(SYS_pidfd_open, pid, flags);
+}
+
+typedef struct async_child_process_holder {
+    async_child_process* child_process_ptr;
+} async_child_process_holder;
 
 int format_socket_name(char ipc_socket_name[], char* socket_template_name, unsigned long* curr_num_name_ptr){
     return snprintf(
@@ -232,9 +245,6 @@ void forker_handler(void){
 void grand_child_handler(char pipe_msg[], char* child_process_task_flag, char* server_name){
     curr_process_pid = getpid();
 
-    //char buf[1];
-    //read(STDIN_FILENO, buf, 1);
-
     pid_t curr_pid = getpid();
     sync_connect_ipc_socket(server_name, STDIN_FILENO,  curr_pid);
     sync_connect_ipc_socket(server_name, STDOUT_FILENO, curr_pid);
@@ -297,21 +307,17 @@ void fork_task(char* server_name){
     func_ptr_holder* child_func = (func_ptr_holder*)child_func_holder;
     //child_func->child_func_ptr
     int child_socket_fd = sync_connect_ipc_socket(server_name, CUSTOM_IPC_SOCKET_FLAG, curr_process_pid);
-
-    async_epoll_init();
-    thread_pool_init();
-    io_uring_init();
-
     async_socket* custom_data_socket = NULL;
     event_node* socket_event_node = create_socket_node(&custom_data_socket, child_socket_fd);
     if(socket_event_node == NULL){
         //TODO: emit error and return early?
     }
 
+    async_epoll_init();
+    thread_pool_init();
+    io_uring_init();
+
     child_func->child_func_ptr(custom_data_socket);
-
-    //asynC_cleanup(); //TODO: use this instead of functions below, but must specify in child_process_creator_destroy() that it should only work in main process based on pid
-
     asynC_wait();
 
     async_epoll_destroy();
@@ -326,9 +332,7 @@ async_child_process* create_new_child_process(int max_num_connections, int* serv
     new_child_process->curr_max_connections = max_num_connections;
 
     new_child_process->ipc_server = async_ipc_server_create();
-
     char* server_name = async_server_get_name(new_child_process->ipc_server);
-
     *server_name_len = format_socket_name(server_name, server_socket_template_name, &curr_num_server_name);
 
     async_ipc_server_listen(
@@ -339,6 +343,25 @@ async_child_process* create_new_child_process(int max_num_connections, int* serv
     );
 
     return new_child_process;
+}
+
+void child_process_destroy(async_child_process* destroying_child_process){
+    free(destroying_child_process);
+}
+
+int async_child_process_event_checker(event_node* child_event_node){
+    async_child_process_holder* child_proc_holder = (async_child_process_holder*)child_event_node->data_ptr;
+    async_child_process* sub_process_ptr = child_proc_holder->child_process_ptr;
+
+    //TODO: check if server and sockets are closed too
+    return  sub_process_ptr->has_terminated;
+}
+
+void async_child_process_end_handler(event_node* child_event_node){
+    async_child_process_holder* child_proc_holder = (async_child_process_holder*)child_event_node->data_ptr;
+    async_child_process* sub_process_ptr = child_proc_holder->child_process_ptr;
+
+    child_process_destroy(sub_process_ptr);
 }
 
 async_child_process* async_child_process_fork(void(*child_func)(async_socket*)){
@@ -449,10 +472,6 @@ void after_child_process_server_listen(async_server* ipc_server, void* arg){
 
 void after_fork_pipe_write(int pipe_fd, async_byte_buffer* child_info_buffer, size_t num_bytes_written, void* arg){
     destroy_buffer(child_info_buffer);
-
-    //TODO: need to set this to NULL?
-    async_child_process* curr_child_process = (async_child_process*)arg;
-    curr_child_process->child_info_buffer = NULL;
 }
 
 void async_ipc_socket_connection_handler(async_socket* ipc_socket, void* arg){
@@ -481,13 +500,26 @@ void async_child_process_on_custom_connection(async_child_process* child_process
     async_child_process_on_socket_connection(child_process, ipc_socket_custom_connection_handler, custom_arg, CUSTOM_IPC_SOCKET_FLAG);
 }
 
+void child_process_event_handler(event_node* process_node, uint32_t events){
+    if(events & EPOLLIN){
+        async_child_process_holder* proc_holder = (async_child_process_holder*)process_node->data_ptr;
+        async_child_process* child_proc = proc_holder->child_process_ptr;
+
+        child_proc->has_terminated = 1;
+
+        //TODO: emit child process terminate event here
+        printf("child process terminated!\n");
+        
+        epoll_remove(child_proc->pid_fd);
+        //TODO: make this async
+        close(child_proc->pid_fd);
+    }
+}
+
 void async_ipc_socket_data_handler(async_socket* ipc_socket, async_byte_buffer* data_buffer, void* arg){
     async_child_process* new_child_process = (async_child_process*)arg;
 
     char* internal_socket_buffer = get_internal_buffer(data_buffer);
-    //TODO: make this a for-loop?
-    memcpy(&new_child_process->subprocess_pid, internal_socket_buffer + 1, sizeof(new_child_process->subprocess_pid));
-    //printf("im main and i received pid of %d\n", new_child_process->subprocess_pid);
 
     int buffer_first_char_index = internal_socket_buffer[0];
     char array[] = { buffer_first_char_index };
@@ -514,8 +546,31 @@ void async_ipc_socket_data_handler(async_socket* ipc_socket, async_byte_buffer* 
 
     //if we have the current subprocess' object's max connections, then we have all sockets ready for data sending between processes
     //TODO: put this if-statement check in async_ipc_socket_connection_handler() instead?
-    if(async_server_get_num_connections(new_child_process->ipc_server) == new_child_process->curr_max_connections){
-        //TODO: emit spawn event here too
-        async_server_close(new_child_process->ipc_server);
+    if(async_server_get_num_connections(new_child_process->ipc_server) != new_child_process->curr_max_connections){
+        return;
     }
+
+    //TODO: emit spawn event here too
+
+    new_child_process->subprocess_pid = *(pid_t*)(internal_socket_buffer + 1);
+    new_child_process->pid_fd = pidfd_open(new_child_process->subprocess_pid, 0);
+
+    async_child_process_holder process_holder = { .child_process_ptr = new_child_process };
+
+    event_node* child_process_node = 
+        async_event_loop_create_new_polling_event(
+            &process_holder,
+            sizeof(async_child_process_holder),
+            async_child_process_event_checker,
+            async_child_process_end_handler
+        );
+    
+    //TODO: need EPOLLONESHOT?
+    epoll_add(new_child_process->pid_fd, child_process_node, EPOLLIN);
+    child_process_node->event_handler = child_process_event_handler;
+
+    async_server_close(new_child_process->ipc_server);
+    //TODO: make and use server_on_end handler here
 }
+
+//void after_child_process_server_end()

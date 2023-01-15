@@ -206,6 +206,7 @@ int main(){
     async_util_hash_map_destroy(&new_map);
     */
 
+    /*
     http_request_options options;
     async_outgoing_http_request* new_request = async_http_request("youtube.com", GET, &options, response_handler, NULL);
     char foo[] = "foofhfhfhjfhjfjhfhjfhjfhjfjhfhjfkjhfhjfk";
@@ -219,27 +220,28 @@ int main(){
     //fgets(custom_url, num_bytes, stdin);
     int url_len = strnlen(custom_url, num_bytes);
     custom_url[url_len - 1] = '\0';
-    
-    /*
-    for(int i = 0; i < 5; i++){
+    */
+
+    char* array[] = {"/bin/ls", NULL};
+    async_child_process* new_cmd_process = async_child_process_exec("/bin/ls", array);
+
+    //for(int i = 0; i < 5; i++){
         //char* array[] = {"/bin/ls", NULL};
         //async_child_process* new_process = async_child_process_exec("/bin/ls", array);
-        async_child_process* new_func_process = async_child_process_fork(child_func_example);
+        //async_child_process* new_func_process = async_child_process_fork(child_func_example);
 
-        async_child_process_on_stdin_connection(new_func_process, ipc_connection_handler, NULL);
-        async_child_process_on_stdout_connection(new_func_process, ipc_connection_handler, NULL);
-        async_child_process_on_stderr_connection(new_func_process, ipc_connection_handler, NULL);
-        async_child_process_on_custom_connection(new_func_process, ipc_connection_handler, NULL);
+        //async_child_process_on_stdin_connection(new_func_process, ipc_connection_handler, NULL);
+        //async_child_process_on_stdout_connection(new_func_process, ipc_connection_handler, NULL);
+        //async_child_process_on_stderr_connection(new_func_process, ipc_connection_handler, NULL);
+        //async_child_process_on_custom_connection(new_func_process, ipc_connection_handler, NULL);
 
-        char* array[] = {"/bin/ls", NULL};
-        async_child_process* new_cmd_process = async_child_process_exec("/bin/ls", array);
+        
 
-        async_child_process_on_stdin_connection(new_cmd_process, ipc_connection_handler, NULL);
-        async_child_process_on_stdout_connection(new_cmd_process, ipc_connection_handler, NULL);
-        async_child_process_on_stderr_connection(new_cmd_process, ipc_connection_handler, NULL);
-        async_child_process_on_custom_connection(new_cmd_process, ipc_connection_handler, NULL);
-    }
-    */
+        //async_child_process_on_stdin_connection(new_cmd_process, ipc_connection_handler, NULL);
+        //async_child_process_on_stdout_connection(new_cmd_process, ipc_connection_handler, NULL);
+        //async_child_process_on_stderr_connection(new_cmd_process, ipc_connection_handler, NULL);
+        //async_child_process_on_custom_connection(new_cmd_process, ipc_connection_handler, NULL);
+    //}
 
     //call_async_open();
     //callchmod();

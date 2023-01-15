@@ -26,6 +26,8 @@ void async_util_vector_destroy(async_util_vector* vector){
     free(vector);
 }
 
+//TODO: make clear() method that sets size to 0 and clears out array?
+
 //TODO: realloc() array if size is too small compared to capacity, based on resize factor?
 int async_util_vector_remove(async_util_vector* vector, size_t index, void* item_buffer){
     if(index < 0 || index >= vector->size){
@@ -102,6 +104,10 @@ int async_util_vector_add_last(async_util_vector** vector, void* new_item){
 
 size_t async_util_vector_size(async_util_vector* vector){
     return vector->size;
+}
+
+void async_util_vector_set_size(async_util_vector* vector, size_t size){
+    vector->size = size;
 }
 
 void async_util_vector_set(async_util_vector* vector, size_t index, void* item_to_set){

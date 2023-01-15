@@ -92,6 +92,7 @@ void async_http_message_template_init(
 );
 
 void async_http_message_template_destroy(async_http_message_template* msg_template_ptr);
+void async_http_message_template_clear(async_http_message_template* msg_template_ptr);
 
 enum async_http_methods async_http_method_binary_search(char* input_string);
 char* async_http_method_enum_find(enum async_http_methods curr_method);

@@ -63,7 +63,7 @@ void ipc_server_listen(void* ipc_listen_task){
 
 void ipc_server_accept(void* ipc_accept_task){
     //async_accept_info* ipc_accept_info_ptr = (async_accept_info*)ipc_accept_task;
-    async_server* ipc_server_ptr = (async_server*)ipc_accept_task;
+    async_server* ipc_server_ptr = *(async_server**)ipc_accept_task;
 
     struct sockaddr_un client_sockaddr;
     socklen_t sock_info_len = sizeof(client_sockaddr);

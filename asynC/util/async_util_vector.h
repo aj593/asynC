@@ -23,6 +23,7 @@ int async_util_vector_add_first(async_util_vector** vector, void* new_item);
 int async_util_vector_add_last(async_util_vector** vector, void* new_item);
 
 size_t async_util_vector_size(async_util_vector* vector);
+void async_util_vector_set_size(async_util_vector* vector, size_t size);
 
 void async_util_vector_get(async_util_vector* vector, size_t index, void* obtained_item);
 

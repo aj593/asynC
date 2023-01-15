@@ -89,6 +89,7 @@ void async_http_outgoing_message_write_head(async_http_outgoing_message* outgoin
 
     msg_template->is_chunked = is_chunked_checker(msg_template);
 
+    outgoing_msg_ptr->has_ended = 0;
     outgoing_msg_ptr->was_header_written = 1;
 }
 
@@ -146,6 +147,10 @@ void async_http_outgoing_message_write(
 ){
     async_http_outgoing_message_write_head(outgoing_msg_ptr);
 
+    if(num_bytes == 0 && !is_terminating_msg){
+        return;
+    }
+
     async_http_message_template* template_ptr = &outgoing_msg_ptr->incoming_msg_template_info;
     if(template_ptr->is_chunked){
         //TODO: using MAX_IP_STR_LEN as max length?
@@ -176,7 +181,7 @@ void async_http_outgoing_message_write(
     );
 
     if(template_ptr->is_chunked){
-        if(num_bytes == 0 && is_terminating_msg){
+        if(is_terminating_msg){
             async_http_outgoing_message_write_trailers(template_ptr);
         }
 
@@ -186,10 +191,15 @@ void async_http_outgoing_message_write(
 
 //TODO: make it so outgoing message isn't writable anymore?
 void async_http_outgoing_message_end(async_http_outgoing_message* outgoing_msg_ptr){
-    if(!outgoing_msg_ptr->has_ended){
-        async_http_outgoing_message_write(outgoing_msg_ptr, "", 0, NULL, NULL, 1);
-        outgoing_msg_ptr->has_ended = 1;
+    if(outgoing_msg_ptr->has_ended){
+        return;
     }
+
+    async_http_outgoing_message_write(outgoing_msg_ptr, "", 0, NULL, NULL, 1);
+    
+    outgoing_msg_ptr->has_ended = 1;
+    outgoing_msg_ptr->was_header_written = 0;
+    async_http_message_template_clear(&outgoing_msg_ptr->incoming_msg_template_info);
 }
 
 int async_http_outgoing_message_start_line_length(async_http_outgoing_message* outgoing_msg_ptr){
