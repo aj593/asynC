@@ -55,4 +55,6 @@ char* async_http_incoming_response_get(async_http_incoming_response* res_ptr, ch
 int   async_http_incoming_response_status_code(async_http_incoming_response* res_ptr);
 char* async_http_incoming_response_status_message(async_http_incoming_response* res_ptr);
 
+void async_outgoing_http_request_add_trailers(async_outgoing_http_request* req, ...);
+
 #endif

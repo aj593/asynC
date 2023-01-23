@@ -62,6 +62,8 @@ void async_http_server_response_write(
     void* arg
 );
 
+void async_http_server_response_add_trailers(async_http_server_response* res, ...);
+
 void async_http_server_response_end(async_http_server_response* curr_http_response);
 void async_http_server_response_end_connection(async_http_server_response* curr_http_response);
 

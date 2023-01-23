@@ -95,6 +95,8 @@ void http_server_on_request(async_http_server* http_server, async_http_server_re
 
     async_http_server_response_set_header(res, "Content-Type", "text/html");
     async_http_server_response_set_header(res, "Transfer-Encoding", "chunked");
+    async_http_server_response_set_header(res, "Trailer", "Foo, Day");
+    async_http_server_response_add_trailers(res, "Hel", "Wor", "Foo", "Bar", "Day", "Night", NULL);
 
     async_fs_readstream* curr_readstream = create_async_fs_readstream("../test_files/basic.html");
     async_fs_readstream_on_data(curr_readstream, response_writer, res, 0, 0);

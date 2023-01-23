@@ -24,6 +24,8 @@ typedef struct async_http_incoming_message {
     
     size_t trailer_buffer_start_index;
 
+    int has_ended;
+
     void(*header_data_handler)(async_socket*, async_byte_buffer*, void*);
     void* header_data_handler_arg;
 } async_http_incoming_message;

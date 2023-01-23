@@ -51,6 +51,13 @@ typedef struct async_socket {
     int is_queueable_for_writing;
 } async_socket;
 
+enum async_socket_events {
+    async_socket_connect_event,
+    async_socket_data_event,
+    async_socket_end_event,
+    async_socket_close_event
+};
+
 //this struct is used for both end and close events for async sockets
 typedef struct socket_end_info {
     async_socket* socket_ptr;
@@ -67,8 +74,8 @@ typedef struct socket_info {
 
 #endif
 
-int socket_event_checker(event_node* socket_event_node);
-void destroy_socket(event_node* socket_node);
+int socket_event_checker(void* socket_event_node);
+void destroy_socket(void* socket_node);
 void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, void* arg);
 void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sent, void* arg);
 void shutdown_callback(int result_val, void* arg);
@@ -237,6 +244,8 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
             !curr_socket->set_to_destroy
             //!curr_socket->peer_closed
         ){
+            //clock_t before = clock();
+            ///*
             async_io_uring_recv(
                 curr_socket->socket_fd,
                 get_internal_buffer(curr_socket->receive_buffer),
@@ -245,7 +254,19 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
                 after_socket_recv,
                 curr_socket
             );
+            //*/
 
+            /*
+            recv(
+                curr_socket->socket_fd,
+                get_internal_buffer(curr_socket->receive_buffer),
+                get_buffer_capacity(curr_socket->receive_buffer),
+                MSG_DONTWAIT
+            );
+            */
+            //clock_t after = clock();
+
+            //printf("difference for recv prep is %ld\n", after - before);
             curr_socket->is_reading = 1; //TODO: keep this inside this function?
         }
     }
@@ -420,8 +441,8 @@ void close_cb(int result, void* arg){
 }
 */
 
-void destroy_socket(event_node* socket_node){
-    socket_info* destroyed_socket_info = (socket_info*)socket_node->data_ptr;
+void destroy_socket(void* socket_node_info){
+    socket_info* destroyed_socket_info = (socket_info*)socket_node_info;
     async_socket* socket_ptr = destroyed_socket_info->socket;
 
     epoll_remove(socket_ptr->socket_fd);
@@ -504,8 +525,8 @@ void async_socket_emit_data(async_socket* data_socket, async_byte_buffer* socket
     );
 }
 
-int socket_event_checker(event_node* socket_event_node){
-    socket_info* checked_socket_info = (socket_info*)socket_event_node->data_ptr;
+int socket_event_checker(void* socket_event_info){
+    socket_info* checked_socket_info = (socket_info*)socket_event_info;
     async_socket* checked_socket = checked_socket_info->socket;
 
     if(

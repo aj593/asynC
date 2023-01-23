@@ -103,6 +103,8 @@ void async_http_message_template_init(
         async_event_emitter_init(&msg_template_ptr->http_msg_event_emitter);
     }
 
+    msg_template_ptr->trailer_vector = async_util_vector_create(5, 2, sizeof(char*));
+
     msg_template_ptr->start_line_first_token  = start_line_first_token_ptr;
     msg_template_ptr->start_line_second_token = start_line_second_token_ptr;
     msg_template_ptr->start_line_third_token  = start_line_third_token_ptr;

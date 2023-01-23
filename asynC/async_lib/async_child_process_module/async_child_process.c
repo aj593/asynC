@@ -17,6 +17,8 @@
 #include <sys/un.h>
 #include <signal.h>
 
+#include <sys/socket.h>
+
 #include <syscall.h>
 
 #define MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS 5
@@ -35,6 +37,8 @@ typedef struct async_child_process {
     void(*ipc_socket_connection_handlers[MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS])(async_socket*, void*);
     void* extra_args[MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS];
     int has_terminated;
+
+    event_node* event_node_ptr;
 } async_child_process;
 
 //TODO: make it in /tmp/ directory?
@@ -349,16 +353,18 @@ void child_process_destroy(async_child_process* destroying_child_process){
     free(destroying_child_process);
 }
 
-int async_child_process_event_checker(event_node* child_event_node){
-    async_child_process_holder* child_proc_holder = (async_child_process_holder*)child_event_node->data_ptr;
+int async_child_process_event_checker(void* child_event_info){
+    async_child_process_holder* child_proc_holder = 
+        (async_child_process_holder*)child_event_info;
     async_child_process* sub_process_ptr = child_proc_holder->child_process_ptr;
 
     //TODO: check if server and sockets are closed too
     return  sub_process_ptr->has_terminated;
 }
 
-void async_child_process_end_handler(event_node* child_event_node){
-    async_child_process_holder* child_proc_holder = (async_child_process_holder*)child_event_node->data_ptr;
+void async_child_process_end_handler(void* child_event_info){
+    async_child_process_holder* child_proc_holder = 
+        (async_child_process_holder*)child_event_info;
     async_child_process* sub_process_ptr = child_proc_holder->child_process_ptr;
 
     child_process_destroy(sub_process_ptr);

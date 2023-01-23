@@ -6,7 +6,7 @@ typedef struct async_container_list_node {
     struct async_container_list_node* next;
     struct async_container_list_node* prev;
     void* data;
-    unsigned int size_per_entry;
+    unsigned int entry_size;
 } async_container_list_node;
 
 typedef struct async_util_linked_list {
@@ -40,11 +40,13 @@ void* async_util_linked_list_iterator_get(async_util_linked_list_iterator* itera
 
 void async_util_linked_list_iterator_set(async_util_linked_list_iterator* iterator, void* new_data);
 
-void async_util_linked_list_iterator_add_next(async_util_linked_list_iterator* iterator, void* data);
-void async_util_linked_list_iterator_add_prev(async_util_linked_list_iterator* iterator, void* data);
+void async_util_linked_list_set_entry_size(async_util_linked_list* list_ptr, unsigned int new_entry_size);
 
-void async_util_linked_list_prepend(async_util_linked_list* list_ptr, void* new_data);
-void async_util_linked_list_append(async_util_linked_list* list_ptr, void* new_data);
+void* async_util_linked_list_iterator_add_next(async_util_linked_list_iterator* iterator, void* data);
+void* async_util_linked_list_iterator_add_prev(async_util_linked_list_iterator* iterator, void* data);
+
+void* async_util_linked_list_prepend(async_util_linked_list* list_ptr, void* new_data);
+void* async_util_linked_list_append(async_util_linked_list* list_ptr, void* new_data);
 
 void async_util_linked_list_iterator_remove(async_util_linked_list_iterator* iterator, void* data);
 void async_util_linked_list_remove_first(async_util_linked_list* list_ptr, void* data);

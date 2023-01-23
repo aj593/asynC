@@ -64,15 +64,15 @@ void thread_pool_destroy(void){
     }
 }
 
-int is_thread_task_done(event_node* thread_task_node){
-    task_block* thread_task_block = (task_block*)thread_task_node->data_ptr;
+int is_thread_task_done(void* thread_task){
+    task_block* thread_task_block = (task_block*)thread_task;
     //*event_index_ptr = thread_task->fs_index;
 
     return thread_task_block->is_done;
 }
 
-void after_task_finished(event_node* thread_event_node){
-    task_block* task_block_ptr = (task_block*)thread_event_node->data_ptr;
+void after_task_finished(void* thread_event){
+    task_block* task_block_ptr = (task_block*)thread_event;
 
     task_block_ptr->task_callback(
         task_block_ptr->async_task_info,
@@ -124,7 +124,7 @@ void* async_thread_pool_create_task_copied(
     thread_task_node->data_ptr = curr_task_block;
 
     //TODO: use defer enqueue event here?
-    enqueue_deferred_event(event_queue_node);
+    enqueue_polling_event(event_queue_node);
     //enqueue_idle_event(event_queue_node);
     defer_enqueue_task(thread_task_node);
 

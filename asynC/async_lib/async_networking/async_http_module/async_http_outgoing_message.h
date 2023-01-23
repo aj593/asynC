@@ -3,6 +3,8 @@
 
 #include "async_http_message_template.h"
 
+#include <stdarg.h>
+
 typedef struct async_http_outgoing_message {
     async_http_message_template incoming_msg_template_info;
     int was_header_written;
@@ -41,6 +43,6 @@ void async_http_outgoing_message_write(
 
 void async_http_outgoing_message_end(async_http_outgoing_message* outgoing_msg_ptr);
 
-void async_http_outgoing_message_add_trailers(async_http_outgoing_message* outgoing_msg_ptr, ...);
+void async_http_outgoing_message_add_trailers(async_http_outgoing_message* outgoing_msg_ptr, va_list trailer_list);
 
 #endif

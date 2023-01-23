@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-//#include <liburing.h>
+#include <linux/limits.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -57,8 +57,8 @@ typedef struct buffer_holder {
 int basic_async_write(void* arg);
 void basic_async_write_thread_task(void* write_task_data);
 void after_writestream_open(int new_writestream_fd, void* writestream_ptr);
-void writestream_finish_handler(event_node* writestream_node);
-int is_writestream_done(event_node* writestream_node);
+void writestream_finish_handler(void* writestream_node);
+int is_writestream_done(void* writestream_node);
 void after_async_write(int write_fd, void* array, size_t num_bytes_written, void* arg);
 size_t min_size(size_t num1, size_t num2);
 void after_writestream_close(int err, void* writestream_cb_arg);
@@ -199,16 +199,16 @@ void after_writestream_close(int err, void* writestream_cb_arg){
     //TODO: when made to go to idle unbound event queue first, put into polling event queue here to clean up?
 }
 
-int is_writestream_done(event_node* writestream_node){
-    fs_writestream_info* writestream_ptr = (fs_writestream_info*)writestream_node->data_ptr;
+int is_writestream_done(void* writestream_info){
+    fs_writestream_info* writestream_ptr = (fs_writestream_info*)writestream_info;
     async_fs_writestream* writestream = writestream_ptr->writestream_info;
 
     return writestream->is_done;
 }
 
-void writestream_finish_handler(event_node* writestream_node){
+void writestream_finish_handler(void* writestream_info){
     //TODO: destroy and close writestream here?
-    fs_writestream_info* destroyed_writestream_ptr = (fs_writestream_info*)writestream_node->data_ptr;
+    fs_writestream_info* destroyed_writestream_ptr = (fs_writestream_info*)writestream_info;
     async_fs_writestream* closing_writestream_ptr = destroyed_writestream_ptr->writestream_info;
     
     //TODO: destroy internal writestream data structure here

@@ -12,8 +12,8 @@ typedef struct event_node {
     //int event_index;            //integer value so we know which index in function array within array to look at
     //node_data data_used;           //pointer to data block/struct holding data pertaining to event
     void* data_ptr;
-    void(*callback_handler)(struct event_node*);
-    int(*event_checker)(struct event_node*);
+    void(*callback_handler)(void*);
+    int(*event_checker)(void*);
     void(*event_handler)(struct event_node*, uint32_t events);
     linked_list* linked_list_ptr;
     struct event_node* next;    //next pointer in linked list
@@ -37,7 +37,7 @@ void linked_list_init(linked_list* list);
 void linked_list_destroy(linked_list* list);
 int is_linked_list_empty(linked_list* list);
 
-event_node* create_event_node(unsigned int event_data_size, void(*callback_interm_handler)(event_node*), int(*event_completion_checker)(event_node*));
+event_node* create_event_node(unsigned int event_data_size, void(*callback_interm_handler)(void*), int(*event_completion_checker)(void*));
 void destroy_event_node(event_node* node_to_destroy);
 
 void add_next(linked_list* list, event_node* curr, event_node* new_node);

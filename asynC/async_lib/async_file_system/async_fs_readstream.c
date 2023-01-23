@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <liburing.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -32,6 +31,12 @@ typedef struct fs_readable_stream {
     unsigned int num_end_event_listeners;
 } async_fs_readstream;
 
+enum readstream_events {
+    async_fs_readstream_data_event,
+    async_fs_readstream_end_event,
+    async_fs_readstream_error_event
+};
+
 typedef struct readstream_ptr_data {
     async_fs_readstream* readstream_ptr;
 } fs_readstream_info;
@@ -42,8 +47,8 @@ typedef struct buffer_info {
     int num_bytes;
 } buffer_info;
 
-void readstream_finish_handler(event_node* readstream_node);
-int readstream_checker(event_node* readstream_node);
+void readstream_finish_handler(void* readstream_node);
+int readstream_checker(void* readstream_node);
 void after_readstream_open(int readstream_fd, void* arg);
 void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg);
 void async_fs_readstream_emit_data(async_fs_readstream* readstream, async_byte_buffer* data_buffer, size_t num_bytes);
@@ -58,6 +63,25 @@ async_fs_readstream* create_async_fs_readstream(char* filename){
     async_fs_open(filename, O_RDONLY, 0644, after_readstream_open, new_readstream_ptr);
 
     return new_readstream_ptr;
+}
+
+void async_fs_readstream_attempt_read(async_fs_readstream* readstream_ptr){
+    if(!readstream_ptr->is_currently_reading && 
+        readstream_ptr->is_readable && 
+        !readstream_ptr->reached_EOF &&
+        readstream_ptr->num_data_event_listeners > 0
+    ){
+        readstream_ptr->is_currently_reading = 1;
+
+        async_fs_buffer_pread(
+            readstream_ptr->read_fd,
+            readstream_ptr->read_buffer,
+            readstream_ptr->read_chunk_size,
+            readstream_ptr->curr_file_offset,
+            after_readstream_read,
+            readstream_ptr
+        );
+    }
 }
 
 void after_readstream_open(int readstream_fd, void* arg){
@@ -82,27 +106,13 @@ void after_readstream_open(int readstream_fd, void* arg){
         readstream_checker,
         readstream_finish_handler
     );
+
+    async_fs_readstream_attempt_read(readstream_ptr);
 }
 
-int readstream_checker(event_node* readstream_node){
-    fs_readstream_info* readstream_info = (fs_readstream_info*)readstream_node->data_ptr;
+int readstream_checker(void* readstream_info_ptr){
+    fs_readstream_info* readstream_info = (fs_readstream_info*)readstream_info_ptr;
     async_fs_readstream* readstream = readstream_info->readstream_ptr;
-    
-    if(!readstream->is_currently_reading && 
-        readstream->is_readable && 
-        !readstream->reached_EOF)
-    {
-        readstream->is_currently_reading = 1;
-
-        async_fs_buffer_pread(
-            readstream->read_fd,
-            readstream->read_buffer,
-            readstream->read_chunk_size,
-            readstream->curr_file_offset,
-            after_readstream_read,
-            readstream
-        );
-    }
 
     return readstream->reached_EOF; /*&& !readstream->is_currently_reading*/
 }
@@ -116,9 +126,9 @@ void after_readstream_close(int success, void* arg){
     free(closed_readstream);
 }
 
-void readstream_finish_handler(event_node* readstream_node){
+void readstream_finish_handler(void* readstream_finish_ptr){
     //TODO: destroy readstreams fields here (or after async_close call), make async_close call here
-    fs_readstream_info* readstream_info_ptr = (fs_readstream_info*)readstream_node->data_ptr;
+    fs_readstream_info* readstream_info_ptr = (fs_readstream_info*)readstream_finish_ptr;
     async_fs_readstream* ending_readstream_ptr = readstream_info_ptr->readstream_ptr;
     async_fs_readstream_emit_end(ending_readstream_ptr);
 
@@ -126,21 +136,23 @@ void readstream_finish_handler(event_node* readstream_node){
 }
 
 void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg){
-    async_fs_readstream* readstream_ptr_arg = (async_fs_readstream*)buffer_cb_arg;
+    async_fs_readstream* readstream_ptr = (async_fs_readstream*)buffer_cb_arg;
     
     if(num_bytes_read > 0){
-        readstream_ptr_arg->curr_file_offset += num_bytes_read;
-        async_fs_readstream_emit_data(readstream_ptr_arg, filled_readstream_buffer, num_bytes_read);
+        readstream_ptr->curr_file_offset += num_bytes_read;
+        async_fs_readstream_emit_data(readstream_ptr, filled_readstream_buffer, num_bytes_read);
     }
     else if(num_bytes_read == 0){
-        readstream_ptr_arg->reached_EOF = 1;
-        readstream_ptr_arg->is_readable = 0;
+        readstream_ptr->reached_EOF = 1;
+        readstream_ptr->is_readable = 0;
     }
     else{
         //TODO: emit error becuase num bytes read is negative?
     }
 
-    readstream_ptr_arg->is_currently_reading = 0;
+    readstream_ptr->is_currently_reading = 0;
+
+    async_fs_readstream_attempt_read(readstream_ptr);
 }
 
 void async_fs_readstream_emit_data(async_fs_readstream* readstream, async_byte_buffer* data_buffer, size_t num_bytes){
@@ -172,18 +184,18 @@ void async_fs_readstream_on_data(
     int is_temp_subscriber,
     int num_times_listen
 ){
-    void(*readstream_data_callback)() = data_handler;
-
     async_event_emitter_on_event(
         &readstream->readstream_event_emitter,
         async_fs_readstream_data_event,
-        readstream_data_callback,
+        data_handler,
         data_event_routine,
         &readstream->num_data_event_listeners,
         arg,
         is_temp_subscriber,
         num_times_listen
     );
+
+    async_fs_readstream_attempt_read(readstream);
 }
 
 void async_fs_readstream_emit_end(async_fs_readstream* readstream){

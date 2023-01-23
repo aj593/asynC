@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
+#include <stdarg.h>
+
 //TODO: find cross-platform/standard version to do this?
 #include <sys/time.h>
 
@@ -28,6 +30,11 @@ typedef struct async_http_server {
     unsigned int curr_num_requests; //TODO: need this?
     int is_listening;
 } async_http_server;
+
+enum async_http_server_events {
+    async_http_server_listen_event,
+    async_http_server_request_event
+};
 
 typedef struct async_http_server_request {
     async_http_incoming_message incoming_msg_info;
@@ -62,8 +69,8 @@ typedef struct async_http_server_info {
 async_http_server* async_create_http_server(void);
 void async_http_server_destroy(async_http_server* http_server);
 void async_http_server_close(async_http_server* http_server);
-int async_http_server_event_checker(event_node* http_server_completion_event_checker);
-void async_http_server_event_finish_handler(event_node* http_server_node_ptr);
+int async_http_server_event_checker(void* http_server_completion_event_checker);
+void async_http_server_event_finish_handler(void* http_server_node_ptr);
 
 void async_http_server_request_init(
     async_http_server_request* new_http_request, 
@@ -134,8 +141,8 @@ void async_http_server_on_request(
 void async_http_server_emit_request(async_http_transaction* http_transaction_ptr);
 void async_http_server_request_routine(void(*generic_callback)(void), void* data, void* arg);
 
-int async_http_server_transaction_event_checker(event_node* http_node);
-void async_http_server_after_transaction_finish(event_node* http_node);
+int async_http_server_transaction_event_checker(void* http_node);
+void async_http_server_after_transaction_finish(void* http_node);
 
 void async_http_server_after_socket_close(async_socket* underlying_tcp_socket, int close_status, void* http_req_arg);
 
@@ -191,15 +198,15 @@ void async_http_server_close(async_http_server* http_server){
     async_server_close(http_server->wrapped_tcp_server);
 }
 
-int async_http_server_event_checker(event_node* http_server_completion_event_checker){
-    async_http_server_info* http_server_info = (async_http_server_info*)http_server_completion_event_checker->data_ptr;
+int async_http_server_event_checker(void* http_server_completion_event_checker){
+    async_http_server_info* http_server_info = (async_http_server_info*)http_server_completion_event_checker;
     async_http_server* http_server = http_server_info->http_server_ptr;
 
     return !http_server->is_listening;
 } 
 
-void async_http_server_event_finish_handler(event_node* http_server_node_ptr){
-    async_http_server_info* http_server_info = (async_http_server_info*)http_server_node_ptr->data_ptr;
+void async_http_server_event_finish_handler(void* http_server_node_ptr){
+    async_http_server_info* http_server_info = (async_http_server_info*)http_server_node_ptr;
     async_http_server* closed_http_server = http_server_info->http_server_ptr;
 
     async_http_server_destroy(closed_http_server);
@@ -499,16 +506,18 @@ void async_http_server_request_routine(void(*generic_callback)(void), void* data
     );
 }
 
-int async_http_server_transaction_event_checker(event_node* http_node){
-    async_http_transaction* curr_working_transaction = (async_http_transaction*)http_node->data_ptr;
+int async_http_server_transaction_event_checker(void* http_info){
+    async_http_transaction* curr_working_transaction = 
+        (async_http_transaction*)http_info;
     async_http_server_request* curr_http_request_info = curr_working_transaction->http_request_info;
 
     //TODO: close when underlying socket is closed, or when response end is closed?
     return curr_http_request_info->is_socket_closed;
 }
 
-void async_http_server_after_transaction_finish(event_node* http_node){
-    async_http_transaction* curr_working_transaction = (async_http_transaction*)http_node->data_ptr;
+void async_http_server_after_transaction_finish(void* http_info){
+    async_http_transaction* curr_working_transaction = 
+        (async_http_transaction*)http_info;
     async_http_server_request* curr_http_request_info   = curr_working_transaction->http_request_info;
     async_http_server_response* curr_http_response_info = curr_working_transaction->http_response_info;
 
@@ -586,6 +595,13 @@ void async_http_server_response_end(async_http_server_response* curr_http_respon
 
 void async_http_server_response_end_connection(async_http_server_response* curr_http_response){
     async_socket_end(curr_http_response->outgoing_msg_info.incoming_msg_template_info.wrapped_tcp_socket);
+}
+
+void async_http_server_response_add_trailers(async_http_server_response* res, ...){
+    va_list trailer_list;
+    va_start(trailer_list, res);
+
+    async_http_outgoing_message_add_trailers(&res->outgoing_msg_info, trailer_list);
 }
 
 void async_http_server_request_on_data(

@@ -9,6 +9,12 @@
 
 #include <stdio.h> //TODO: use this for debugging?
 
+enum async_http_incoming_message_events {
+    async_http_incoming_message_data_event,
+    async_http_incoming_message_end_event,
+    async_http_incoming_message_trailers_event
+};
+
 typedef struct incoming_message_info {
     void* data_ptr;
     unsigned int num_bytes;
@@ -233,6 +239,8 @@ void async_http_incoming_message_parse(void* incoming_msg_ptr_arg){
         incoming_msg_ptr->incoming_msg_template_info.content_length = 
             strtoull(content_length_num_str, NULL, 10);
     }
+
+    incoming_msg_ptr->has_ended = 0;
 }
 
 void async_http_incoming_message_data_handler(async_socket* socket, async_byte_buffer* data, void* arg){
@@ -288,6 +296,8 @@ void async_http_incoming_message_check_data(async_http_incoming_message* incomin
         }
         
         async_byte_stream_dequeue(curr_stream_ptr, num_bytes_to_dequeue);
+
+        async_http_incoming_message_emit_end(incoming_msg_ptr);
     }
 }
 
@@ -360,7 +370,6 @@ int async_http_incoming_message_chunk_handler(
                                 *is_reading_trailers_ptr = 1;
                                 *num_bytes_to_dequeue_ptr = zero_CRLF_len;
 
-                                incoming_msg_ptr->incoming_msg_template_info.trailer_vector = async_util_vector_create(5, 2, sizeof(char*));
                                 incoming_msg_ptr->trailer_buffer_start_index = get_buffer_length(incoming_msg_ptr->header_buffer);
                             }
                         }
@@ -541,14 +550,6 @@ void async_http_incoming_message_emit_data(async_http_incoming_message* incoming
 
     //TODO: put check on capacity so number of payload bytes read == content length field exactly?
     incoming_msg->num_payload_bytes_read += num_bytes;
-
-    int read_full_non_chunked_payload = 
-        !incoming_msg->incoming_msg_template_info.is_chunked &&
-        incoming_msg->num_payload_bytes_read == incoming_msg->incoming_msg_template_info.content_length;
-
-    if(read_full_non_chunked_payload){
-        async_http_incoming_message_emit_end(incoming_msg);
-    }
 }
 
 void incoming_msg_data_converter(void(*generic_callback)(void), void* data, void* arg){
@@ -600,6 +601,14 @@ void async_http_incoming_message_clear(async_http_incoming_message* incoming_msg
 void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info){
     async_http_message_template* template_ptr = &incoming_msg_info->incoming_msg_template_info;
     
+    int has_not_read_full_non_chunked_payload = 
+            !template_ptr->is_chunked &&
+            incoming_msg_info->num_payload_bytes_read != template_ptr->content_length;
+
+    if(has_not_read_full_non_chunked_payload || incoming_msg_info->has_ended){
+        return;
+    }
+
     async_event_emitter_emit_event(
         &template_ptr->http_msg_event_emitter,
         async_http_incoming_message_end_event,
@@ -618,6 +627,8 @@ void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_
         0,
         0
     );
+
+    incoming_msg_info->has_ended = 1;
 }
 
 void req_end_converter(void(*generic_callback)(void), void* data, void* arg){

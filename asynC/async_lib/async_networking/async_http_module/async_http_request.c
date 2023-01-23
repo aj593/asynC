@@ -303,8 +303,8 @@ void after_request_dns_callback(char** ip_list, int num_ips, void* arg){
 
 void socket_data_handler(async_socket*, async_byte_buffer*, void*);
 
-void client_http_request_finish_handler(event_node*);
-int client_http_request_event_checker(event_node*);
+void client_http_request_finish_handler(void*);
+int client_http_request_event_checker(void*);
 
 void http_request_connection_handler(async_socket* newly_connected_socket, void* arg){
     connect_attempt_info* connect_info = (connect_attempt_info*)arg;
@@ -336,16 +336,18 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     async_socket_on_data(newly_connected_socket, socket_data_handler, new_http_transaction_node->data_ptr, 0, 0);
 }
 
-int client_http_request_event_checker(event_node* client_http_transaction_node){
-    client_side_http_transaction_info* http_info = (client_side_http_transaction_info*)client_http_transaction_node->data_ptr;
+int client_http_request_event_checker(void* client_http_transaction_node_info){
+    client_side_http_transaction_info* http_info = 
+        (client_side_http_transaction_info*)client_http_transaction_node_info;
 
     //TODO: make better to condition for when to close request
     async_socket* is_socket_open_ptr = http_info->request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket;
     return !async_socket_is_open(is_socket_open_ptr); 
 }
 
-void client_http_request_finish_handler(event_node* finished_http_request_node){
-    client_side_http_transaction_info* ending_http_info = (client_side_http_transaction_info*)finished_http_request_node->data_ptr;
+void client_http_request_finish_handler(void* finished_http_request_info){
+    client_side_http_transaction_info* ending_http_info = 
+        (client_side_http_transaction_info*)finished_http_request_info;
 
     async_http_outgoing_request_destroy(ending_http_info->request_info);
     async_http_incoming_response_destroy(ending_http_info->response_info);
@@ -434,4 +436,11 @@ int async_http_incoming_response_status_code(async_http_incoming_response* res_p
 
 char* async_http_incoming_response_status_message(async_http_incoming_response* res_ptr){
     return res_ptr->status_message;
+}
+
+void async_outgoing_http_request_add_trailers(async_outgoing_http_request* req, ...){
+    va_list trailer_list;
+    va_start(trailer_list, req);
+
+    async_http_outgoing_message_add_trailers(&req->outgoing_message_info, trailer_list);
 }

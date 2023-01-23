@@ -7,14 +7,15 @@ async_util_vector* create_event_listener_vector(void){
 */
 
 typedef struct event_emitter_handler {
-    enum emitter_events curr_event;
-    //union event_emitter_callbacks curr_callback;
+    int curr_event;
     void(*generic_callback)();
-    void (*curr_event_converter)(void(*)(void), void*, void*);
     void* curr_arg;
-    int is_temp_subscriber;
+
     int is_new_subscriber;
+    int is_temp_subscriber;
     unsigned int num_listens_left;
+    
+    void (*curr_event_converter)(void(*)(void), void*, void*);
     unsigned int* num_listeners_ptr;
 } event_emitter_handler;
 
@@ -28,7 +29,7 @@ void async_event_emitter_destroy(async_event_emitter* event_emitter_ptr){
 
 void async_event_emitter_on_event(
     async_event_emitter* event_emitter,
-    enum emitter_events curr_event,
+    int curr_event,
     void(*generic_callback)(),
     void (*curr_event_converter)(void(*)(), void*, void*),
     unsigned int* num_listeners_ptr,
@@ -60,7 +61,7 @@ void async_event_emitter_on_event(
 
 void async_event_emitter_off_event(
     async_event_emitter* event_emitter,
-    enum emitter_events curr_event,
+    int curr_event,
     void(*generic_callback)()
 ){
     async_util_vector* event_listener_vector = event_emitter->event_handler_vector;
@@ -89,7 +90,7 @@ void async_event_emitter_off_event(
 
 void async_event_emitter_emit_event(
     async_event_emitter* event_emitter, 
-    enum emitter_events event, 
+    int event, 
     void* data
 ){
     async_util_vector* event_vector = event_emitter->event_handler_vector;
@@ -128,49 +129,3 @@ void async_event_emitter_emit_event(
         }
     }
 }
-
-/*
-void async_event_emitter_on_event_num_times(
-    async_util_vector** event_listener_vector,
-    enum emitter_events curr_event,
-    union event_emitter_callbacks emitter_callback,
-    void (*curr_event_converter)(union event_emitter_callbacks, void*, void*),
-    unsigned int* num_listeners_ptr,
-    void* arg,
-    unsigned int num_times
-){
-    async_event_emitter_on_event(
-        event_listener_vector,
-        curr_event,
-        emitter_callback,
-        curr_event_converter,
-        num_listeners_ptr,
-        arg
-    );
-
-    event_emitter_handler* emitter_handler_array = (event_emitter_handler*)async_util_vector_internal_array(*event_listener_vector);
-    size_t curr_listener_vector_size = async_util_vector_size(*event_listener_vector);
-    event_emitter_handler* event_handler_ptr = &emitter_handler_array[curr_listener_vector_size - 1];
-    event_handler_ptr->is_temp_subscriber = 1;
-    event_handler_ptr->num_listens_left = num_times;
-}
-
-void async_event_emitter_once_event(
-    async_util_vector** event_listener_vector,
-    enum emitter_events curr_event,
-    union event_emitter_callbacks emitter_callback,
-    void (*curr_event_converter)(union event_emitter_callbacks, void*, void*),
-    unsigned int* num_listeners_ptr,
-    void* arg
-){
-    async_event_emitter_on_event_num_times(
-        event_listener_vector,
-        curr_event,
-        emitter_callback,
-        curr_event_converter,
-        num_listeners_ptr,
-        arg,
-        1
-    );
-}
-*/

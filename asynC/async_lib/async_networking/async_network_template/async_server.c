@@ -43,6 +43,11 @@ typedef struct async_server {
 
 #endif
 
+enum async_server_events {
+    async_server_connection_event,
+    async_server_listen_event
+};
+
 #ifndef SERVER_INFO
 #define SERVER_INFO
 
@@ -68,8 +73,8 @@ void after_server_listen(void* thread_data, void* cb_arg);
 
 void closing_server_callback(int result_val, void* cb_arg);
 
-void destroy_server(event_node* server_node);
-int server_accept_connections(event_node* server_event_node);
+void destroy_server(void* server_node);
+int server_accept_connections(void* server_event_node);
 void post_accept_interm(void* accept_info, void* arg);
 
 void async_server_on_listen(async_server* listening_server, void(*listen_handler)(async_server*, void*), void* arg, int is_temp_subscriber, int num_listens);
@@ -154,15 +159,15 @@ void after_server_listen(void* thread_data, void* cb_arg){
     epoll_add(newly_listening_server->listening_socket, server_node, EPOLLIN);
 }
 
-int server_accept_connections(event_node* server_event_node){
-    server_info* node_server_info = (server_info*)server_event_node->data_ptr;
+int server_accept_connections(void* server_event_ptr){
+    server_info* node_server_info = (server_info*)server_event_ptr;
     async_server* listening_server = node_server_info->listening_server;
 
     return !listening_server->is_listening && listening_server->num_connections == 0;
 }
 
-void destroy_server(event_node* server_node){
-    server_info* destroying_server_info = (server_info*)server_node->data_ptr;
+void destroy_server(void* server_ptr){
+    server_info* destroying_server_info = (server_info*)server_ptr;
     async_server* destroying_server = destroying_server_info->listening_server;
     //TODO: do other cleanups? remove items from each vector?
     

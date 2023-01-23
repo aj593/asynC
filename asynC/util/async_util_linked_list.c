@@ -10,10 +10,6 @@ void async_util_linked_list_init(async_util_linked_list* new_linked_list, unsign
     new_linked_list->head.prev = NULL;
     new_linked_list->tail.next = NULL;
 
-    //TODO: need to set these?
-    new_linked_list->head.size_per_entry = entry_size;
-    new_linked_list->tail.size_per_entry = entry_size;
-
     new_linked_list->size = 0;
     new_linked_list->size_per_entry = entry_size;
 }
@@ -68,7 +64,7 @@ void async_util_linked_list_iterator_next(async_util_linked_list_iterator* itera
         iterator->node_ptr != &iterator->list_ptr->tail &&
         iterator->node_ptr != &iterator->list_ptr->head //TODO: need this third condition?
     ){
-        memcpy(data, iterator->node_ptr->data, iterator->list_ptr->size_per_entry);
+        memcpy(data, iterator->node_ptr->data, iterator->node_ptr->entry_size);
     }
 }
 
@@ -91,7 +87,7 @@ void async_util_linked_list_iterator_prev(async_util_linked_list_iterator* itera
         iterator->node_ptr != &iterator->list_ptr->tail && //TODO: need this second condition?
         iterator->node_ptr != &iterator->list_ptr->head 
     ){
-        memcpy(data, iterator->node_ptr->data, iterator->list_ptr->size_per_entry);
+        memcpy(data, iterator->node_ptr->data, iterator->node_ptr->entry_size);
     }
 }
 
@@ -101,7 +97,7 @@ void async_util_linked_list_iterator_get_copy(async_util_linked_list_iterator* i
         iterator->node_ptr != &iterator->list_ptr->tail &&
         iterator->node_ptr != &iterator->list_ptr->head
     ){
-        memcpy(data, iterator->node_ptr->data, iterator->list_ptr->size_per_entry);
+        memcpy(data, iterator->node_ptr->data, iterator->node_ptr->entry_size);
     }
 }
 
@@ -117,8 +113,12 @@ void* async_util_linked_list_iterator_get(async_util_linked_list_iterator* itera
 }
 
 void async_util_linked_list_iterator_set(async_util_linked_list_iterator* iterator, void* new_data){
-    if(new_data != NULL){
-        memcpy(iterator->node_ptr->data, new_data, iterator->list_ptr->size_per_entry);
+    if(
+        new_data != NULL &&
+        iterator->node_ptr != &iterator->list_ptr->tail &&
+        iterator->node_ptr != &iterator->list_ptr->head
+    ){
+        memcpy(iterator->node_ptr->data, new_data, iterator->node_ptr->entry_size);
     }
 }
 
@@ -145,16 +145,20 @@ void async_util_linked_list_connect_nodes(async_container_list_node* before_node
 }
 */
 
-void async_util_linked_list_add(async_util_linked_list* list_ptr, async_container_list_node* before_node, async_container_list_node* after_node, void* new_data){
+void async_util_linked_list_set_entry_size(async_util_linked_list* list_ptr, unsigned int new_entry_size){
+    list_ptr->size_per_entry = new_entry_size;
+}
+
+void* async_util_linked_list_add(async_util_linked_list* list_ptr, async_container_list_node* before_node, async_container_list_node* after_node, void* new_data){
     async_container_list_node* new_node = (async_container_list_node*)malloc(sizeof(async_container_list_node) + list_ptr->size_per_entry);
     if(new_node == NULL){
-        return; //TODO: make actual return value for error checking?
+        return NULL; //TODO: make actual return value for error checking?
     }
 
-    new_node->size_per_entry = list_ptr->size_per_entry;
+    new_node->entry_size = list_ptr->size_per_entry;
     new_node->data = (void*)(new_node + 1);
     if(new_data != NULL){
-        memcpy(new_node->data, new_data, new_node->size_per_entry);
+        memcpy(new_node->data, new_data, new_node->entry_size);
     }
 
     before_node->next = new_node;
@@ -164,31 +168,39 @@ void async_util_linked_list_add(async_util_linked_list* list_ptr, async_containe
     new_node->prev = before_node;
 
     list_ptr->size++;
+
+    return new_node->data;
 }
 
-void async_util_linked_list_add_next(async_util_linked_list* list_ptr, async_container_list_node* curr_node, void* new_data){
-    async_util_linked_list_add(list_ptr, curr_node, curr_node->next, new_data);
+void* async_util_linked_list_add_next(async_util_linked_list* list_ptr, async_container_list_node* curr_node, void* new_data){
+    return async_util_linked_list_add(list_ptr, curr_node, curr_node->next, new_data);
 }
 
-void async_util_linked_list_add_prev(async_util_linked_list* list_ptr, async_container_list_node* curr_node, void* new_data){
-    async_util_linked_list_add(list_ptr, curr_node->prev, curr_node, new_data);
+void* async_util_linked_list_add_prev(async_util_linked_list* list_ptr, async_container_list_node* curr_node, void* new_data){
+    return async_util_linked_list_add(list_ptr, curr_node->prev, curr_node, new_data);
 }
 
-void async_util_linked_list_iterator_add_next(async_util_linked_list_iterator* iterator, void* data){
-    async_util_linked_list_add_next(iterator->list_ptr, iterator->node_ptr, data);
+void* async_util_linked_list_iterator_add_next(async_util_linked_list_iterator* iterator, void* data){
+    return async_util_linked_list_add_next(iterator->list_ptr, iterator->node_ptr, data);
 }
 
-void async_util_linked_list_iterator_add_prev(async_util_linked_list_iterator* iterator, void* data){
-    async_util_linked_list_add_prev(iterator->list_ptr, iterator->node_ptr, data);
+void* async_util_linked_list_iterator_add_prev(async_util_linked_list_iterator* iterator, void* data){
+    return async_util_linked_list_add_prev(iterator->list_ptr, iterator->node_ptr, data);
 }
 
-void async_util_linked_list_prepend(async_util_linked_list* list_ptr, void* new_data){
-    async_util_linked_list_add_next(list_ptr, &list_ptr->head, new_data);
+void* async_util_linked_list_prepend(async_util_linked_list* list_ptr, void* new_data){
+    return async_util_linked_list_add_next(list_ptr, &list_ptr->head, new_data);
 }
 
-void async_util_linked_list_append(async_util_linked_list* list_ptr, void* new_data){
-    async_util_linked_list_add_prev(list_ptr, &list_ptr->tail, new_data);
+void* async_util_linked_list_append(async_util_linked_list* list_ptr, void* new_data){
+    return async_util_linked_list_add_prev(list_ptr, &list_ptr->tail, new_data);
 }
+
+/*
+async_container_list_node* async_util_linked_list_remove_node(async_util_linked_list* list_ptr, async_container_list_node* curr_node){
+
+}
+*/
 
 //TODO: have return value based on success?
 int async_util_linked_list_remove_curr(async_util_linked_list* list_ptr, async_container_list_node* curr_node, void* data){
@@ -207,7 +219,7 @@ int async_util_linked_list_remove_curr(async_util_linked_list* list_ptr, async_c
     after_node->prev = before_node;
 
     if(data != NULL){
-        memcpy(data, curr_node->data, list_ptr->size_per_entry);
+        memcpy(data, curr_node->data, curr_node->entry_size);
     }
 
     free(curr_node);
