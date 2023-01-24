@@ -44,9 +44,7 @@ typedef struct async_io_uring_task_args {
     union async_sockaddr_types sockaddr_type;
     socklen_t sockaddr_len;
 
-    int is_done;
     void(*io_uring_prep_task)(struct io_uring_sqe*, struct async_io_uring_task_args*);
-    void(*after_io_uring_event_handler)(void*);
     void(*uring_task_callback)();
     void* arg;
 
@@ -142,7 +140,6 @@ void uring_event_handler(event_node* uring_node, uint32_t events){
         async_io_uring_task_args* curr_io_uring_data = 
             (async_io_uring_task_args*)io_uring_cqe_get_data(uring_completed_entry);
 
-        curr_io_uring_data->is_done = 1;
         curr_io_uring_data->return_val = uring_completed_entry->res;
 
         event_node* curr_event_node_ptr = remove_curr(curr_io_uring_data->event_node_ptr);
@@ -215,11 +212,12 @@ void uring_unlock(void){
     pthread_spin_unlock(&uring_spinlock);
 }
 
+
 int is_uring_done(void* uring_info){
     async_io_uring_task_args* uring_task_info = 
         (async_io_uring_task_args*)uring_info;
 
-    return uring_task_info->is_done;
+    return 1;
 }
 
 //TODO: ok to make inline?
@@ -284,7 +282,7 @@ void async_io_uring_create_task(
             io_uring_arg_ptr,
             sizeof(async_io_uring_task_args),
             is_uring_done,
-            io_uring_arg_ptr->after_io_uring_event_handler
+            after_io_uring_task_handler
         );
     
     async_io_uring_task_args* uring_task_ptr = 
@@ -292,9 +290,7 @@ void async_io_uring_create_task(
 
     uring_task_ptr->event_node_ptr = io_uring_event_node;
     uring_task_ptr->io_uring_prep_task = io_uring_prep_task;
-    uring_task_ptr->after_io_uring_event_handler = after_io_uring_task_handler;
     uring_task_ptr->arg = arg;
-    uring_task_ptr->is_done = 0;
 
     //TODO: make separate queue for io_uring future tasks
     future_task_queue_enqueue(async_io_uring_sqe_and_prep_attempt, uring_task_ptr);
@@ -469,7 +465,6 @@ void async_io_uring_accept(
         .flags = flags,
         .sockaddr_len = socklen,
         .uring_task_callback = accept_cb,
-        .arg = arg
     };
 
     async_io_uring_create_task(
@@ -540,7 +535,6 @@ void async_io_uring_socket(
         .domain = domain,
         .type = type,
         .protocol = protocol,
-        .arg = arg,
         .uring_task_callback = socket_callback
     };
 
