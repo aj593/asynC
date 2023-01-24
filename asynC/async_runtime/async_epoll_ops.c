@@ -40,8 +40,7 @@ void epoll_remove(int op_fd){
 }
 
 void epoll_check(void){
-    //TODO: make if-statement only if there's at least one fd being monitored?
-    int num_fds = epoll_wait(epoll_fd, curr_events, MAX_NUM_EPOLL_EVENTS, 0);
+    int num_fds = epoll_wait(epoll_fd, curr_events, MAX_NUM_EPOLL_EVENTS, -1);
 
     for(int i = 0; i < num_fds; i++){
         event_node* curr_event_node_data = (event_node*)curr_events[i].data.ptr;

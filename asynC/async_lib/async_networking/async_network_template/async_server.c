@@ -145,7 +145,7 @@ void after_server_listen(void* thread_data, void* cb_arg){
         .listening_server = newly_listening_server
     };
 
-    event_node* server_node = async_event_loop_create_new_idle_event(
+    event_node* server_node = async_event_loop_create_new_bound_event(
         &server_info,
         sizeof(server_info),
         server_accept_connections,
@@ -281,9 +281,15 @@ void async_server_on_connection(async_server* listening_server, void(*connection
 void async_server_decrement_connection_and_check(async_server* server_ptr){
     server_ptr->num_connections--;
 
-    if(!server_ptr->is_listening && server_ptr->num_connections == 0){
-        migrate_idle_to_polling_queue(server_ptr->event_node_ptr);
+    if(server_ptr->is_listening || server_ptr->num_connections > 0){
+        return;
     }
+
+    event_node* removed_server_node = remove_curr(server_ptr->event_node_ptr);
+    destroy_event_node(removed_server_node);
+
+    async_event_emitter_destroy(&server_ptr->server_event_emitter);
+    free(server_ptr);
 }
 
 void async_server_set_listening_socket(async_server* server_ptr, int listening_socket_fd){

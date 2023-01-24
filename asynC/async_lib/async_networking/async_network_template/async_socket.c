@@ -115,6 +115,49 @@ async_socket* async_socket_create(void){
     return new_socket;
 }
 
+void async_socket_open_checker(async_socket* checked_socket){
+    //TODO: does this prevent this from executing this function repeatedly?
+    if(!checked_socket->is_open){
+        return;
+    }
+
+    int is_reading_or_writing = 
+        checked_socket->is_reading ||
+        checked_socket->is_queued_for_writing;
+
+    //case for when socket calls async_socket_end()
+    int called_async_socket_end = 
+        !checked_socket->is_writable &&
+        checked_socket->closed_self &&
+        is_async_byte_stream_empty(&checked_socket->socket_send_stream);
+
+    int fulfills_end_condition = 
+        checked_socket->set_to_destroy || 
+        checked_socket->peer_closed ||
+        called_async_socket_end;
+
+    if(fulfills_end_condition && !is_reading_or_writing){
+        checked_socket->is_open = 0;
+    }
+
+    if(checked_socket->is_open){
+        return;
+    }
+
+    event_node* removed_socket_node = remove_curr(checked_socket->socket_event_node_ptr);
+    destroy_event_node(removed_socket_node);
+
+    epoll_remove(checked_socket->socket_fd);
+
+    //TODO: try results with different flags?
+    async_io_uring_shutdown(
+        checked_socket->socket_fd,
+        SHUT_WR,
+        shutdown_callback,
+        checked_socket
+    );
+}
+
 async_socket* async_connect(async_socket* connecting_socket, async_connect_info* connect_info_ptr, void(*connect_task_handler)(void*), void(*connection_handler)(async_socket*, void*), void* connection_arg){
     if(connection_handler != NULL){
         async_socket_on_connection(connecting_socket, connection_handler, connection_arg, 1, 1);
@@ -176,7 +219,7 @@ event_node* create_socket_node(async_socket** new_socket_dbl_ptr, int new_socket
         .socket = new_socket
     };
 
-    event_node* socket_event_node = async_event_loop_create_new_idle_event(
+    event_node* socket_event_node = async_event_loop_create_new_bound_event(
         &new_socket_info,
         sizeof(socket_info),
         socket_event_checker,
@@ -242,7 +285,6 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
             curr_socket->is_open &&
             curr_socket->is_flowing &&
             !curr_socket->set_to_destroy
-            //!curr_socket->peer_closed
         ){
             //clock_t before = clock();
             ///*
@@ -280,9 +322,9 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
             !curr_socket->data_available_to_read ||
             curr_socket->num_data_listeners == 0
         ){
-            curr_socket->is_open = 0;
+            //curr_socket->is_open = 0;
 
-            migrate_idle_to_polling_queue(curr_socket_node);
+            async_socket_open_checker(curr_socket);
         }
 
         //epoll_mod(curr_socket->socket_fd, curr_socket_node, EPOLLIN);
@@ -301,9 +343,10 @@ void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, vo
         //TODO: may not need this if-statement here because socket event checker takes care of this case?
         if(reading_socket->peer_closed){
             reading_socket->is_readable = 0;
-            reading_socket->is_open = 0; //TODO: make extra field member in async_socket struct "is_no_longer_reading" instead of this?
+            //reading_socket->is_open = 0; //TODO: make extra field member in async_socket struct "is_no_longer_reading" instead of this?
 
-            migrate_idle_to_polling_queue(reading_socket->socket_event_node_ptr);
+            //TODO: move this outside nested if-statements?
+            async_socket_open_checker(reading_socket);
         }
 
         return;
@@ -397,19 +440,15 @@ void async_socket_end(async_socket* ending_socket){
     ending_socket->closed_self = 1;
     //TODO: set is_readable to 0 also?
 
-    //check for if it's reading too? would also have to change code in async recv callback too
-    if(!ending_socket->is_queued_for_writing){
-        migrate_idle_to_polling_queue(ending_socket->socket_event_node_ptr);
-    }
+    async_socket_open_checker(ending_socket);
 }
 
 void async_socket_destroy(async_socket* socket_to_destroy){
     socket_to_destroy->set_to_destroy = 1;
     socket_to_destroy->is_readable = 0;
     socket_to_destroy->is_writable = 0;
-    //TODO: add if-statement here to set is_open = 0 if not currently reading or writing?
-
-    migrate_idle_to_polling_queue(socket_to_destroy->socket_event_node_ptr);
+    
+    async_socket_open_checker(socket_to_destroy);
 }
 
 void after_socket_close(int success, void* arg){
@@ -529,22 +568,19 @@ int socket_event_checker(void* socket_event_info){
     socket_info* checked_socket_info = (socket_info*)socket_event_info;
     async_socket* checked_socket = checked_socket_info->socket;
 
+    int is_reading_or_writing = 
+        checked_socket->is_reading ||
+        checked_socket->is_writing;
+
+    //case for when socket calls async_socket_end()
+    int called_async_socket_end = 
+        !checked_socket->is_writable &&
+        checked_socket->closed_self &&
+        is_async_byte_stream_empty(&checked_socket->socket_send_stream);
+
     if(
-        //case for when socket calls socket_destroy()
-        (
-            checked_socket->set_to_destroy &&
-            !checked_socket->is_reading &&
-            !checked_socket->is_writing
-        )
-            ||
-        //case for when socket calls socket_end()
-        (
-            !checked_socket->is_writable &&
-            checked_socket->closed_self &&
-            !checked_socket->is_reading &&
-            !checked_socket->is_writing &&
-            is_async_byte_stream_empty(&checked_socket->socket_send_stream)
-        )
+        (checked_socket->set_to_destroy || called_async_socket_end) &&
+        !is_reading_or_writing
     ){
         checked_socket->is_open = 0;
     }
@@ -575,21 +611,14 @@ void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sen
     async_socket* written_socket = (async_socket*)arg;
 
     written_socket->is_writing = 0;
-    async_byte_stream_dequeue(&written_socket->socket_send_stream, num_bytes_sent);
-
     written_socket->is_queued_for_writing = 0;
+
+    async_byte_stream_dequeue(&written_socket->socket_send_stream, num_bytes_sent);
 
     //TODO: check for queueable condition here even though it was set to 1 above?
     async_socket_future_send_task_enqueue_attempt(written_socket);
 
-    //TODO: check if written_socket not writable also?
-    if(
-        is_async_byte_stream_empty(&written_socket->socket_send_stream) &&
-        written_socket->closed_self
-    ){
-        //move socket event node to polling queue
-        migrate_idle_to_polling_queue(written_socket->socket_event_node_ptr);
-    }
+    async_socket_open_checker(written_socket);
 }
 
 //TODO: make this function have return value so we can tell whether it failed

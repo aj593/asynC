@@ -506,6 +506,16 @@ void async_child_process_on_custom_connection(async_child_process* child_process
     async_child_process_on_socket_connection(child_process, ipc_socket_custom_connection_handler, custom_arg, CUSTOM_IPC_SOCKET_FLAG);
 }
 
+void after_pidfd_close(int success, void* arg){
+    async_child_process* child_proc = (async_child_process*)arg;
+
+    //TODO: also know to end based on when server calls end event?
+    event_node* removed_child_event = remove_curr(child_proc->event_node_ptr);
+    destroy_event_node(removed_child_event);
+
+    child_process_destroy(child_proc);
+}
+
 void child_process_event_handler(event_node* process_node, uint32_t events){
     if(events & EPOLLIN){
         async_child_process_holder* proc_holder = (async_child_process_holder*)process_node->data_ptr;
@@ -517,8 +527,8 @@ void child_process_event_handler(event_node* process_node, uint32_t events){
         printf("child process terminated!\n");
         
         epoll_remove(child_proc->pid_fd);
-        //TODO: make this async
-        close(child_proc->pid_fd);
+        
+        async_fs_close(child_proc->pid_fd, after_pidfd_close, child_proc);
     }
 }
 
@@ -564,7 +574,7 @@ void async_ipc_socket_data_handler(async_socket* ipc_socket, async_byte_buffer* 
     async_child_process_holder process_holder = { .child_process_ptr = new_child_process };
 
     event_node* child_process_node = 
-        async_event_loop_create_new_polling_event(
+        async_event_loop_create_new_bound_event(
             &process_holder,
             sizeof(async_child_process_holder),
             async_child_process_event_checker,

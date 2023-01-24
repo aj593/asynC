@@ -29,6 +29,7 @@ typedef struct fs_writable_stream {
     //TODO: add event handler vectors? will have to be destroyed when writestream is closed
     int is_queueable_for_writing;
     int is_queued_for_writing;
+    event_node* writestream_node;
 } async_fs_writestream;
 
 typedef struct writestream_node_info {
@@ -108,12 +109,13 @@ void after_writestream_open(int new_writestream_fd, void* writestream_ptr){
     };
 
     //TODO: make this an unbound event (doesn't keep event loop running)
-    async_event_loop_create_new_polling_event(
-        &writestream_ptr_info,
-        sizeof(fs_writestream_info),
-        is_writestream_done,
-        writestream_finish_handler
-    );
+    fs_writestream_ptr->writestream_node = 
+        async_event_loop_create_new_unbound_event(
+            &writestream_ptr_info,
+            sizeof(fs_writestream_info),
+            is_writestream_done,
+            writestream_finish_handler
+        );
 
     //TODO: check for queueable condition here even though it was set to 1 above?
     if(
@@ -196,7 +198,13 @@ void after_writestream_close(int err, void* writestream_cb_arg){
     async_fs_writestream* closed_writestream = (async_fs_writestream*)writestream_cb_arg;
     closed_writestream->is_done = 1;
 
-    //TODO: when made to go to idle unbound event queue first, put into polling event queue here to clean up?
+    event_node* removed_node = remove_curr(closed_writestream->writestream_node);
+    destroy_event_node(removed_node);
+
+    async_byte_stream_destroy(&closed_writestream->writestream);
+    pthread_mutex_destroy(&closed_writestream->buffer_stream_lock);
+
+    free(closed_writestream);
 }
 
 int is_writestream_done(void* writestream_info){

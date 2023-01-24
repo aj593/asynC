@@ -13,6 +13,8 @@
 void thread_pool_init(void);
 void thread_pool_destroy(void);
 
+int has_queue_thread_tasks(void);
+
 //int is_defer_queue_empty();
 void submit_thread_tasks(void);
 

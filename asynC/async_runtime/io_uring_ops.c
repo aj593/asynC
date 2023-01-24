@@ -4,7 +4,9 @@
 
 #include <pthread.h>
 #include <liburing.h>
+
 #include "thread_pool.h"
+#include "async_epoll_ops.h"
 
 #include <sys/un.h>
 #include <netinet/in.h>
@@ -12,11 +14,16 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+#include <sys/eventfd.h>
+#include <sys/epoll.h>
+#include <unistd.h>
+
 struct io_uring async_uring;
 #define IO_URING_NUM_ENTRIES 100 //TODO: change this later?
 int uring_has_sqe = 0;
 int num_entries_to_submit = 0;
 pthread_spinlock_t uring_spinlock;
+int io_uring_eventfd;
 
 union async_sockaddr_types {
     struct sockaddr_in  sockaddr_inet;
@@ -42,6 +49,8 @@ typedef struct async_io_uring_task_args {
     void(*after_io_uring_event_handler)(void*);
     void(*uring_task_callback)();
     void* arg;
+
+    event_node* event_node_ptr;
 } async_io_uring_task_args;
 
 /*
@@ -118,9 +127,32 @@ void after_io_uring_socket_handler(void* socket_task_node);
 
 
 
+struct __kernel_timespec uring_wait_cqe_timeout = {
+    .tv_sec = 0,
+    .tv_nsec = 0,
+};
 
+void uring_event_handler(event_node* uring_node, uint32_t events){
+    eventfd_t uring_count;
+    eventfd_read(io_uring_eventfd, &uring_count);
 
+    struct io_uring_cqe* uring_completed_entry;
+    while(io_uring_peek_cqe(&async_uring, &uring_completed_entry) == 0){
+        //TODO: check if return value from this is NULL?
+        async_io_uring_task_args* curr_io_uring_data = 
+            (async_io_uring_task_args*)io_uring_cqe_get_data(uring_completed_entry);
 
+        curr_io_uring_data->is_done = 1;
+        curr_io_uring_data->return_val = uring_completed_entry->res;
+
+        event_node* curr_event_node_ptr = remove_curr(curr_io_uring_data->event_node_ptr);
+        curr_event_node_ptr->callback_handler(curr_event_node_ptr->data_ptr);
+
+        destroy_event_node(curr_event_node_ptr);
+
+        io_uring_cqe_seen(&async_uring, uring_completed_entry);
+    }
+}
 
 void uring_submit_task_handler(void* uring_submit_task);
 
@@ -131,15 +163,35 @@ void io_uring_init(void){
     if(uring_init_ret != 0){
         exit(0);
     }
+
+    io_uring_eventfd = eventfd(0, O_NONBLOCK);
+    io_uring_register_eventfd(&async_uring, io_uring_eventfd);
+
+    event_node* io_uring_node = 
+        async_event_loop_create_new_unbound_event(
+            NULL,
+            0,
+            NULL,
+            NULL
+        );
+
+    io_uring_node->event_handler = uring_event_handler;
+    epoll_add(io_uring_eventfd, io_uring_node, EPOLLIN);
     
     pthread_spin_init(&uring_spinlock, 0);
 }
 
 void io_uring_exit(void){
+    io_uring_unregister_eventfd(&async_uring);
+    epoll_remove(io_uring_eventfd);
+    close(io_uring_eventfd);
+
     io_uring_queue_exit(&async_uring);
+    
     pthread_spin_destroy(&uring_spinlock);
 }
 
+/*
 void uring_check(void){
     struct io_uring_cqe* uring_completed_entry;
     while(io_uring_peek_cqe(&async_uring, &uring_completed_entry) == 0){
@@ -151,6 +203,7 @@ void uring_check(void){
         io_uring_cqe_seen(&async_uring, uring_completed_entry);
     }
 }
+*/
 
 void uring_lock(void){
     pthread_spin_lock(&uring_spinlock);
@@ -174,11 +227,6 @@ void increment_sqe_counter(void){
     uring_has_sqe = 1;
     num_entries_to_submit++;
 }
-
-struct __kernel_timespec uring_wait_cqe_timeout = {
-    .tv_sec = 0,
-    .tv_nsec = 0,
-};
 
 /*
 struct io_uring_sqe* get_sqe(void){
@@ -231,22 +279,25 @@ void async_io_uring_create_task(
     void(*after_io_uring_task_handler)(void*),
     void* arg
 ){
-    io_uring_arg_ptr->io_uring_prep_task = io_uring_prep_task;
-    io_uring_arg_ptr->after_io_uring_event_handler = after_io_uring_task_handler;
-    io_uring_arg_ptr->arg = arg;
-    io_uring_arg_ptr->is_done = 0;
-
-    //TODO: make idle event soon?
     event_node* io_uring_event_node =
-        async_event_loop_create_new_polling_event(
+        async_event_loop_create_new_bound_event(
             io_uring_arg_ptr,
             sizeof(async_io_uring_task_args),
             is_uring_done,
             io_uring_arg_ptr->after_io_uring_event_handler
         );
+    
+    async_io_uring_task_args* uring_task_ptr = 
+        (async_io_uring_task_args*)io_uring_event_node->data_ptr;
+
+    uring_task_ptr->event_node_ptr = io_uring_event_node;
+    uring_task_ptr->io_uring_prep_task = io_uring_prep_task;
+    uring_task_ptr->after_io_uring_event_handler = after_io_uring_task_handler;
+    uring_task_ptr->arg = arg;
+    uring_task_ptr->is_done = 0;
 
     //TODO: make separate queue for io_uring future tasks
-    future_task_queue_enqueue(async_io_uring_sqe_and_prep_attempt, io_uring_event_node->data_ptr);
+    future_task_queue_enqueue(async_io_uring_sqe_and_prep_attempt, uring_task_ptr);
 }
 
 int async_io_uring_sqe_and_prep_attempt(void* async_io_uring_args_ptr){
@@ -495,7 +546,7 @@ void async_io_uring_socket(
 
     async_io_uring_create_task(
         &socket_args,
-        io_uring_prep_accept_task,
+        io_uring_prep_socket_task,
         after_io_uring_socket_handler,
         arg
     );

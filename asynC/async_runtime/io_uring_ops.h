@@ -7,7 +7,7 @@
 void io_uring_init(void);
 void io_uring_exit(void);
 
-void uring_check(void);
+//void uring_check(void);
 
 void uring_try_submit_task();
 

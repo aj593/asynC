@@ -71,6 +71,7 @@ void async_http_server_destroy(async_http_server* http_server);
 void async_http_server_close(async_http_server* http_server);
 int async_http_server_event_checker(void* http_server_completion_event_checker);
 void async_http_server_event_finish_handler(void* http_server_node_ptr);
+void http_server_decrement_request_counter(async_http_server_response* curr_http_response);
 
 void async_http_server_request_init(
     async_http_server_request* new_http_request, 
@@ -358,7 +359,7 @@ void async_http_server_after_listen(async_server* http_server, void* cb_arg){
     };
 
     listening_http_server->event_node_ptr =
-        async_event_loop_create_new_idle_event(
+        async_event_loop_create_new_bound_event(
             &server_info,
             sizeof(async_http_server_info),
             async_http_server_event_checker,
@@ -393,7 +394,27 @@ void async_http_server_connection_handler(async_socket* new_http_socket, void* a
     incoming_msg_ptr->header_data_handler = async_http_server_socket_data_handler;
     incoming_msg_ptr->header_data_handler_arg = http_req_res_single_block;
 
+    async_http_server_response* new_http_response = 
+        (async_http_server_response*)(new_http_request + 1);
+    
+    async_http_transaction http_transaction_info = {
+        .http_request_info = new_http_request,
+        .http_response_info = new_http_response,
+        .http_server_ptr = http_server_arg
+    };
+
+    new_http_request->event_queue_node = 
+        async_event_loop_create_new_bound_event(
+            &http_transaction_info,
+            sizeof(async_http_transaction),
+            async_http_server_transaction_event_checker,
+            async_http_server_after_transaction_finish
+        );
+
     async_socket_on_data(new_http_socket, async_http_server_socket_data_handler, http_req_res_single_block, 0, 0);
+
+    //TODO: is this good place to register close event for underlying tcp socket of http request?
+    async_socket_on_close(new_http_socket, async_http_server_after_socket_close, new_http_request->event_queue_node->data_ptr, 0, 0);
 }
 
 //TODO: remove this data handler using off_data() after implementing it?
@@ -444,20 +465,6 @@ void async_http_server_after_request_parsed(void* parse_data, void* arg){
 
     //emitting request event
     async_http_server_emit_request(&http_transaction_info);
-
-    event_node* http_transaction_node = 
-        async_event_loop_create_new_idle_event(
-            &http_transaction_info,
-            sizeof(async_http_transaction),
-            async_http_server_transaction_event_checker,
-            async_http_server_after_transaction_finish
-        );
-
-    http_request->event_queue_node = http_transaction_node;
-
-    async_socket* client_socket = http_request->incoming_msg_info.incoming_msg_template_info.wrapped_tcp_socket;
-    //TODO: is this good place to register close event for underlying tcp socket of http request?
-    async_socket_on_close(client_socket, async_http_server_after_socket_close, http_request, 0, 0);
 }
 
 void async_http_server_on_request(
@@ -527,16 +534,28 @@ void async_http_server_after_transaction_finish(void* http_info){
         !http_server_ptr->is_listening && 
         http_server_ptr->curr_num_requests == 0
     ){
-        migrate_idle_to_polling_queue(http_server_ptr->event_node_ptr);
+        //migrate_idle_to_polling_queue(http_server_ptr->event_node_ptr);
     }
 
     async_http_server_request_and_response_destroy(curr_http_request_info, curr_http_response_info);
 }
 
-void async_http_server_after_socket_close(async_socket* underlying_tcp_socket, int close_status, void* http_req_arg){
-    async_http_server_request* curr_closing_request = (async_http_server_request*)http_req_arg;
-    curr_closing_request->is_socket_closed = 1;
-    migrate_idle_to_polling_queue(curr_closing_request->event_queue_node);
+void async_http_server_after_socket_close(async_socket* underlying_tcp_socket, int close_status, void* http_tran_arg){
+    //async_http_server_request* curr_closing_request = (async_http_server_request*)http_req_arg;
+    async_http_transaction* transaction_ptr = (async_http_transaction*)http_tran_arg;
+    
+    transaction_ptr->http_request_info->is_socket_closed = 1;
+
+    //TODO: need this here?
+    http_server_decrement_request_counter(transaction_ptr->http_response_info);
+
+    event_node* removed_http_node = remove_curr(transaction_ptr->http_request_info->event_queue_node);
+    destroy_event_node(removed_http_node);
+
+    async_http_server_request_and_response_destroy(
+        transaction_ptr->http_request_info, 
+        transaction_ptr->http_response_info
+    );
 }
 
 void async_http_server_response_set_status_code(async_http_server_response* curr_http_response, int status_code){
@@ -584,13 +603,31 @@ void async_http_server_response_write(
     );
 }
 
+void http_server_decrement_request_counter(async_http_server_response* curr_http_response){
+    if(curr_http_response->has_decremented_request_counter){
+        return;
+    }
+
+    curr_http_response->http_server_ptr->curr_num_requests--;
+    curr_http_response->has_decremented_request_counter = 1;
+
+    if(
+        curr_http_response->http_server_ptr->is_listening || 
+        curr_http_response->http_server_ptr->curr_num_requests > 0
+    ){
+        return;
+    }
+
+    event_node* removed_node = remove_curr(curr_http_response->http_server_ptr->event_node_ptr);
+    destroy_event_node(removed_node);
+
+    async_http_server_destroy(curr_http_response->http_server_ptr);
+}
+
 void async_http_server_response_end(async_http_server_response* curr_http_response){
     async_http_outgoing_message_end(&curr_http_response->outgoing_msg_info);
 
-    if(!curr_http_response->has_decremented_request_counter){
-        curr_http_response->http_server_ptr->curr_num_requests--;
-        curr_http_response->has_decremented_request_counter = 1;
-    }
+    http_server_decrement_request_counter(curr_http_response);
 }
 
 void async_http_server_response_end_connection(async_http_server_response* curr_http_response){

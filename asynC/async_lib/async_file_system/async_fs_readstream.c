@@ -29,6 +29,8 @@ typedef struct fs_readable_stream {
     size_t curr_file_offset;
     unsigned int num_data_event_listeners;
     unsigned int num_end_event_listeners;
+
+    event_node* event_node_ptr;
 } async_fs_readstream;
 
 enum readstream_events {
@@ -100,12 +102,13 @@ void after_readstream_open(int readstream_fd, void* arg){
         .readstream_ptr = readstream_ptr
     };
 
-    async_event_loop_create_new_polling_event(
-        &readstream_info,
-        sizeof(fs_readstream_info),
-        readstream_checker,
-        readstream_finish_handler
-    );
+    readstream_ptr->event_node_ptr =
+        async_event_loop_create_new_bound_event(
+            &readstream_info,
+            sizeof(fs_readstream_info),
+            readstream_checker,
+            readstream_finish_handler
+        );
 
     async_fs_readstream_attempt_read(readstream_ptr);
 }
@@ -153,6 +156,17 @@ void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstre
     readstream_ptr->is_currently_reading = 0;
 
     async_fs_readstream_attempt_read(readstream_ptr);
+
+    if(!readstream_ptr->reached_EOF){
+        return;
+    }
+
+    async_fs_readstream_emit_end(readstream_ptr);
+
+    async_fs_close(readstream_ptr->read_fd, after_readstream_close, readstream_ptr);
+
+    event_node* readstream_node = remove_curr(readstream_ptr->event_node_ptr);
+    destroy_event_node(readstream_node);
 }
 
 void async_fs_readstream_emit_data(async_fs_readstream* readstream, async_byte_buffer* data_buffer, size_t num_bytes){

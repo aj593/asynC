@@ -32,6 +32,8 @@ typedef struct async_outgoing_http_request {
     char* host;
     void (*response_handler)(async_http_incoming_response*, void* arg);
     void* response_arg;
+    int is_socket_closed;
+    event_node* request_node;
 } async_outgoing_http_request;
 
 typedef struct client_side_http_transaction_info {
@@ -306,6 +308,21 @@ void socket_data_handler(async_socket*, async_byte_buffer*, void*);
 void client_http_request_finish_handler(void*);
 int client_http_request_event_checker(void*);
 
+void socket_close_handler(async_socket* socket, int success, void* arg){
+    client_side_http_transaction_info* transaction_info =
+        (client_side_http_transaction_info*)arg;
+    
+    transaction_info->request_info->is_socket_closed = 1;
+
+    event_node* removed_transaction_node = remove_curr(transaction_info->request_info->request_node);
+    destroy_event_node(removed_transaction_node);
+
+    async_http_outgoing_request_destroy(transaction_info->request_info);
+    async_http_incoming_response_destroy(transaction_info->response_info);
+
+    free(transaction_info->request_info);
+}
+
 void http_request_connection_handler(async_socket* newly_connected_socket, void* arg){
     connect_attempt_info* connect_info = (connect_attempt_info*)arg;
     async_outgoing_http_request* request_info = connect_info->http_request_info;
@@ -321,7 +338,7 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     };
     
     event_node* new_http_transaction_node = 
-        async_event_loop_create_new_polling_event(
+        async_event_loop_create_new_bound_event(
             &transaction_info,
             sizeof(client_side_http_transaction_info),
             client_http_request_event_checker,
@@ -333,16 +350,17 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     incoming_msg_ptr->header_data_handler = socket_data_handler;
     incoming_msg_ptr->header_data_handler_arg = new_http_transaction_node->data_ptr;
 
+    request_info->request_node = new_http_transaction_node;
+
     async_socket_on_data(newly_connected_socket, socket_data_handler, new_http_transaction_node->data_ptr, 0, 0);
+    async_socket_on_close(newly_connected_socket, socket_close_handler, new_http_transaction_node->data_ptr, 0, 0);
 }
 
 int client_http_request_event_checker(void* client_http_transaction_node_info){
     client_side_http_transaction_info* http_info = 
         (client_side_http_transaction_info*)client_http_transaction_node_info;
 
-    //TODO: make better to condition for when to close request
-    async_socket* is_socket_open_ptr = http_info->request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket;
-    return !async_socket_is_open(is_socket_open_ptr); 
+    return http_info->request_info->is_socket_closed;
 }
 
 void client_http_request_finish_handler(void* finished_http_request_info){
