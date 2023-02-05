@@ -145,11 +145,9 @@ void future_task_queue_check(void){
 event_node* async_event_loop_create_new_event(
     linked_list* event_list,
     void* copy_data, 
-    size_t data_size, 
-    int(*task_checker)(void*), 
-    void(*after_task_handler)(void*)
+    size_t data_size
 ){
-    event_node* new_event_node = create_event_node(data_size, after_task_handler, task_checker);
+    event_node* new_event_node = create_event_node(data_size);
     if(copy_data != NULL){
         memcpy(new_event_node->data_ptr, copy_data, data_size);
     }
@@ -160,37 +158,23 @@ event_node* async_event_loop_create_new_event(
     return new_event_node;
 }
 
-event_node* async_event_loop_create_new_bound_event(
-    void* copy_data,
-    size_t data_size,
-    int(*task_checker)(void*),
-    void(*after_task_handler)(void*)
-){
+event_node* async_event_loop_create_new_bound_event(void* copy_data, size_t data_size){
     event_node* new_bound_event_node = 
         async_event_loop_create_new_event(
             &bound_queue,
             copy_data,
-            data_size,
-            task_checker,
-            after_task_handler
+            data_size
         );
 
     return new_bound_event_node;
 }
 
-event_node* async_event_loop_create_new_unbound_event(
-    void* copy_data,
-    size_t data_size,
-    int(*task_checker)(void*),
-    void(*after_task_handler)(void*)
-){
+event_node* async_event_loop_create_new_unbound_event(void* copy_data, size_t data_size){
     event_node* new_unbound_event_node = 
         async_event_loop_create_new_event(
             &unbound_queue,
             copy_data,
-            data_size,
-            task_checker,
-            after_task_handler
+            data_size
         );
 
     return new_unbound_event_node;

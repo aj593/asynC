@@ -9,7 +9,7 @@
 
 void async_http_outgoing_message_init(
     async_http_outgoing_message* outgoing_msg,
-    async_socket* socket_ptr,
+    async_tcp_socket* socket_ptr,
     char* start_line_first_token_ptr,
     char* start_line_second_token_ptr,
     char* start_line_third_token_ptr
@@ -23,7 +23,7 @@ void async_http_outgoing_message_write(
     async_http_outgoing_message* outgoing_msg_ptr,
     void* response_data, 
     int num_bytes,
-    void (*send_callback)(void*),
+    void (*send_callback)(async_tcp_socket*, void*),
     void* arg,
     int is_terminating_msg
 );
@@ -33,7 +33,7 @@ void async_http_outgoing_message_headers_write(async_http_outgoing_message* outg
 
 void async_http_outgoing_message_init(
     async_http_outgoing_message* outgoing_msg,
-    async_socket* socket_ptr,
+    async_tcp_socket* socket_ptr,
     char* start_line_first_token_ptr,
     char* start_line_second_token_ptr,
     char* start_line_third_token_ptr
@@ -130,7 +130,7 @@ void async_http_outgoing_message_write_trailers(async_http_message_template* msg
         char header_buffer[whole_header_len];
         snprintf(header_buffer, whole_header_len, "%s: %s%s", key, value, CRLF_STR);
 
-        async_socket_write(
+        async_tcp_socket_write(
             msg_template->wrapped_tcp_socket,
             header_buffer,
             whole_header_len - 1,
@@ -165,7 +165,7 @@ void async_http_outgoing_message_write(
     async_http_outgoing_message* outgoing_msg_ptr,
     void* response_data, 
     int num_bytes,
-    void (*send_callback)(void*),
+    void (*send_callback)(async_tcp_socket*, void*),
     void* arg,
     int is_terminating_msg
 ){
@@ -187,7 +187,7 @@ void async_http_outgoing_message_write(
             CRLF_STR
         );
 
-        async_socket_write(
+        async_tcp_socket_write(
             template_ptr->wrapped_tcp_socket,
             response_chunk_info,
             num_bytes_formatted,
@@ -196,7 +196,7 @@ void async_http_outgoing_message_write(
         );
     }
 
-    async_socket_write(
+    async_tcp_socket_write(
         template_ptr->wrapped_tcp_socket,
         response_data,
         num_bytes,
@@ -209,7 +209,7 @@ void async_http_outgoing_message_write(
             async_http_outgoing_message_write_trailers(template_ptr);
         }
 
-        async_socket_write(template_ptr->wrapped_tcp_socket, CRLF_STR, CRLF_LEN, NULL, NULL);
+        async_tcp_socket_write(template_ptr->wrapped_tcp_socket, CRLF_STR, CRLF_LEN, NULL, NULL);
     }
 }
 
@@ -247,7 +247,7 @@ void async_http_outgoing_message_start_line_write(async_http_outgoing_message* o
         CRLF_STR
     );
 
-    async_socket_write(
+    async_tcp_socket_write(
         msg_template->wrapped_tcp_socket,
         start_line_buffer,
         num_bytes_formatted,
@@ -299,7 +299,7 @@ void async_http_outgoing_message_headers_write(async_http_outgoing_message* outg
             CRLF_STR
         );
 
-        async_socket_write(
+        async_tcp_socket_write(
             msg_template->wrapped_tcp_socket,
             curr_header_buffer,
             num_bytes_formatted,
@@ -308,5 +308,5 @@ void async_http_outgoing_message_headers_write(async_http_outgoing_message* outg
         );
     }
 
-    async_socket_write(msg_template->wrapped_tcp_socket, CRLF_STR, CRLF_LEN, NULL, NULL);
+    async_tcp_socket_write(msg_template->wrapped_tcp_socket, CRLF_STR, CRLF_LEN, NULL, NULL);
 }

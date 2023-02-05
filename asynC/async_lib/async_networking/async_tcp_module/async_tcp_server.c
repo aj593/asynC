@@ -8,105 +8,138 @@
 #include <string.h>
 #include <stdio.h>
 
-void tcp_server_listen_task(void* listen_task);
-void tcp_server_accept_task(void* accept_task);
+#include "../async_net.h"
+#include "../../../async_runtime/io_uring_ops.h"
 
-async_server* async_tcp_server_create(void){
-    //TODO: specify protocol or just leave as 0?
-    return async_create_server(tcp_server_listen_task, tcp_server_accept_task);
+typedef struct async_tcp_server {
+    async_server wrapped_server;
+    async_inet_address local_address;
+} async_tcp_server;
+
+//void tcp_server_listen_task(void* listen_task);
+//void tcp_server_accept_task(void* accept_task);
+
+void after_tcp_server_socket(int socket_fd, void* arg);
+void after_tcp_server_bind(int, int, char*, int, void*);
+void after_tcp_server_listen(int, int, void*);
+
+async_tcp_server* async_tcp_server_create(void){
+    async_tcp_server* new_tcp_server = calloc(1, sizeof(async_tcp_server));
+    
+    async_server_init(
+        &new_tcp_server->wrapped_server, 
+        new_tcp_server,
+        async_tcp_socket_create_return_wrapped_socket
+    );
+
+    return new_tcp_server;
 }
 
-void async_tcp_server_listen(async_server* listening_tcp_server, int port, char* ip_address, void(*listen_callback)(async_server*, void*), void* arg){
-    async_listen_info listen_info;
-    strncpy(listen_info.ip_address, ip_address, MAX_SOCKET_NAME_LEN);
-    listen_info.port = port;
+/*
+void async_tcp_server_listen_template(
+    async_server* server, 
+    void(*listen_callback)(), 
+    void* arg, 
+    void* socket_arg,
+    char* ip_address_source,
+    char* ip_address_destination,
+    int port,
+    int* port_destination_ptr
+){
     
-    async_server_listen(
-        listening_tcp_server,
-        &listen_info,
+}
+*/
+
+void async_tcp_server_listen(
+    async_tcp_server* listening_tcp_server, 
+    char* ip_address, 
+    int port, 
+    void(*listen_callback)(async_tcp_server*, void*), 
+    void* arg
+){
+    async_server_listen_init_template(
+        &listening_tcp_server->wrapped_server,
         listen_callback,
-        arg
+        arg,
+        AF_INET,
+        SOCK_STREAM,
+        0,
+        after_tcp_server_socket,
+        listening_tcp_server
+    );
+
+    strncpy(
+        listening_tcp_server->local_address.ip_address, 
+        ip_address, 
+        INET_ADDRSTRLEN
+    );
+
+    listening_tcp_server->local_address.port = port;
+}
+
+void after_tcp_server_socket(int socket_fd, void* arg){
+    async_tcp_server* tcp_server = (async_tcp_server*)arg;
+    tcp_server->wrapped_server.listening_socket = socket_fd;
+
+    async_net_ipv4_bind(
+        socket_fd,
+        tcp_server->local_address.ip_address,
+        tcp_server->local_address.port,
+        after_tcp_server_bind,
+        tcp_server
     );
 }
 
-void tcp_server_listen_task(void* listen_task){
-    async_listen_info* curr_listen_info = (async_listen_info*)listen_task;
-    async_server* new_listening_server = curr_listen_info->listening_server;
-    
-    clock_t before = clock();
-    int listening_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-    clock_t after = clock();
+void after_tcp_server_bind(
+    int bind_ret_val, 
+    int socket_fd,
+    char* ip_address, 
+    int port, 
+    void* arg
+){
+    async_tcp_server* tcp_server = (async_tcp_server*)arg;
 
-    printf("difference for socket() is %ld\n", after - before);
-
-    if(listening_socket == -1){
-        perror("socket()");
-    }
-
-    async_server_set_listening_socket(new_listening_server, listening_socket);
-
-    int opt = 1;
-    before = clock();
-    int return_val = setsockopt(
-        listening_socket,
-        SOL_SOCKET,
-        SO_REUSEADDR,
-        &opt,
-        sizeof(opt)
-    );
-    after = clock();
-    printf("difference for setsockopt() is %ld\n", after - before);
-    
-    if(return_val == -1){
-        perror("setsockopt()");
-    }
-
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(curr_listen_info->port);
-    server_addr.sin_addr.s_addr = inet_addr(curr_listen_info->ip_address);
-    if(server_addr.sin_addr.s_addr == -1){
-        perror("inet_addr()");
-    }
-
-    before = clock();
-    return_val = bind(
-       listening_socket,
-        (const struct sockaddr*)&server_addr,
-        sizeof(server_addr)
-    );
-    after = clock();
-    printf("difference for bind() is %ld\n", after - before);
-    if(return_val == -1){
-        perror("bind()");
-    }
-
-    before = clock();
-    return_val = listen(
-        listening_socket,
-        MAX_BACKLOG_COUNT
-    );
-    after = clock();
-
-    printf("difference for listen() is %ld\n", after - before);
-
-    if(return_val == -1){
-        perror("listen()");
-    }
+    async_server_listen(&tcp_server->wrapped_server);
 }
 
-void tcp_server_accept_task(void* accept_task){
-    async_server* accepting_server = *(async_server**)accept_task;
-
-    //TODO: get these structs and info from async_accept_info pointer instead of having local variables? 
-    struct sockaddr_in client_addr;
-    socklen_t peer_addr_len = sizeof(client_addr);
-
-    int newly_accepted_socket_fd = accept(
-        async_server_get_listening_socket(accepting_server),
-        (struct sockaddr*)&client_addr,
-        &peer_addr_len
+void async_tcp_server_on_listen(
+    async_tcp_server* tcp_server,
+    void(*listen_handler)(async_tcp_server*, void*),
+    void* arg,
+    int is_temp_subscriber,
+    int num_listens
+){
+    async_server_on_listen(
+        &tcp_server->wrapped_server,
+        tcp_server,
+        listen_handler,
+        arg,
+        is_temp_subscriber,
+        num_listens
     );
+}
 
-    async_server_set_newly_accepted_socket(accepting_server, newly_accepted_socket_fd);
+void async_tcp_server_on_connection(
+    async_tcp_server* tcp_server,
+    void(*tcp_connection_handler)(async_tcp_server*, async_tcp_socket*, void*),
+    void* arg,
+    int is_temp_subscriber,
+    int num_listens
+){
+    async_server_on_connection(
+        &tcp_server->wrapped_server,
+        tcp_server,
+        tcp_connection_handler,
+        arg,
+        is_temp_subscriber,
+        num_listens
+    );
+}
+
+void async_tcp_server_close(async_tcp_server* tcp_server){
+    async_server_close(&tcp_server->wrapped_server);
+}
+
+async_inet_address* async_tcp_server_address(async_tcp_server* tcp_server){
+    return &tcp_server->local_address;
 }

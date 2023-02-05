@@ -11,7 +11,6 @@
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/socket.h>
 #include <netdb.h>
 
 #include <sys/eventfd.h>
@@ -26,6 +25,7 @@ pthread_spinlock_t uring_spinlock;
 int io_uring_eventfd;
 
 union async_sockaddr_types {
+    struct sockaddr     sockaddr_generic;
     struct sockaddr_in  sockaddr_inet;
     struct sockaddr_in6 sockaddr_inet6;
     struct sockaddr_un  sockaddr_unix;
@@ -45,18 +45,12 @@ typedef struct async_io_uring_task_args {
     socklen_t sockaddr_len;
 
     void(*io_uring_prep_task)(struct io_uring_sqe*, struct async_io_uring_task_args*);
+    void(*after_task_handler)(struct async_io_uring_task_args*);
     void(*uring_task_callback)();
     void* arg;
 
     event_node* event_node_ptr;
 } async_io_uring_task_args;
-
-/*
-typedef struct uring_user_data {
-    int* return_val_ptr;
-    int* is_done_ptr;
-} uring_user_data;
-*/
 
 int async_io_uring_sqe_and_prep_attempt(void* async_io_uring_args_ptr);
 
@@ -70,7 +64,7 @@ void async_io_uring_recv(
 );
 
 void io_uring_recv_prep_task(struct io_uring_sqe* recv_sqe, async_io_uring_task_args* recv_args);
-void after_io_uring_recv(void* recv_node);
+void after_io_uring_recv(async_io_uring_task_args* recv_node);
 
 
 void async_io_uring_send(
@@ -83,7 +77,7 @@ void async_io_uring_send(
 );
 
 void io_uring_send_prep_task(struct io_uring_sqe* send_sqe, async_io_uring_task_args* send_args);
-void after_io_uring_send(void* send_node);
+void after_io_uring_send(async_io_uring_task_args* send_node);
 
 
 void async_io_uring_shutdown(
@@ -94,19 +88,46 @@ void async_io_uring_shutdown(
 );
 
 void io_uring_shutdown_prep_task(struct io_uring_sqe* shutdown_sqe, async_io_uring_task_args* shutdown_args);
-void after_io_uring_shutdown(void* shutdown_node);
+void after_io_uring_shutdown(async_io_uring_task_args* shutdown_node);
 
-void async_io_uring_accept(
+void async_io_uring_accept_template(
     int accepting_fd, 
     socklen_t socklen, 
     int flags, 
     void(*accept_cb)(), 
-    void(*accept_handler)(void*),
+    void(*accept_handler)(async_io_uring_task_args*),
     void* arg
 );
 
 void io_uring_prep_accept_task(struct io_uring_sqe* accept_sqe, async_io_uring_task_args* accept_args);
-void async_io_uring_ipv4_after_accept(void* ipv4_accept_node);
+void async_io_uring_ipv4_after_accept(async_io_uring_task_args* ipv4_accept_node);
+
+void async_io_uring_accept(
+    int accepting_fd,
+    int flags,
+    void(*accept_callback)(int, int, struct sockaddr*, void*),
+    void* arg
+);
+
+void after_accept_handler(async_io_uring_task_args* uring_accept_args);
+
+void async_io_uring_connect(
+    int connecting_fd, 
+    union async_sockaddr_types* sockaddr_ptr, 
+    socklen_t socket_len,
+    void(*connect_handler)(async_io_uring_task_args*),
+    void* arg
+);
+
+void async_io_uring_ipv4_connect(
+    int connecting_fd, 
+    char* ip_address, 
+    int port,
+    void(*connect_callback)(int, int, char*, int, void*),
+    void* arg
+);
+
+void after_io_uring_ipv4_connect(async_io_uring_task_args* task_args);
 
 void async_io_uring_socket(
     int domain, 
@@ -118,17 +139,30 @@ void async_io_uring_socket(
 );
 
 void io_uring_prep_socket_task(struct io_uring_sqe* sqe, async_io_uring_task_args* socket_args);
-void after_io_uring_socket_handler(void* socket_task_node);
+void after_io_uring_socket_handler(async_io_uring_task_args* socket_task_node);
+
+void async_io_uring_ipv4_connect(
+    int connecting_fd, 
+    char* ip_address, 
+    int port,
+    void(*connect_callback)(int, int, char*, int, void*),
+    void* arg
+);
+
+void async_io_uring_connect(
+    int connecting_fd, 
+    union async_sockaddr_types* sockaddr_ptr, 
+    socklen_t socket_len,
+    void(*connect_handler)(async_io_uring_task_args*),
+    void* arg
+);
+
+void io_uring_prep_connect_task(struct io_uring_sqe* sqe, async_io_uring_task_args* connect_args);
+void after_io_uring_ipv4_connect(async_io_uring_task_args* task_args);
 
 
 
 
-
-
-struct __kernel_timespec uring_wait_cqe_timeout = {
-    .tv_sec = 0,
-    .tv_nsec = 0,
-};
 
 void uring_event_handler(event_node* uring_node, uint32_t events){
     eventfd_t uring_count;
@@ -142,9 +176,9 @@ void uring_event_handler(event_node* uring_node, uint32_t events){
 
         curr_io_uring_data->return_val = uring_completed_entry->res;
 
-        event_node* curr_event_node_ptr = remove_curr(curr_io_uring_data->event_node_ptr);
-        curr_event_node_ptr->callback_handler(curr_event_node_ptr->data_ptr);
+        curr_io_uring_data->after_task_handler(curr_io_uring_data);
 
+        event_node* curr_event_node_ptr = remove_curr(curr_io_uring_data->event_node_ptr);
         destroy_event_node(curr_event_node_ptr);
 
         io_uring_cqe_seen(&async_uring, uring_completed_entry);
@@ -165,12 +199,7 @@ void io_uring_init(void){
     io_uring_register_eventfd(&async_uring, io_uring_eventfd);
 
     event_node* io_uring_node = 
-        async_event_loop_create_new_unbound_event(
-            NULL,
-            0,
-            NULL,
-            NULL
-        );
+        async_event_loop_create_new_unbound_event(NULL, 0);
 
     io_uring_node->event_handler = uring_event_handler;
     epoll_add(io_uring_eventfd, io_uring_node, EPOLLIN);
@@ -188,25 +217,9 @@ void io_uring_exit(void){
     pthread_spin_destroy(&uring_spinlock);
 }
 
-/*
-void uring_check(void){
-    struct io_uring_cqe* uring_completed_entry;
-    while(io_uring_peek_cqe(&async_uring, &uring_completed_entry) == 0){
-        //TODO: check if return value from this is NULL?
-        async_io_uring_task_args* curr_io_uring_data = (async_io_uring_task_args*)io_uring_cqe_get_data(uring_completed_entry);
-        curr_io_uring_data->is_done = 1;
-        curr_io_uring_data->return_val = uring_completed_entry->res;
-
-        io_uring_cqe_seen(&async_uring, uring_completed_entry);
-    }
-}
-*/
-
 void uring_lock(void){
     pthread_spin_lock(&uring_spinlock);
 }
-
-//TODO: make try lock function
 
 void uring_unlock(void){
     pthread_spin_unlock(&uring_spinlock);
@@ -214,33 +227,8 @@ void uring_unlock(void){
 
 
 int is_uring_done(void* uring_info){
-    async_io_uring_task_args* uring_task_info = 
-        (async_io_uring_task_args*)uring_info;
-
     return 1;
 }
-
-//TODO: ok to make inline?
-void increment_sqe_counter(void){
-    uring_has_sqe = 1;
-    num_entries_to_submit++;
-}
-
-/*
-struct io_uring_sqe* get_sqe(void){
-    return io_uring_get_sqe(&async_uring);
-}
-*/
-
-/*
-void set_sqe_data(struct io_uring_sqe* incoming_sqe, event_node* uring_node){
-    uring_user_data* new_uring_check_data = (uring_user_data*)malloc(sizeof(uring_user_data));
-    uring_stats* uring_stats_ptr = (uring_stats*)uring_node->data_ptr;
-    new_uring_check_data->is_done_ptr = &uring_stats_ptr->is_done;
-    new_uring_check_data->return_val_ptr = &uring_stats_ptr->return_val;
-    io_uring_sqe_set_data(incoming_sqe, new_uring_check_data);
-}
-*/
 
 void after_uring_submit(void* data, void* arg){
     //TODO: put something in here?
@@ -266,6 +254,7 @@ void uring_submit_task_handler(void* uring_submit_task){
     int num_submitted = io_uring_submit(&async_uring);
     num_entries_to_submit -= num_submitted;
     uring_unlock();
+    //printf("submitted %d\n", num_submitted);
     if(num_submitted == 0){
         //printf("didn't submit anything??\n");
     }
@@ -274,15 +263,13 @@ void uring_submit_task_handler(void* uring_submit_task){
 void async_io_uring_create_task(
     async_io_uring_task_args* io_uring_arg_ptr,
     void(*io_uring_prep_task)(struct io_uring_sqe*, async_io_uring_task_args*),
-    void(*after_io_uring_task_handler)(void*),
+    void(*after_io_uring_task_handler)(async_io_uring_task_args*),
     void* arg
 ){
     event_node* io_uring_event_node =
         async_event_loop_create_new_bound_event(
             io_uring_arg_ptr,
-            sizeof(async_io_uring_task_args),
-            is_uring_done,
-            after_io_uring_task_handler
+            sizeof(async_io_uring_task_args)
         );
     
     async_io_uring_task_args* uring_task_ptr = 
@@ -290,6 +277,7 @@ void async_io_uring_create_task(
 
     uring_task_ptr->event_node_ptr = io_uring_event_node;
     uring_task_ptr->io_uring_prep_task = io_uring_prep_task;
+    uring_task_ptr->after_task_handler = after_io_uring_task_handler;
     uring_task_ptr->arg = arg;
 
     //TODO: make separate queue for io_uring future tasks
@@ -297,7 +285,8 @@ void async_io_uring_create_task(
 }
 
 int async_io_uring_sqe_and_prep_attempt(void* async_io_uring_args_ptr){
-    async_io_uring_task_args* curr_io_uring_task_info = (async_io_uring_task_args*)async_io_uring_args_ptr;
+    async_io_uring_task_args* curr_io_uring_task_info = 
+        (async_io_uring_task_args*)async_io_uring_args_ptr;
     
     //TODO: need lock for this?
     struct io_uring_sqe* new_task_sqe = io_uring_get_sqe(&async_uring);
@@ -311,7 +300,9 @@ int async_io_uring_sqe_and_prep_attempt(void* async_io_uring_args_ptr){
     );
 
     io_uring_sqe_set_data(new_task_sqe, curr_io_uring_task_info);
-    increment_sqe_counter();
+    
+    uring_has_sqe = 1;
+    num_entries_to_submit++;
 
     return 0;
 }
@@ -350,16 +341,15 @@ void io_uring_recv_prep_task(struct io_uring_sqe* recv_sqe, async_io_uring_task_
     );
 }
 
-void after_io_uring_recv(void* recv_info){
-    async_io_uring_task_args* io_uring_data_ptr = (async_io_uring_task_args*)recv_info;
+void after_io_uring_recv(async_io_uring_task_args* recv_info){
     void(*recv_callback)(int, void*, size_t, void*) = 
-        (void(*)(int, void*, size_t, void*))io_uring_data_ptr->uring_task_callback;
+        (void(*)(int, void*, size_t, void*))recv_info->uring_task_callback;
 
     recv_callback(
-        io_uring_data_ptr->task_fd,
-        io_uring_data_ptr->task_array,
-        io_uring_data_ptr->return_val,
-        io_uring_data_ptr->arg
+        recv_info->task_fd,
+        recv_info->task_array,
+        recv_info->return_val,
+        recv_info->arg
     );
 }
 
@@ -397,17 +387,15 @@ void io_uring_send_prep_task(struct io_uring_sqe* send_sqe, async_io_uring_task_
     );
 }
 
-void after_io_uring_send(void* send_info){
-    async_io_uring_task_args* io_uring_data_ptr = (async_io_uring_task_args*)send_info;
-
+void after_io_uring_send(async_io_uring_task_args* send_info){
     void(*send_callback)(int, void*, size_t, void*) =
-        (void(*)(int, void*, size_t, void*))io_uring_data_ptr->uring_task_callback;
+        (void(*)(int, void*, size_t, void*))send_info->uring_task_callback;
 
     send_callback(
-        io_uring_data_ptr->task_fd,
-        io_uring_data_ptr->task_array,
-        io_uring_data_ptr->return_val,
-        io_uring_data_ptr->arg
+        send_info->task_fd,
+        send_info->task_array,
+        send_info->return_val,
+        send_info->arg
     );
 }
 
@@ -440,24 +428,22 @@ void io_uring_shutdown_prep_task(struct io_uring_sqe* shutdown_sqe, async_io_uri
     );
 }
 
-void after_io_uring_shutdown(void* shutdown_info){
-    async_io_uring_task_args* io_uring_data_ptr = (async_io_uring_task_args*)shutdown_info;
-
+void after_io_uring_shutdown(async_io_uring_task_args* shutdown_info){
     void(*shutdown_callback)(int, void*) =
-        (void(*)(int, void*))io_uring_data_ptr->uring_task_callback;
+        (void(*)(int, void*))shutdown_info->uring_task_callback;
 
     shutdown_callback(
-        io_uring_data_ptr->return_val,
-        io_uring_data_ptr->arg
+        shutdown_info->return_val,
+        shutdown_info->arg
     );
 }
 
-void async_io_uring_accept(
+void async_io_uring_accept_template(
     int accepting_fd, 
     socklen_t socklen, 
     int flags, 
     void(*accept_cb)(), 
-    void(*accept_handler)(void*),
+    void(*accept_handler)(async_io_uring_task_args*),
     void* arg
 ){
     async_io_uring_task_args accept_args = {
@@ -491,7 +477,7 @@ void async_io_uring_ipv4_accept(
     void(*ipv4_accept_callback)(int, int, char*, int, void*), 
     void* arg
 ){
-    async_io_uring_accept(
+    async_io_uring_accept_template(
         accepting_fd, 
         sizeof(struct sockaddr_in),
         flags,
@@ -501,25 +487,123 @@ void async_io_uring_ipv4_accept(
     );
 }
 
-void async_io_uring_ipv4_after_accept(void* ipv4_accept_info){
-    async_io_uring_task_args* accept_info = 
-        (async_io_uring_task_args*)ipv4_accept_info;
-
+void async_io_uring_ipv4_after_accept(async_io_uring_task_args* ipv4_accept_info){
     char ip_addr_str[INET_ADDRSTRLEN];
-    struct sockaddr_in* sockaddr_inet_ptr = &accept_info->sockaddr_type.sockaddr_inet;
+    struct sockaddr_in* sockaddr_inet_ptr = &ipv4_accept_info->sockaddr_type.sockaddr_inet;
     struct in_addr* inet_addr_ptr = &sockaddr_inet_ptr->sin_addr;
 
     //TODO: does this null terminate string?
     inet_ntop(AF_INET, inet_addr_ptr, ip_addr_str, INET_ADDRSTRLEN);
     uint32_t port = ntohl(sockaddr_inet_ptr->sin_port);
 
-    void(*ipv4_accept_callback)(int, int, char*, int, void*) = accept_info->uring_task_callback;
+    void(*ipv4_accept_callback)(int, int, char*, int, void*) = ipv4_accept_info->uring_task_callback;
     ipv4_accept_callback(
-        accept_info->task_fd,
-        accept_info->return_val,
+        ipv4_accept_info->return_val,
+        ipv4_accept_info->task_fd,
         ip_addr_str,
         port,
-        accept_info->arg
+        ipv4_accept_info->arg
+    );
+}
+
+void after_accept_handler(async_io_uring_task_args* uring_accept_args){
+    void(*accept_callback)(int, int, struct sockaddr*, void*) = 
+        (void(*)(int, int, struct sockaddr*, void*))uring_accept_args->uring_task_callback;
+
+    accept_callback(
+        uring_accept_args->return_val,
+        uring_accept_args->task_fd,
+        &uring_accept_args->sockaddr_type.sockaddr_generic,
+        uring_accept_args->arg
+    );
+}
+
+void async_io_uring_accept(
+    int accepting_fd,
+    int flags,
+    void(*accept_callback)(int, int, struct sockaddr*, void*),
+    void* arg
+){
+    async_io_uring_accept_template(
+        accepting_fd,
+        sizeof(union async_sockaddr_types),
+        flags,
+        accept_callback,
+        after_accept_handler,
+        arg
+    );
+}
+
+void async_io_uring_ipv4_connect(
+    int connecting_fd, 
+    char* ip_address, 
+    int port,
+    void(*connect_callback)(int, int, char*, int, void*),
+    void* arg
+){
+    union async_sockaddr_types sockaddr_union;
+
+    struct sockaddr_in* inet_socket = &sockaddr_union.sockaddr_inet;
+    inet_socket->sin_family = AF_INET;
+    inet_socket->sin_addr.s_addr = inet_addr(ip_address);
+    inet_socket->sin_port = htons(port);
+    
+    async_io_uring_connect(
+        connecting_fd,
+        &sockaddr_union,
+        sizeof(struct sockaddr_in),
+        after_io_uring_ipv4_connect,
+        arg
+    );
+}
+
+void async_io_uring_connect(
+    int connecting_fd, 
+    union async_sockaddr_types* sockaddr_ptr, 
+    socklen_t socket_len,
+    void(*connect_handler)(async_io_uring_task_args*),
+    void* arg
+){
+    async_io_uring_task_args connect_args = {
+        .task_fd = connecting_fd,
+        .sockaddr_type = *sockaddr_ptr,
+        .sockaddr_len = socket_len
+    };
+
+    async_io_uring_create_task(
+        &connect_args,
+        io_uring_prep_connect_task,
+        connect_handler,
+        arg
+    );
+}
+
+void io_uring_prep_connect_task(struct io_uring_sqe* sqe, async_io_uring_task_args* connect_args){
+    io_uring_prep_connect(
+        sqe,
+        connect_args->task_fd,
+        &connect_args->sockaddr_type.sockaddr_generic,
+        connect_args->sockaddr_len
+    );
+}
+
+void after_io_uring_ipv4_connect(async_io_uring_task_args* task_args){
+    void(*connect_callback)(int, int, char*, int, void*) =
+        (void(*)(int, int, char*, int, void*))task_args->uring_task_callback;
+    
+    struct sockaddr_in* inet_sockaddr = &task_args->sockaddr_type.sockaddr_inet;
+    struct in_addr* inet_addr_ptr = &inet_sockaddr->sin_addr;
+
+    //TODO: null terminate this string?
+    char ip_address[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, inet_addr_ptr, ip_address, INET_ADDRSTRLEN);
+
+    connect_callback(
+        task_args->return_val,
+        task_args->task_fd,
+        ip_address,
+        ntohs(inet_sockaddr->sin_port),
+        task_args->arg
     );
 }
 
@@ -556,13 +640,10 @@ void io_uring_prep_socket_task(struct io_uring_sqe* sqe, async_io_uring_task_arg
     );
 }
 
-void after_io_uring_socket_handler(void* socket_task_info){
-    async_io_uring_task_args* socket_result_data = 
-        (async_io_uring_task_args*)socket_task_info;
-
-    void(*socket_callback)(int, void*) = socket_result_data->uring_task_callback;
+void after_io_uring_socket_handler(async_io_uring_task_args* socket_task_info){
+    void(*socket_callback)(int, void*) = socket_task_info->uring_task_callback;
     socket_callback(
-        socket_result_data->return_val, 
-        socket_result_data->arg
+        socket_task_info->return_val, 
+        socket_task_info->arg
     );
 }

@@ -2,6 +2,7 @@
 #define ASYNC_HTTP_OUTGOING_MESSAGE_TYPE_H
 
 #include "async_http_message_template.h"
+#include "../async_tcp_module/async_tcp_socket.h"
 
 #include <stdarg.h>
 
@@ -13,7 +14,7 @@ typedef struct async_http_outgoing_message {
 
 void async_http_outgoing_message_init(
     async_http_outgoing_message* outgoing_msg,
-    async_socket* socket_ptr,
+    async_tcp_socket* socket_ptr,
     char* start_line_first_token_ptr,
     char* start_line_second_token_ptr,
     char* start_line_third_token_ptr
@@ -36,7 +37,7 @@ void async_http_outgoing_message_write(
     async_http_outgoing_message* outgoing_msg_ptr,
     void* response_data, 
     int num_bytes,
-    void (*send_callback)(void*),
+    void (*send_callback)(async_tcp_socket*, void*),
     void* arg,
     int is_terminating_msg
 );

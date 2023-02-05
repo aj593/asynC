@@ -22,7 +22,7 @@ typedef struct incoming_message_info {
 
 void async_http_incoming_message_init(
     async_http_incoming_message* incoming_msg,
-    async_socket* socket_ptr,
+    async_tcp_socket* socket_ptr,
     char* start_line_first_token_ptr,
     char* start_line_second_token_ptr,
     char* start_line_third_token_ptr
@@ -32,22 +32,22 @@ void async_http_incoming_message_destroy(async_http_incoming_message* incoming_m
 
 int double_CRLF_check_and_enqueue_parse_task(
     async_http_incoming_message* incoming_msg_ptr,
-    async_socket* read_socket,
+    async_tcp_socket* read_socket,
     async_byte_buffer* data_buffer,
-    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*),
+    void data_handler_to_remove(async_tcp_socket*, async_byte_buffer*, void*),
     void(*after_parse_task)(void*, void*),
     void* thread_cb_arg
 );
 
 int async_http_incoming_message_double_CRLF_check(
     async_http_incoming_message* incoming_msg_ptr,
-    async_socket* read_socket,
+    async_tcp_socket* read_socket,
     async_byte_buffer* new_data_buffer,
-    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*)
+    void data_handler_to_remove(async_tcp_socket*, async_byte_buffer*, void*)
 );
 
 void async_http_incoming_message_parse(void* incoming_msg_ptr_arg);
-void async_http_incoming_message_data_handler(async_socket* socket, async_byte_buffer* data, void* arg);
+void async_http_incoming_message_data_handler(async_tcp_socket* socket, async_byte_buffer* data, void* arg);
 void async_http_incoming_message_check_data(async_http_incoming_message* incoming_msg_ptr);
 
 int async_http_incoming_message_chunk_handler(
@@ -64,7 +64,8 @@ int async_http_incoming_message_process_trailers(
 );
 
 void async_http_incoming_message_on_data(
-    async_http_incoming_message* incoming_msg_ptr, 
+    async_http_incoming_message* incoming_msg_ptr,
+    void* type_arg, 
     void(*http_incoming_msg_data_callback)(async_byte_buffer*, void*), 
     void* arg, 
     int is_temp, 
@@ -77,10 +78,11 @@ void async_http_incoming_message_emit_data(
     unsigned int num_bytes
 );
 
-void incoming_msg_data_converter(void(*generic_callback)(void), void* data, void* arg);
+void incoming_msg_data_converter(void(*generic_callback)(void), void* type_arg, void* data, void* arg);
 
 void async_http_incoming_message_on_end(
     async_http_incoming_message* incoming_msg, 
+    void* type_arg,
     void(*req_end_handler)(void*), 
     void* arg, 
     int is_temp, 
@@ -88,11 +90,11 @@ void async_http_incoming_message_on_end(
 );
 
 void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_msg_info);
-void req_end_converter(void(*generic_callback)(void), void* data, void* arg);
+void req_end_converter(void(*generic_callback)(void), void* type_arg, void* data, void* arg);
 
 void async_http_incoming_message_init(
     async_http_incoming_message* incoming_msg,
-    async_socket* socket_ptr,
+    async_tcp_socket* socket_ptr,
     char* start_line_first_token_ptr,
     char* start_line_second_token_ptr,
     char* start_line_third_token_ptr
@@ -115,9 +117,9 @@ void async_http_incoming_message_destroy(async_http_incoming_message* incoming_m
 
 int double_CRLF_check_and_enqueue_parse_task(
     async_http_incoming_message* incoming_msg_ptr,
-    async_socket* read_socket,
+    async_tcp_socket* read_socket,
     async_byte_buffer* data_buffer,
-    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*),
+    void data_handler_to_remove(async_tcp_socket*, async_byte_buffer*, void*),
     void(*after_parse_task)(void*, void*),
     void* thread_cb_arg
 ){
@@ -145,9 +147,9 @@ int double_CRLF_check_and_enqueue_parse_task(
 
 int async_http_incoming_message_double_CRLF_check(
     async_http_incoming_message* incoming_message_ptr,
-    async_socket* read_socket,
+    async_tcp_socket* read_socket,
     async_byte_buffer* new_data_buffer,
-    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*)
+    void data_handler_to_remove(async_tcp_socket*, async_byte_buffer*, void*)
 ){
     if(incoming_message_ptr->found_double_CRLF){
         destroy_buffer(new_data_buffer);
@@ -182,9 +184,9 @@ int async_http_incoming_message_double_CRLF_check(
     async_byte_stream_enqueue(&incoming_message_ptr->incoming_data_stream, start_of_body_ptr, start_of_body_len, NULL, NULL);
 
     //remove "data_handler_to_remove" data handler here
-    async_socket_off_data(read_socket, data_handler_to_remove);
+    async_tcp_socket_off_data(read_socket, data_handler_to_remove);
 
-    async_socket_on_data(
+    async_tcp_socket_on_data(
         read_socket,
         async_http_incoming_message_data_handler,
         incoming_message_ptr,
@@ -243,7 +245,7 @@ void async_http_incoming_message_parse(void* incoming_msg_ptr_arg){
     incoming_msg_ptr->has_ended = 0;
 }
 
-void async_http_incoming_message_data_handler(async_socket* socket, async_byte_buffer* data, void* arg){
+void async_http_incoming_message_data_handler(async_tcp_socket* socket, async_byte_buffer* data, void* arg){
     async_http_incoming_message* incoming_msg_ptr = (async_http_incoming_message*)arg;    
 
     //TODO: need mutex lock here?
@@ -440,14 +442,14 @@ void async_http_incoming_message_parse_trailers(void* incoming_msg_arg){
     }
 }
 
-void trailer_event_converter(void(*generic_callback)(void), void* data, void* arg){
-    void(*trailer_handler)(async_util_vector*, void*) = 
-        (void(*)(async_util_vector*, void*))generic_callback;
+void trailer_event_converter(void(*generic_callback)(void), void* type_arg, void* data, void* arg){
+    void(*trailer_handler)(void*, async_util_vector*, void*) = 
+        (void(*)(void*, async_util_vector*, void*))generic_callback;
 
     async_http_incoming_message* incoming_msg_ptr = (async_http_incoming_message*)data;
     async_util_vector* trailer_vector = incoming_msg_ptr->incoming_msg_template_info.trailer_vector;
 
-    trailer_handler(trailer_vector, arg);
+    trailer_handler(type_arg, trailer_vector, arg);
 }
 
 void async_http_incoming_message_emit_trailers(async_http_incoming_message* incoming_msg_ptr){
@@ -460,6 +462,7 @@ void async_http_incoming_message_emit_trailers(async_http_incoming_message* inco
 
 void async_http_incoming_message_on_trailers(
     async_http_incoming_message* incoming_msg_ptr, 
+    void* type_arg,
     void(*trailer_handler)(async_util_vector*, void*),
     void* cb_arg,
     int is_temp_subscriber,
@@ -467,6 +470,7 @@ void async_http_incoming_message_on_trailers(
 ){
     async_event_emitter_on_event(
         &incoming_msg_ptr->incoming_msg_template_info.http_msg_event_emitter,
+        type_arg,
         async_http_incoming_message_trailers_event,
         (void(*)())trailer_handler,
         trailer_event_converter,
@@ -517,15 +521,17 @@ int async_http_incoming_message_process_trailers(
 
 void async_http_incoming_message_on_data(
     async_http_incoming_message* incoming_msg_ptr, 
-    void(*http_incoming_msg_data_callback)(async_byte_buffer*, void*), 
+    void* type_arg,
+    void(*http_incoming_msg_data_callback)(), 
     void* arg, 
     int is_temp, 
     int num_listens
 ){
     async_event_emitter_on_event(
         &incoming_msg_ptr->incoming_msg_template_info.http_msg_event_emitter,
+        type_arg,
         async_http_incoming_message_data_event,
-        (void(*)(void))http_incoming_msg_data_callback,
+        http_incoming_msg_data_callback,
         incoming_msg_data_converter,
         &incoming_msg_ptr->num_data_listeners,
         arg,
@@ -552,11 +558,13 @@ void async_http_incoming_message_emit_data(async_http_incoming_message* incoming
     incoming_msg->num_payload_bytes_read += num_bytes;
 }
 
-void incoming_msg_data_converter(void(*generic_callback)(void), void* data, void* arg){
-    void(*incoming_msg_data_handler)(async_byte_buffer*, void*) = (void(*)(async_byte_buffer*, void*))generic_callback;
+void incoming_msg_data_converter(void(*generic_callback)(void), void* type_arg, void* data, void* arg){
+    void(*incoming_msg_data_handler)(void*, async_byte_buffer*, void*) = 
+        (void(*)(void*, async_byte_buffer*, void*))generic_callback;
     incoming_message_info* curr_http_incoming_info = (incoming_message_info*)data;
     
     incoming_msg_data_handler(
+        type_arg,
         buffer_from_array(
             curr_http_incoming_info->data_ptr, 
             curr_http_incoming_info->num_bytes
@@ -565,11 +573,17 @@ void incoming_msg_data_converter(void(*generic_callback)(void), void* data, void
     );
 }
 
-void async_http_incoming_message_on_end(async_http_incoming_message* incoming_msg, void(*req_end_handler)(void*), void* arg, int is_temp, int num_listens){
+void async_http_incoming_message_on_end(
+    async_http_incoming_message* incoming_msg,
+    void* type_arg,
+    void(*req_end_handler)(), 
+    void* arg, int is_temp, int num_listens
+){
     async_event_emitter_on_event(
         &incoming_msg->incoming_msg_template_info.http_msg_event_emitter,
+        type_arg,
         async_http_incoming_message_end_event,
-        (void(*)(void))req_end_handler,
+        req_end_handler,
         req_end_converter,
         &incoming_msg->num_end_listeners,
         arg,
@@ -618,9 +632,9 @@ void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_
     async_http_incoming_message_clear(incoming_msg_info);
     async_http_message_template_clear(template_ptr);
 
-    async_socket_off_data(template_ptr->wrapped_tcp_socket, async_http_incoming_message_data_handler);
+    async_tcp_socket_off_data(template_ptr->wrapped_tcp_socket, async_http_incoming_message_data_handler);
     
-    async_socket_on_data(
+    async_tcp_socket_on_data(
         template_ptr->wrapped_tcp_socket,
         incoming_msg_info->header_data_handler,
         incoming_msg_info->header_data_handler_arg,
@@ -631,8 +645,8 @@ void async_http_incoming_message_emit_end(async_http_incoming_message* incoming_
     incoming_msg_info->has_ended = 1;
 }
 
-void req_end_converter(void(*generic_callback)(void), void* data, void* arg){
-    void(*req_end_handler)(void*) = (void(*)(void*))generic_callback;
+void req_end_converter(void(*generic_callback)(void), void* type_arg, void* data, void* arg){
+    void(*req_end_handler)(void*, void*) = (void(*)(void*, void*))generic_callback;
 
-    req_end_handler(arg);
+    req_end_handler(type_arg, arg);
 }

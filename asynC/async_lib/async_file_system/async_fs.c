@@ -59,7 +59,7 @@ void async_fs_buffer_write(int write_fd, async_byte_buffer* write_buff_ptr, size
 void async_fs_buffer_write_thread_task(void* write_task);
 void async_fs_after_buffer_write(void* buffer_write, void* arg);
 
-void async_unlink(char* filename, void(*unlink_callback)(int, void*), void* arg);
+void async_fs_unlink(char* filename, void(*unlink_callback)(int, void*), void* arg);
 void async_unlink_thread_task(void* thread_unlink_info);
 void after_async_unlink(void* unlink_data, void* arg);
 
@@ -331,7 +331,7 @@ void async_fs_after_buffer_write(void* buffer_write_info, void* arg){
     );
 }
 
-void async_unlink(char* filename, void(*unlink_callback)(int, void*), void* arg){
+void async_fs_unlink(char* filename, void(*unlink_callback)(int, void*), void* arg){
     size_t filename_length = strnlen(filename, FILENAME_MAX) + 1;
 
     async_fs_task_info unlink_info = {

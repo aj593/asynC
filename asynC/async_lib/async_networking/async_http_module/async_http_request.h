@@ -16,7 +16,7 @@ void async_outgoing_http_request_write(
     async_outgoing_http_request* writing_request, 
     void* buffer, 
     unsigned int num_bytes,
-    void(*send_callback)(void*),
+    void(*send_callback)(async_tcp_socket*, void*),
     void* arg
 );
 
@@ -37,7 +37,7 @@ void async_http_request_set_method_and_url(async_outgoing_http_request* http_req
 
 void async_http_incoming_response_on_data(
     async_http_incoming_response* response_ptr,
-    void(*incoming_response_data_handler)(async_byte_buffer*, void*),
+    void(*incoming_response_data_handler)(async_http_incoming_response*, async_byte_buffer*, void*),
     void* cb_arg,
     int is_temp,
     int num_times_listen

@@ -51,10 +51,9 @@ typedef struct connect_attempt_info {
 void response_data_emit_data(async_http_incoming_response* res, async_byte_buffer* curr_buffer);
 void http_parse_response_task(void* arg);
 void after_http_parse_response(void* parse_data, void* cb_arg);
-//void response_data_handler(async_socket*, async_byte_buffer*, void*);
 void async_http_outgoing_request_write_head(async_outgoing_http_request* outgoing_request_ptr);
 void after_request_dns_callback(char** ip_list, int num_ips, void * arg);
-void http_request_connection_handler(async_socket* newly_connected_socket, void* arg);
+void http_request_connection_handler(async_tcp_socket* newly_connected_socket, void* arg);
 
 void async_http_request_options_init(http_request_options* http_options_ptr){
     
@@ -81,7 +80,7 @@ void async_http_request_options_destroy(http_request_options* http_options_ptr){
         //TODO: fix this when more options added?
     }
 
-    async_socket* new_socket = async_socket_create();
+    async_tcp_socket* new_socket = async_tcp_socket_create(NULL, 0);
     if(new_socket == NULL){
         return;
     }
@@ -106,7 +105,7 @@ void async_http_outgoing_request_destroy(async_outgoing_http_request* http_reque
     async_http_outgoing_message_destroy(&http_request_to_destroy->outgoing_message_info);
 }
 
-void incoming_response_init(async_http_incoming_response* new_response, async_socket* socket_ptr){
+void incoming_response_init(async_http_incoming_response* new_response, async_tcp_socket* socket_ptr){
     async_http_message_template* template_msg_ptr = &new_response->incoming_response.incoming_msg_template_info;
 
     async_http_incoming_message_init(
@@ -142,7 +141,7 @@ void async_outgoing_http_request_write(
     async_outgoing_http_request* writing_request, 
     void* buffer, 
     unsigned int num_bytes,
-    void(*send_callback)(void*),
+    void(*send_callback)(async_tcp_socket*, void*),
     void* arg
 ){
     if(!writing_request->outgoing_message_info.was_header_written){
@@ -292,7 +291,7 @@ void after_request_dns_callback(char** ip_list, int num_ips, void* arg){
     new_connect_info->curr_index = 0;
 
     //TODO: write http info here instead of in http_request_connection_handler?
-    /*async_socket* new_socket = */async_tcp_connect(
+    /*async_tcp_socket* new_socket = */async_tcp_socket_connect(
         new_connect_info->http_request_info->outgoing_message_info.incoming_msg_template_info.wrapped_tcp_socket,
         new_connect_info->ip_list[new_connect_info->curr_index++],
         new_connect_info->http_request_info->connecting_port,
@@ -303,12 +302,12 @@ void after_request_dns_callback(char** ip_list, int num_ips, void* arg){
     //TODO: make and use error handler for socket here
 }
 
-void socket_data_handler(async_socket*, async_byte_buffer*, void*);
+void socket_data_handler(async_tcp_socket*, async_byte_buffer*, void*);
 
 void client_http_request_finish_handler(void*);
 int client_http_request_event_checker(void*);
 
-void socket_close_handler(async_socket* socket, int success, void* arg){
+void socket_close_handler(async_tcp_socket* socket, int success, void* arg){
     client_side_http_transaction_info* transaction_info =
         (client_side_http_transaction_info*)arg;
     
@@ -323,7 +322,7 @@ void socket_close_handler(async_socket* socket, int success, void* arg){
     free(transaction_info->request_info);
 }
 
-void http_request_connection_handler(async_socket* newly_connected_socket, void* arg){
+void http_request_connection_handler(async_tcp_socket* newly_connected_socket, void* arg){
     connect_attempt_info* connect_info = (connect_attempt_info*)arg;
     async_outgoing_http_request* request_info = connect_info->http_request_info;
     free(connect_info->ip_list);
@@ -340,9 +339,7 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
     event_node* new_http_transaction_node = 
         async_event_loop_create_new_bound_event(
             &transaction_info,
-            sizeof(client_side_http_transaction_info),
-            client_http_request_event_checker,
-            client_http_request_finish_handler
+            sizeof(client_side_http_transaction_info)
         );
 
     async_http_incoming_message* incoming_msg_ptr = 
@@ -352,26 +349,11 @@ void http_request_connection_handler(async_socket* newly_connected_socket, void*
 
     request_info->request_node = new_http_transaction_node;
 
-    async_socket_on_data(newly_connected_socket, socket_data_handler, new_http_transaction_node->data_ptr, 0, 0);
-    async_socket_on_close(newly_connected_socket, socket_close_handler, new_http_transaction_node->data_ptr, 0, 0);
+    async_tcp_socket_on_data(newly_connected_socket, socket_data_handler, new_http_transaction_node->data_ptr, 0, 0);
+    async_tcp_socket_on_close(newly_connected_socket, socket_close_handler, new_http_transaction_node->data_ptr, 0, 0);
 }
 
-int client_http_request_event_checker(void* client_http_transaction_node_info){
-    client_side_http_transaction_info* http_info = 
-        (client_side_http_transaction_info*)client_http_transaction_node_info;
-
-    return http_info->request_info->is_socket_closed;
-}
-
-void client_http_request_finish_handler(void* finished_http_request_info){
-    client_side_http_transaction_info* ending_http_info = 
-        (client_side_http_transaction_info*)finished_http_request_info;
-
-    async_http_outgoing_request_destroy(ending_http_info->request_info);
-    async_http_incoming_response_destroy(ending_http_info->response_info);
-}
-
-void socket_data_handler(async_socket* socket, async_byte_buffer* data_buffer, void* arg){
+void socket_data_handler(async_tcp_socket* socket, async_byte_buffer* data_buffer, void* arg){
     client_side_http_transaction_info* client_http_info = (client_side_http_transaction_info*)arg;
 
     int CRLF_check_and_parse_attempt_ret = 
@@ -407,13 +389,14 @@ void after_http_parse_response(void* parser_data, void* arg){
 
 void async_http_incoming_response_on_data(
     async_http_incoming_response* response_ptr,
-    void(*incoming_response_data_handler)(async_byte_buffer*, void*),
+    void(*incoming_response_data_handler)(async_http_incoming_response*, async_byte_buffer*, void*),
     void* cb_arg,
     int is_temp,
     int num_times_listen
 ){
     async_http_incoming_message_on_data(
         &response_ptr->incoming_response,
+        response_ptr,
         incoming_response_data_handler,
         cb_arg,
         is_temp,
@@ -430,6 +413,7 @@ void async_http_incoming_response_on_end(
 ){
     async_http_incoming_message_on_end(
         &response_ptr->incoming_response,
+        response_ptr,
         incoming_response_end_handler,
         cb_arg,
         is_temp,

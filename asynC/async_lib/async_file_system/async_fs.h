@@ -53,7 +53,7 @@ void async_fs_buffer_write(
     void* cb_arg
 );
 
-void async_unlink(char* filename, void(*unlink_callback)(int, void*), void* arg);
+void async_fs_unlink(char* filename, void(*unlink_callback)(int, void*), void* arg);
 
 /*
 void async_chmod(char* filename, mode_t mode, void(*chmod_callback)(int, void*), void* cb_arg);

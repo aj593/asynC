@@ -2,6 +2,7 @@
 #define ASYNC_HTTP_SERVER_LIB_H
 
 #include "../../../util/async_byte_buffer.h"
+#include "../async_tcp_module/async_tcp_socket.h"
 
 typedef struct async_http_server async_http_server;
 typedef struct async_http_server_request async_http_server_request;
@@ -11,8 +12,8 @@ async_http_server* async_create_http_server(void);
 
 void async_http_server_listen(
     async_http_server* listening_server, 
-    int port, 
     char* ip_address, 
+    int port, 
     void(*http_listen_callback)(async_http_server*, void*), 
     void* arg
 );
@@ -34,7 +35,7 @@ char* async_http_server_request_http_version(async_http_server_request* http_req
 
 void async_http_server_request_on_data(
     async_http_server_request* incoming_request,
-    void(*request_data_handler)(async_byte_buffer*, void*),
+    void(*request_data_handler)(async_http_server_request*, async_byte_buffer*, void*),
     void* cb_arg,
     int is_temp,
     int num_times_listen
@@ -58,7 +59,7 @@ void async_http_server_response_write(
     async_http_server_response* curr_http_response, 
     void* response_data, 
     unsigned int num_bytes, 
-    void (*send_callback)(void*),
+    void (*send_callback)(async_tcp_socket*, void*),
     void* arg
 );
 

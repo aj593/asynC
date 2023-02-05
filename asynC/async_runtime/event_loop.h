@@ -14,9 +14,6 @@ typedef struct async_queue_task {
     void* arg;
 } async_queue_task;
 
-//put this here so event_emitter can use this
-//hash_table* subscriber_hash_table; //TODO: put this in a different file?
-
 void asynC_init();
 void asynC_cleanup();
 
@@ -27,18 +24,7 @@ int future_task_queue_enqueue(int(*queue_task)(void*), void* arg);
 size_t min_value(size_t integer_array[], size_t num_entries);
 size_t min(size_t num1, size_t num2);
 
-event_node* async_event_loop_create_new_bound_event(
-    void* copy_data,
-    size_t data_size,
-    int(*task_checker)(void*),
-    void(*after_task_handler)(void*)
-);
-
-event_node* async_event_loop_create_new_unbound_event(
-    void* copy_data,
-    size_t data_size,
-    int(*task_checker)(void*),
-    void(*after_task_handler)(void*)
-);
+event_node* async_event_loop_create_new_bound_event(void* copy_data, size_t data_size);
+event_node* async_event_loop_create_new_unbound_event(void* copy_data, size_t data_size);
 
 #endif

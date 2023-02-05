@@ -4,6 +4,8 @@
 #include "../async_lib/async_file_system/async_fs.h"
 #include "../util/async_byte_buffer.h"
 
+#include <sys/socket.h>
+
 void io_uring_init(void);
 void io_uring_exit(void);
 
@@ -34,6 +36,21 @@ void async_io_uring_shutdown(
     int shutdown_flags,
     void(*shutdown_callback)(int, void*),
     void* cb_arg
+);
+
+void async_io_uring_ipv4_connect(
+    int connecting_fd, 
+    char* ip_address, 
+    int port,
+    void(*connect_callback)(int, int, char*, int, void*),
+    void* arg
+);
+
+void async_io_uring_accept(
+    int accepting_fd,
+    int flags,
+    void(*accept_callback)(int, int, struct sockaddr*, void*),
+    void* arg
 );
 
 void async_io_uring_ipv4_accept(

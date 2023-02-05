@@ -4,6 +4,7 @@
 #include "../../../util/async_byte_buffer.h"
 #include "../async_network_template/async_socket.h"
 #include "../../../util/async_util_hash_map.h"
+#include "../async_tcp_module/async_tcp_socket.h"
 
 #include <stddef.h>
 
@@ -65,7 +66,7 @@ enum async_http_methods {
 
 typedef struct async_http_message_template {
     async_util_hash_map header_map;
-    async_socket* wrapped_tcp_socket;
+    async_tcp_socket* wrapped_tcp_socket;
     size_t content_length;
     async_event_emitter http_msg_event_emitter;
     int is_chunked;
@@ -85,7 +86,7 @@ typedef struct async_http_message_template {
 
 void async_http_message_template_init(
     async_http_message_template* msg_template_ptr,
-    async_socket* socket_ptr,
+    async_tcp_socket* socket_ptr,
     char* start_line_first_token_ptr,
     char* start_line_second_token_ptr,
     char* start_line_third_token_ptr

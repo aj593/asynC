@@ -79,7 +79,7 @@ char* async_http_method_enum_find(enum async_http_methods curr_method){
 
 void async_http_message_template_init(
     async_http_message_template* msg_template_ptr,
-    async_socket* socket_ptr,
+    async_tcp_socket* socket_ptr,
     char* start_line_first_token_ptr,
     char* start_line_second_token_ptr,
     char* start_line_third_token_ptr

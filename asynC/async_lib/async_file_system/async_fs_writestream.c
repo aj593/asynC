@@ -112,9 +112,7 @@ void after_writestream_open(int new_writestream_fd, void* writestream_ptr){
     fs_writestream_ptr->writestream_node = 
         async_event_loop_create_new_unbound_event(
             &writestream_ptr_info,
-            sizeof(fs_writestream_info),
-            is_writestream_done,
-            writestream_finish_handler
+            sizeof(fs_writestream_info)
         );
 
     //TODO: check for queueable condition here even though it was set to 1 above?
@@ -205,26 +203,6 @@ void after_writestream_close(int err, void* writestream_cb_arg){
     pthread_mutex_destroy(&closed_writestream->buffer_stream_lock);
 
     free(closed_writestream);
-}
-
-int is_writestream_done(void* writestream_info){
-    fs_writestream_info* writestream_ptr = (fs_writestream_info*)writestream_info;
-    async_fs_writestream* writestream = writestream_ptr->writestream_info;
-
-    return writestream->is_done;
-}
-
-void writestream_finish_handler(void* writestream_info){
-    //TODO: destroy and close writestream here?
-    fs_writestream_info* destroyed_writestream_ptr = (fs_writestream_info*)writestream_info;
-    async_fs_writestream* closing_writestream_ptr = destroyed_writestream_ptr->writestream_info;
-    
-    //TODO: destroy internal writestream data structure here
-
-    async_byte_stream_destroy(&closing_writestream_ptr->writestream);
-    pthread_mutex_destroy(&closing_writestream_ptr->buffer_stream_lock);
-
-    free(closing_writestream_ptr);
 }
 
 void async_fs_writestream_end(async_fs_writestream* ending_writestream){

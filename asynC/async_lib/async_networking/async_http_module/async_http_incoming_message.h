@@ -26,13 +26,13 @@ typedef struct async_http_incoming_message {
 
     int has_ended;
 
-    void(*header_data_handler)(async_socket*, async_byte_buffer*, void*);
+    void(*header_data_handler)(async_tcp_socket*, async_byte_buffer*, void*);
     void* header_data_handler_arg;
 } async_http_incoming_message;
 
 void async_http_incoming_message_init(
     async_http_incoming_message* incoming_msg,
-    async_socket* socket_ptr,
+    async_tcp_socket* socket_ptr,
     char* start_line_first_token_ptr,
     char* start_line_second_token_ptr,
     char* start_line_third_token_ptr
@@ -42,24 +42,26 @@ void async_http_incoming_message_destroy(async_http_incoming_message* incoming_m
 
 int double_CRLF_check_and_enqueue_parse_task(
     async_http_incoming_message* incoming_msg_ptr,
-    async_socket* read_socket,
+    async_tcp_socket* read_socket,
     async_byte_buffer* data_buffer,
-    void data_handler_to_remove(async_socket*, async_byte_buffer*, void*),
+    void data_handler_to_remove(async_tcp_socket*, async_byte_buffer*, void*),
     void(*after_parse_task)(void*, void*),
     void* thread_cb_arg
 );
 
 void async_http_incoming_message_on_data(
-    async_http_incoming_message* incoming_msg_ptr, 
-    void(*http_incoming_msg_data_callback)(async_byte_buffer*, void*), 
+    async_http_incoming_message* incoming_msg_ptr,
+    void* type_arg, 
+    void(*http_incoming_msg_data_callback)(), 
     void* arg, 
     int is_temp, 
     int num_listens
 );
 
 void async_http_incoming_message_on_end(
-    async_http_incoming_message* incoming_msg, 
-    void(*req_end_handler)(void*), 
+    async_http_incoming_message* incoming_msg,
+    void* type_arg, 
+    void(*req_end_handler)(), 
     void* arg, 
     int is_temp, 
     int num_listens

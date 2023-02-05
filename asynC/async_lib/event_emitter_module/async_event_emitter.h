@@ -12,9 +12,10 @@ void async_event_emitter_destroy(async_event_emitter* event_emitter_ptr);
 
 void async_event_emitter_on_event(
     async_event_emitter* event_emitter,
+    void* type_arg,
     int curr_event,
     void(*generic_callback)(),
-    void (*curr_event_converter)(void(*)(void), void*, void*),
+    void (*curr_event_converter)(void(*)(), void*, void*, void*),
     unsigned int* num_listeners_ptr,
     void* arg,
     int is_temp_subscriber,

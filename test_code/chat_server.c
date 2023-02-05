@@ -86,16 +86,17 @@ void write_callback(async_socket* written_socket, int num){
 int port = 3000;
 
 void listen_callback(async_tcp_server* tcp_server, void* arg){
-    printf("listening on port %d\n", port);
+    async_inet_address* address = async_tcp_server_address(tcp_server);
+    printf("listening on address %s and port %d\n", address->ip_address, address->port);
 }
 
-void chat_data_handler(async_socket*, async_byte_buffer* chat_data, void* arg);
+void chat_data_handler(async_tcp_socket*, async_byte_buffer* chat_data, void* arg);
 
 #define max_num_sockets 10
-async_socket* socket_array[max_num_sockets];
+async_tcp_socket* socket_array[max_num_sockets];
 int curr_num_sockets = 0;
 
-void socket_end_callback(async_socket* closed_socket, int shutdown_return_val, void* arg){
+void socket_end_callback(async_tcp_socket* closed_socket, int shutdown_return_val, void* arg){
     for(int i = 0; i < curr_num_sockets; i++){
         if(socket_array[i] == closed_socket){
             for(int j = i; j < curr_num_sockets - 1; j++){
@@ -112,11 +113,15 @@ void socket_end_callback(async_socket* closed_socket, int shutdown_return_val, v
 
 async_tcp_server* new_server;
 
-void chat_connection_handler(async_socket* new_socket, void* arg){
+void chat_connection_handler(async_tcp_server* server, async_tcp_socket* new_socket, void* arg){
     printf("got new connection!\n");
+
+    async_inet_address* address = async_tcp_server_address(server);
+    printf("listening on address %s and port %d\n", address->ip_address, address->port);
+
     socket_array[curr_num_sockets++] = new_socket;
-    async_socket_on_data(new_socket, chat_data_handler, NULL, 0 , 0);
-    async_socket_on_end(new_socket, socket_end_callback, NULL, 0, 0);
+    async_tcp_socket_on_data(new_socket, chat_data_handler, NULL, 0 , 0);
+    async_tcp_socket_on_end(new_socket, socket_end_callback, NULL, 0, 0);
     //async_server_close(new_server);
     /*
     if(new_server->num_connections == 3){
@@ -126,13 +131,13 @@ void chat_connection_handler(async_socket* new_socket, void* arg){
     */
 }
 
-void chat_data_handler(async_socket* reading_socket, async_byte_buffer* chat_data, void* arg){
+void chat_data_handler(async_tcp_socket* reading_socket, async_byte_buffer* chat_data, void* arg){
     char* internal_buffer = (char*)get_internal_buffer(chat_data);
     write(STDOUT_FILENO, internal_buffer, get_buffer_capacity(chat_data));
 
     for(int i = 0; i < curr_num_sockets; i++){
         if(socket_array[i] != reading_socket){
-            async_socket_write(
+            async_tcp_socket_write(
                 socket_array[i], 
                 internal_buffer, 
                 get_buffer_capacity(chat_data),
@@ -151,8 +156,8 @@ int main(int argc, char* argv[]){
     //127.0.0.1
     //192.168.1.195
     new_server = async_tcp_server_create();
-    async_tcp_server_listen(new_server, port, "127.0.0.1", listen_callback, NULL);
-    async_server_on_connection(new_server, chat_connection_handler, NULL, 0, 0);
+    async_tcp_server_listen(new_server, "127.0.0.1", port, listen_callback, NULL);
+    async_tcp_server_on_connection(new_server, chat_connection_handler, NULL, 0, 0);
 
     asynC_cleanup();
 

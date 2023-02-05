@@ -1,5 +1,8 @@
 #include "async_ipc_server.h"
 
+#include "../../async_file_system/async_fs.h"
+#include "../async_net.h"
+
 #include <sys/un.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -10,71 +13,121 @@
 
 #include <stdio.h>
 
-void ipc_server_listen(void* ipc_listen_task);
-void ipc_server_accept(void* ipc_accept_task);
+typedef struct async_ipc_server {
+    async_server wrapped_server;
+    char server_path[MAX_SOCKET_NAME_LEN];
+} async_ipc_server;
 
-async_server* async_ipc_server_create(void){
-    return async_create_server(ipc_server_listen, ipc_server_accept);
+void after_ipc_server_socket(int socket_fd, void* arg);
+void after_unlink(int, void*);
+void ipc_server_bind_callback(int, int, char*, void*);
+
+async_ipc_server* async_ipc_server_create(void){
+    async_ipc_server* ipc_server = calloc(1, sizeof(async_ipc_server));
+
+    async_server_init(
+        &ipc_server->wrapped_server,
+        ipc_server,
+        async_ipc_socket_create_return_wrapped_socket
+    );
+
+    return ipc_server;
 }
 
-void async_ipc_server_listen(async_server* listening_ipc_server, char* socket_server_path, void(*listen_callback)(async_server*, void*), void* arg){
-    async_listen_info ipc_listen_info;
-    strncpy(ipc_listen_info.socket_path, socket_server_path, MAX_SOCKET_NAME_LEN);
-
-    async_server_listen(
-        listening_ipc_server,
-        &ipc_listen_info,
+void async_ipc_server_listen(
+    async_ipc_server* listening_ipc_server,
+    char* local_address,
+    void(*listen_callback)(async_ipc_server*, void*),
+    void* arg
+){
+    async_server_listen_init_template(
+        &listening_ipc_server->wrapped_server,
         listen_callback,
-        arg
+        arg,
+        AF_UNIX,
+        SOCK_STREAM,
+        0,
+        after_ipc_server_socket,
+        listening_ipc_server
+    );
+
+    strncpy(
+        listening_ipc_server->server_path,
+        local_address,
+        MAX_SOCKET_NAME_LEN
     );
 }
 
-void ipc_server_listen(void* ipc_listen_task){
-    async_listen_info* ipc_listen_info = (async_listen_info*)ipc_listen_task;
-    async_server* new_listening_server = ipc_listen_info->listening_server;
+void after_ipc_server_socket(int socket_fd, void* arg){
+    async_ipc_server* ipc_server = (async_ipc_server*)arg;
+    ipc_server->wrapped_server.listening_socket = socket_fd;
 
-    async_server_set_listening_socket(new_listening_server, socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0));
-    int new_socket = async_server_get_listening_socket(new_listening_server);
-
-    if(new_socket == -1){
-        perror("socket()");
-    }
-    
-    struct sockaddr_un server_sockaddr;
-    server_sockaddr.sun_family = AF_UNIX;   
-    strncpy(server_sockaddr.sun_path, ipc_listen_info->socket_path, MAX_SOCKET_NAME_LEN); 
-    socklen_t struct_len = sizeof(server_sockaddr);
-    
-    unlink(server_sockaddr.sun_path);
-    int ret = bind(new_socket, (struct sockaddr *)&server_sockaddr, struct_len);
-    if (ret == -1){
-        perror("bind()");
-        close(new_socket);
-    }
-    
-    ret = listen(new_socket, MAX_BACKLOG_COUNT);
-    if (ret == -1){ 
-        perror("listen()");
-        close(new_socket);
-    }
-
-    //new_listening_server->is_listening = 1;
+    async_fs_unlink(
+        ipc_server->server_path,
+        after_unlink,
+        ipc_server
+    );
 }
 
-void ipc_server_accept(void* ipc_accept_task){
-    //async_accept_info* ipc_accept_info_ptr = (async_accept_info*)ipc_accept_task;
-    async_server* ipc_server_ptr = *(async_server**)ipc_accept_task;
+void after_unlink(int return_val, void* arg){
+    async_ipc_server* ipc_server = (async_ipc_server*)arg;
 
-    struct sockaddr_un client_sockaddr;
-    socklen_t sock_info_len = sizeof(client_sockaddr);
-
-    int new_socket_fd = accept(
-        async_server_get_listening_socket(ipc_server_ptr),
-        (struct sockaddr*)&client_sockaddr,
-        &sock_info_len
+    async_net_ipc_bind(
+        ipc_server->wrapped_server.listening_socket,
+        ipc_server->server_path,
+        ipc_server_bind_callback,
+        ipc_server
     );
+}
 
-    async_server_set_newly_accepted_socket(ipc_server_ptr, new_socket_fd);
+void ipc_server_bind_callback(int result_val, int socket_fd, char* binded_name, void* arg){
+    async_ipc_server* ipc_server = (async_ipc_server*)arg;
 
-    //TODO: use getpeername()?
+    async_server_listen(&ipc_server->wrapped_server);
+}
+
+char* async_ipc_server_name(async_ipc_server* ipc_server){
+    return ipc_server->server_path;
+}
+
+void async_ipc_server_on_listen(
+    async_ipc_server* ipc_server,
+    void(*listen_handler)(async_ipc_server*, void*),
+    void* arg,
+    int is_temp_subscriber,
+    int num_listens
+){
+    async_server_on_listen(
+        &ipc_server->wrapped_server,
+        ipc_server,
+        listen_handler,
+        arg,
+        is_temp_subscriber,
+        num_listens
+    );
+}
+
+void async_ipc_server_on_connection(
+    async_ipc_server* ipc_server,
+    void(*ipc_connection_handler)(async_ipc_server*, async_ipc_socket*, void*),
+    void* arg,
+    int is_temp_subscriber,
+    int num_listens
+){
+    async_server_on_connection(
+        &ipc_server->wrapped_server,
+        ipc_server,
+        ipc_connection_handler,
+        arg,
+        is_temp_subscriber,
+        num_listens
+    );
+}
+
+int async_ipc_server_num_connections(async_ipc_server* ipc_server){
+    return ipc_server->wrapped_server.num_connections;
+}
+
+void async_ipc_server_close(async_ipc_server* ipc_server){
+    async_server_close(&ipc_server->wrapped_server);
 }

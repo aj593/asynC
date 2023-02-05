@@ -10,12 +10,14 @@ typedef struct event_emitter_handler {
     int curr_event;
     void(*generic_callback)();
     void* curr_arg;
+    
+    void* type_arg;
 
     int is_new_subscriber;
     int is_temp_subscriber;
     unsigned int num_listens_left;
     
-    void (*curr_event_converter)(void(*)(void), void*, void*);
+    void (*curr_event_converter)(void(*)(void), void*, void*, void*);
     unsigned int* num_listeners_ptr;
 } event_emitter_handler;
 
@@ -29,9 +31,10 @@ void async_event_emitter_destroy(async_event_emitter* event_emitter_ptr){
 
 void async_event_emitter_on_event(
     async_event_emitter* event_emitter,
+    void* type_arg,
     int curr_event,
     void(*generic_callback)(),
-    void (*curr_event_converter)(void(*)(), void*, void*),
+    void (*curr_event_converter)(void(*)(), void*, void*, void*),
     unsigned int* num_listeners_ptr,
     void* arg,
     int is_temp_subscriber,
@@ -43,6 +46,7 @@ void async_event_emitter_on_event(
 
     event_emitter_handler new_event_emitter_handler = {
         .curr_event = curr_event,
+        .type_arg = type_arg,
         .generic_callback = generic_callback,
         .curr_event_converter = curr_event_converter,
         .num_listeners_ptr = num_listeners_ptr,
@@ -111,6 +115,7 @@ void async_event_emitter_emit_event(
 
         curr_event_handler.curr_event_converter(
             curr_event_handler.generic_callback,
+            curr_event_handler.type_arg,
             data,
             curr_event_handler.curr_arg
         );

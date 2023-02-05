@@ -45,6 +45,7 @@ pthread_mutex_t finished_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 void* task_waiter(void* arg);
 void enqueue_task(event_node* task);
 void defer_enqueue_task(event_node* task);
+void after_task_finished(void* thread_event);
 
 /*
 int is_defer_queue_empty(){
@@ -81,7 +82,7 @@ void thread_pool_event_handler(event_node* thread_pool_node, uint32_t events){
         event_node* finished_task_node = remove_first(&finished_queue);
         pthread_mutex_unlock(&finished_queue_mutex);
 
-        finished_task_node->callback_handler(finished_task_node->data_ptr);
+        after_task_finished(finished_task_node->data_ptr);
         destroy_event_node(finished_task_node);
     }
 }
@@ -94,9 +95,7 @@ void thread_pool_init(void){
     event_node* thread_pool_node = 
         async_event_loop_create_new_unbound_event(
             &num_event_tasks_done_fd, 
-            sizeof(num_event_tasks_done_fd), 
-            placeholder, 
-            NULL
+            sizeof(num_event_tasks_done_fd)
         );
 
     epoll_add(num_event_tasks_done_fd, thread_pool_node, EPOLLIN);
@@ -117,7 +116,7 @@ void thread_pool_init(void){
 //TODO: is this best way to destroy threads?
 void thread_pool_destroy(void){
     for(int i = 0; i < NUM_THREADS; i++){
-        event_node* thread_term_node = create_event_node(sizeof(task_block), NULL, NULL); //TODO: use create_task_node instead eventually?
+        event_node* thread_term_node = create_event_node(sizeof(task_block)); //TODO: use create_task_node instead eventually?
         task_block* destroy_task = (task_block*)thread_term_node->data_ptr;
         destroy_task->task_type = TERM_FLAG;
         enqueue_task(thread_term_node);
@@ -128,13 +127,6 @@ void thread_pool_destroy(void){
     }
 
     close(num_event_tasks_done_fd);
-}
-
-int is_thread_task_done(void* thread_task){
-    task_block* thread_task_block = (task_block*)thread_task;
-    //*event_index_ptr = thread_task->fs_index;
-
-    return thread_task_block->is_done;
 }
 
 void after_task_finished(void* thread_event){
@@ -184,9 +176,6 @@ void* async_thread_pool_create_task_copied(
     if(thread_task_data != NULL){
         memcpy(curr_task_block->async_task_info, thread_task_data, thread_task_size);
     }
-
-    event_queue_node->event_checker = is_thread_task_done;
-    event_queue_node->callback_handler = after_task_finished;
 
     event_queue_node->data_ptr = curr_task_block;
     thread_task_node->data_ptr = curr_task_block;
