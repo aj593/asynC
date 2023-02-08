@@ -107,7 +107,7 @@ void read_chat_input(async_socket* socket_ptr){
 }
 */
 
-void chat_data_handler(async_socket* data_socket, async_byte_buffer* chat_buffer, void* arg){
+void chat_data_handler(async_tcp_socket* data_socket, async_byte_buffer* chat_buffer, void* arg){
     write(
         STDOUT_FILENO,
         get_internal_buffer(chat_buffer),
@@ -117,10 +117,10 @@ void chat_data_handler(async_socket* data_socket, async_byte_buffer* chat_buffer
     destroy_buffer(chat_buffer);
 }
 
-void chat_connection_handler(async_socket* socket, void* arg){
+void chat_connection_handler(async_tcp_socket* socket, void* arg){
     printf("client connected!\n");
     //async_socket_end(socket);
-    async_socket_on_data(socket, chat_data_handler, NULL, 0, 0);
+    async_tcp_socket_on_data(socket, chat_data_handler, NULL, 0, 0);
 
     //char mary[] = "mary had a little lamb as white as snow\n";
     //async_byte_buffer* mary_buffer = buffer_from_array(mary, sizeof(mary));
@@ -145,7 +145,7 @@ async_byte_buffer* read_and_make_buffer(){
 }
 
 void* chat_input(void* arg){
-    async_socket* new_socket = (async_socket*)arg;
+    async_tcp_socket* new_socket = (async_tcp_socket*)arg;
     
     int max_num_bytes = 1000;
     char stdin_buffer[max_num_bytes];
@@ -155,7 +155,7 @@ void* chat_input(void* arg){
         
         if(strncmp(stdin_buffer, "exit", num_bytes_read - 1) == 0){
             char mary[] = "mary had a little lamb as white as snow\n";
-            async_socket_write(
+            async_tcp_socket_write(
                 new_socket, 
                 mary, 
                 sizeof(mary) - 1, 
@@ -163,7 +163,7 @@ void* chat_input(void* arg){
                 NULL
             );
 
-            async_socket_end(new_socket);
+            async_tcp_socket_end(new_socket);
             //destroy_buffer(mary_buffer);
 
             break;
@@ -171,7 +171,7 @@ void* chat_input(void* arg){
 
         async_byte_buffer* send_buffer = buffer_from_array(stdin_buffer, num_bytes_read);
 
-        async_socket_write(
+        async_tcp_socket_write(
             new_socket, 
             stdin_buffer, 
             num_bytes_read, 
@@ -191,10 +191,10 @@ void* chat_input(void* arg){
 int main(int argc, char* argv[]){
     asynC_init();
 
-    async_socket* new_socket = async_tcp_create_connection("127.0.0.1", 3000, chat_connection_handler, NULL);
+    async_tcp_socket* new_socket = async_tcp_create_connection("127.0.0.1", 3000, chat_connection_handler, NULL);
     int arr_len = 2;
     char hi_array[] = "hi";
-    async_socket_write(new_socket, hi_array, sizeof(hi_array) - 1, NULL, NULL);
+    async_tcp_socket_write(new_socket, hi_array, sizeof(hi_array) - 1, NULL, NULL);
     //async_socket_on_data()
 
     pthread_t thread_id;

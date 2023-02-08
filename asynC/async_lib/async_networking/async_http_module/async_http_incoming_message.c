@@ -463,7 +463,7 @@ void async_http_incoming_message_emit_trailers(async_http_incoming_message* inco
 void async_http_incoming_message_on_trailers(
     async_http_incoming_message* incoming_msg_ptr, 
     void* type_arg,
-    void(*trailer_handler)(async_util_vector*, void*),
+    void(*trailer_handler)(),
     void* cb_arg,
     int is_temp_subscriber,
     int num_times_listen

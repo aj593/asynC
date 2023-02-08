@@ -16,11 +16,12 @@ typedef struct async_server async_server;
 
 typedef struct async_socket {
     int socket_fd;
-    //int domain;
-    //int type;
-    //int protocol;
+    int domain;
+    int type;
+    int protocol;
     int is_open;
     async_byte_stream socket_send_stream;
+    async_util_linked_list buffer_list;
     atomic_int is_reading;
     atomic_int is_writing;
     atomic_int is_flowing;
@@ -43,6 +44,7 @@ typedef struct async_socket {
     void* upper_socket_ptr;
 } async_socket;
 
+/*
 typedef struct connect_info {
     async_socket* connecting_socket;
     char ip_address[MAX_IP_STR_LEN];
@@ -52,14 +54,21 @@ typedef struct connect_info {
     int socket_fd;
     void* custom_data;
 } async_connect_info;
+*/
+
+typedef struct socket_info {
+    async_socket* socket;
+} socket_info;
 
 //typedef struct socket_channel async_socket;
 //async_socket* async_socket_create(int domain, int type, int protocol);
 async_socket* create_socket_node(
     async_socket*(*socket_creator)(struct sockaddr*),
     struct sockaddr* sockaddr_ptr,
-    async_socket* new_socket_dbl_ptr, 
-    int new_socket_fd
+    async_socket* new_socket, 
+    int new_socket_fd,
+    void (*custom_socket_event_handler)(event_node*, uint32_t),
+    uint32_t events
 );
 
 void async_socket_on_connection(
@@ -96,10 +105,11 @@ void async_socket_off_data(async_socket* reading_socket, void(*data_handler)());
 
 async_socket* async_socket_connect(
     async_socket* connecting_socket,
+    void* type_arg,
     int domain,
     int type,
     int protocol,
-    void(*after_socket_callback)(int, void*),
+    void(*after_socket_callback)(int, int, void*),
     void* socket_callback_arg,
     void(*connection_handler)(),
     void* connection_arg

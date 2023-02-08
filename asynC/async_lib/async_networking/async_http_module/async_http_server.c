@@ -103,6 +103,12 @@ char* async_http_server_request_url(async_http_server_request* http_req);
 char* async_http_server_request_http_version(async_http_server_request* http_req);
 char* async_http_server_request_get(async_http_server_request* http_req, char* header_key_name);
 
+void async_http_server_on_connection(
+    async_http_server* listening_http_server,
+    void(*http_connection_callback)(async_http_server*, async_tcp_socket*, void*),
+    void* arg, int is_temp_subscriber, int num_times_listen
+);
+
 void async_http_server_listen(
     async_http_server* listening_server, 
     char* ip_address, 
@@ -185,6 +191,10 @@ async_http_server* async_create_http_server(void){
     new_http_server->request_timeout = 60.0f;
 
     return new_http_server;
+}
+
+async_inet_address* async_http_server_address(async_http_server* http_server){
+    return &http_server->local_address;
 }
 
 void async_http_server_close(async_http_server* http_server){
@@ -281,7 +291,7 @@ char* async_http_server_request_get(async_http_server_request* http_req, char* h
     return (char*)async_util_hash_map_get(header_map, header_key_name);
 }
 
-void after_socket(int new_socket_fd, void* arg);
+void after_socket(int new_socket_fd, int errno, void* arg);
 void after_ipv4_bind(
     int bind_ret_val, 
     int socket_fd,
@@ -316,10 +326,17 @@ void async_http_server_listen(
     );
     
     listening_server->local_address.port = port;
+
+    async_http_server_on_connection(
+        listening_server,
+        async_http_server_connection_handler,
+        NULL, 0, 0
+    );
 }
 
-void after_socket(int new_socket_fd, void* arg){
+void after_socket(int new_socket_fd, int errno, void* arg){
     async_http_server* http_server = (async_http_server*)arg;
+    http_server->wrapped_server.listening_socket = new_socket_fd;
 
     async_net_ipv4_bind(
         new_socket_fd,
@@ -581,20 +598,6 @@ void http_server_decrement_request_counter(async_http_server_response* curr_http
 
     curr_http_response->http_server_ptr->curr_num_requests--;
     curr_http_response->has_decremented_request_counter = 1;
-
-    /*
-    if(
-        curr_http_response->http_server_ptr->wrapped_server.is_listening || 
-        curr_http_response->http_server_ptr->curr_num_requests > 0
-    ){
-        return;
-    }
-
-    event_node* removed_node = remove_curr(curr_http_response->http_server_ptr->wrapped_server.event_node_ptr);
-    destroy_event_node(removed_node);
-
-    async_http_server_destroy(curr_http_response->http_server_ptr);
-    */
 }
 
 void async_http_server_response_end(async_http_server_response* curr_http_response){

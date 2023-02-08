@@ -18,7 +18,7 @@ typedef struct async_ipc_server {
     char server_path[MAX_SOCKET_NAME_LEN];
 } async_ipc_server;
 
-void after_ipc_server_socket(int socket_fd, void* arg);
+void after_ipc_server_socket(int socket_fd, int errno, void* arg);
 void after_unlink(int, void*);
 void ipc_server_bind_callback(int, int, char*, void*);
 
@@ -58,7 +58,7 @@ void async_ipc_server_listen(
     );
 }
 
-void after_ipc_server_socket(int socket_fd, void* arg){
+void after_ipc_server_socket(int socket_fd, int errno, void* arg){
     async_ipc_server* ipc_server = (async_ipc_server*)arg;
     ipc_server->wrapped_server.listening_socket = socket_fd;
 

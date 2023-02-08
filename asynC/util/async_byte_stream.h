@@ -26,10 +26,19 @@ typedef struct async_byte_stream_buffer {
 
 void async_byte_stream_init(async_byte_stream* new_writable_stream, unsigned int size_per_buffer);
 void async_byte_stream_destroy(async_byte_stream* stream_to_destroy);
-void async_byte_stream_enqueue(async_byte_stream* writable_stream, void* copied_buffer, unsigned int num_bytes_to_write, void(*writable_stream_callback)(void*), void* arg);
+
+void async_byte_stream_enqueue(
+    async_byte_stream* writable_stream, 
+    void* copied_buffer, 
+    unsigned int num_bytes_to_write, 
+    void(*writable_stream_callback)(void*), 
+    void* arg
+);
+
+void async_byte_stream_dequeue(async_byte_stream* curr_stream_ptr, unsigned int num_bytes_processed);
+
 async_byte_stream_ptr_data async_byte_stream_get_buffer_stream_ptr(async_byte_stream* stream_ptr);
 int is_async_byte_stream_empty(async_byte_stream* curr_stream_ptr);
 void async_byte_stream_execute_callbacks(async_byte_stream* current_writable_stream);
-void async_byte_stream_dequeue(async_byte_stream* curr_stream_ptr, unsigned int num_bytes_processed);
 
 #endif

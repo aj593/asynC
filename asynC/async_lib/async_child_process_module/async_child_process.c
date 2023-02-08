@@ -371,7 +371,9 @@ void fork_task(char* server_name){
             async_ipc_socket_create_return_wrapped_socket,
             (struct sockaddr*)&ipc_sockaddr,
             NULL, 
-            child_socket_fd
+            child_socket_fd,
+            NULL,
+            0
         );
     
     if(new_socket == NULL){

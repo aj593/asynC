@@ -19,6 +19,9 @@
 #include "../../../util/async_byte_stream.h"
 #include "../async_net.h"
 
+//TODO: temporary, get rid of this
+#include "../async_udp_socket/async_udp_socket.h"
+
 enum async_socket_events {
     async_socket_connect_event,
     async_socket_data_event,
@@ -31,16 +34,6 @@ typedef struct socket_end_info {
     async_socket* socket_ptr;
     int end_return_val;
 } socket_end_info;
-
-#ifndef SOCKET_INFO
-#define SOCKET_INFO
-
-//TODO: use this instead?
-typedef struct socket_info {
-    async_socket* socket;
-} socket_info;
-
-#endif
 
 void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, void* arg);
 void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sent, void* arg);
@@ -58,7 +51,10 @@ void async_socket_on_connection(
 );
 
 void async_socket_emit_connection(async_socket* connected_socket);
+
 void socket_event_handler(event_node* curr_socket_node, uint32_t events);
+void inet_dgram_handler(event_node* curr_socket_node, uint32_t events);
+
 void async_socket_emit_data(async_socket* data_socket, async_byte_buffer* socket_receive_buffer, int num_bytes);
 
 //TODO: set to socket is_writing after async_socket_write(), not in async_send() call?
@@ -76,16 +72,19 @@ void async_socket_init(async_socket* socket_ptr, void* upper_socket_ptr){
     async_event_emitter_init(&socket_ptr->socket_event_emitter);
 
     async_byte_stream_init(&socket_ptr->socket_send_stream, DEFAULT_SEND_BUFFER_SIZE);
+
+    async_util_linked_list_init(&socket_ptr->buffer_list, 0);
     
     socket_ptr->receive_buffer = create_buffer(DEFAULT_RECV_BUFFER_SIZE);
 }
 
 async_socket* async_socket_connect(
     async_socket* connecting_socket,
+    void* type_arg,
     int domain,
     int type,
     int protocol,
-    void(*after_socket_callback)(int, void*),
+    void(*after_socket_callback)(int, int, void*),
     void* socket_callback_arg,
     void(*connection_handler)(),
     void* connection_arg
@@ -93,12 +92,15 @@ async_socket* async_socket_connect(
     if(connection_handler != NULL){
         async_socket_on_connection(
             connecting_socket, 
-            connection_arg,
+            type_arg,
             connection_handler, 
-            connection_arg, 
-            1, 1
+            connection_arg, 1, 1
         );
     }
+
+    connecting_socket->domain = domain;
+    connecting_socket->type = type;
+    connecting_socket->protocol = protocol;
 
     async_net_socket(
         domain,
@@ -147,7 +149,7 @@ void connect_callback(
         return;
     }
 
-    create_socket_node(NULL, NULL, connected_socket, fd);
+    create_socket_node(NULL, NULL, connected_socket, fd, NULL, 0);
 
     async_socket_emit_connection(connected_socket);
 
@@ -158,7 +160,9 @@ async_socket* create_socket_node(
     async_socket*(*socket_creator)(struct sockaddr*),
     struct sockaddr* sockaddr_ptr,
     async_socket* new_socket, 
-    int new_socket_fd
+    int new_socket_fd,
+    void (*custom_socket_event_handler)(event_node*, uint32_t),
+    uint32_t events
 ){
     if(new_socket == NULL){
         new_socket = socket_creator(sockaddr_ptr);
@@ -177,8 +181,13 @@ async_socket* create_socket_node(
     //TODO: is this valid and right place to set socket event node ptr?
     new_socket->socket_event_node_ptr = socket_event_node;
 
-    socket_event_node->event_handler = socket_event_handler;
-    epoll_add(new_socket_fd, socket_event_node, EPOLLIN | EPOLLRDHUP);
+    if(custom_socket_event_handler == NULL || events == 0){
+        custom_socket_event_handler = socket_event_handler;
+        events = EPOLLIN | EPOLLRDHUP;
+    }
+
+    socket_event_node->event_handler = custom_socket_event_handler;
+    epoll_add(new_socket_fd, socket_event_node, events);
 
     new_socket->socket_fd = new_socket_fd;
     new_socket->is_open = 1;
@@ -255,32 +264,19 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
             curr_socket->is_flowing &&
             !curr_socket->set_to_destroy
         ){
-            //clock_t before = clock();
-            ///*
             async_io_uring_recv(
                 curr_socket->socket_fd,
                 get_internal_buffer(curr_socket->receive_buffer),
                 get_buffer_capacity(curr_socket->receive_buffer),
-                MSG_DONTWAIT,
+                0,
                 after_socket_recv,
                 curr_socket
             );
-            //*/
 
-            /*
-            recv(
-                curr_socket->socket_fd,
-                get_internal_buffer(curr_socket->receive_buffer),
-                get_buffer_capacity(curr_socket->receive_buffer),
-                MSG_DONTWAIT
-            );
-            */
-            //clock_t after = clock();
-
-            //printf("difference for recv prep is %ld\n", after - before);
             curr_socket->is_reading = 1; //TODO: keep this inside this function?
         }
     }
+
     if(events & EPOLLRDHUP){
         //TODO: emit peer-closed event here?
         curr_socket->peer_closed = 1;
@@ -435,6 +431,8 @@ void after_socket_close(int success, void* arg){
     
     async_byte_stream_destroy(&closed_socket->socket_send_stream);
 
+    async_util_linked_list_destroy(&closed_socket->buffer_list);
+
     async_event_emitter_destroy(&closed_socket->socket_event_emitter);
 
     async_server* server_ptr = closed_socket->server_ptr;
@@ -563,7 +561,13 @@ void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sen
 }
 
 //TODO: make this function have return value so we can tell whether it failed
-void async_socket_write(async_socket* writing_socket, void* buffer_to_write, int num_bytes_to_write, void(*send_callback)(), void* arg){
+void async_socket_write(
+    async_socket* writing_socket, 
+    void* buffer_to_write, 
+    int num_bytes_to_write, 
+    void(*send_callback)(), 
+    void* arg
+){
     if(!writing_socket->is_writable){
         return;
     }

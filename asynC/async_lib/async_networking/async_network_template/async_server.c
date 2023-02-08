@@ -32,17 +32,6 @@ typedef struct server_info {
 
 #endif
 
-#ifndef SOCKET_BUFFER_INFO
-#define SOCKET_BUFFER_INFO
-
-typedef struct socket_send_buffer {
-    async_byte_buffer* buffer_data;
-    void(*send_callback)(async_socket*, void*);
-} socket_buffer_info;
-
-#endif
-
-
 void after_server_listen(int, int, void*);
 void closing_server_callback(int result_val, void* cb_arg);
 
@@ -92,7 +81,7 @@ void async_server_listen_init_template(
     int domain,
     int type, 
     int protocol,
-    void(*socket_callback)(int, void*),
+    void(*socket_callback)(int, int, void*),
     void* socket_callback_arg
 ){
     //TODO: make use of listen_callback
@@ -209,7 +198,9 @@ void accept_callback(
             accepting_server->socket_creator,
             sockaddr_ptr,
             NULL, 
-            new_socket_fd
+            new_socket_fd,
+            NULL,
+            0
         );
 
     if(new_socket == NULL){

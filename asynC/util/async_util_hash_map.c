@@ -169,6 +169,10 @@ void* async_util_hash_map_get(async_util_hash_map* hash_map_ptr, void* key){
 }
 
 int async_util_hash_map_set(async_util_hash_map* map_ptr, void* key, void* value){
+    if(key == NULL || value == NULL){
+        return -1;
+    }
+
     float fraction_occupied_after_set = ((float)(map_ptr->size + 1)) / ((float)map_ptr->capacity);
     size_t existing_key_index = async_util_hash_map_find_key_index(map_ptr, key);
     int resize_result = 0;

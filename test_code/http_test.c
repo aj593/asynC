@@ -15,7 +15,7 @@ int main(){
     asynC_init();
 
     async_http_server* new_http_server = async_create_http_server();
-    async_http_server_listen(new_http_server, 3000, "127.0.0.1", listen_callback, NULL);
+    async_http_server_listen(new_http_server, "127.0.0.1", 3000, listen_callback, NULL);
     async_http_server_on_request(new_http_server, http_server_on_request, NULL, 0, 0);
 
     asynC_cleanup();
@@ -24,7 +24,9 @@ int main(){
 }
 
 void listen_callback(async_http_server* http_server, void* arg){
-    printf("http server listening\n");
+    async_inet_address* address = async_http_server_address(http_server);
+
+    printf("http server listening on %s and port %d\n", address->ip_address, address->port);
 }
 
 /*
@@ -77,7 +79,7 @@ void response_stream_ender(async_fs_readstream* readstream, void* arg){
     async_http_server_response_end_connection(res);
 }
 
-void data_handler(async_byte_buffer* buffer, void*){
+void data_handler(async_http_server_request* server_request, async_byte_buffer* buffer, void*){
     printf("got a buffer of size %ld\n", get_buffer_capacity(buffer));
 }
 

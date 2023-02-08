@@ -32,7 +32,6 @@ typedef struct async_server {
     //int domain;
     //int type;
     //int protocol;
-    //int newly_accepted_fd;
     void* server_wrapper;
     int listening_socket;
     int has_connection_waiting;
@@ -41,11 +40,6 @@ typedef struct async_server {
     int num_connections;
     async_event_emitter server_event_emitter;
     async_socket*(*socket_creator)(struct sockaddr*);
-    //char ip_address[MAX_IP_STR_LEN];
-    //int port;
-    //char name[MAX_SOCKET_NAME_LEN];
-    //void(*listen_task)(void*);
-    //void(*accept_task)(void*);
     unsigned int num_listen_event_listeners;
     unsigned int num_connection_event_listeners;
 
@@ -101,7 +95,7 @@ void async_server_listen_init_template(
     int domain,
     int type, 
     int protocol,
-    void(*socket_callback)(int, void*),
+    void(*socket_callback)(int, int, void*),
     void* socket_callback_arg
 );
 

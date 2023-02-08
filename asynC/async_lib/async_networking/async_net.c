@@ -13,6 +13,8 @@
 #include "../../async_runtime/thread_pool.h"
 #include "../../async_runtime/async_epoll_ops.h"
 
+#include <stdio.h>
+
 union async_sockaddr_types {
     struct sockaddr     sockaddr_generic;
     struct sockaddr_in  sockaddr_inet;
@@ -22,6 +24,10 @@ union async_sockaddr_types {
 
 typedef struct async_net_info {
     int socket_fd;
+
+    void* buffer;
+    size_t max_num_bytes;
+
     union async_sockaddr_types sockaddr;
     socklen_t socket_length;
     void(*async_net_callback)();
@@ -32,6 +38,9 @@ typedef struct async_net_info {
     int type;
     int protocol;
     int backlog_max;
+
+    int flags;
+    int task_errno;
 
     void* arg;
 } async_net_info;
@@ -61,7 +70,7 @@ void async_net_socket(
     int domain, 
     int type, 
     int protocol,
-    void(*socket_callback)(int, void*),
+    void(*socket_callback)(int, int, void*),
     void* arg
 );
 
@@ -199,7 +208,7 @@ void async_net_after_ipv4_bind(void* data, void* arg){
     struct in_addr* inet_addr_ptr = &sockaddr_inet_ptr->sin_addr;
 
     inet_ntop(AF_INET, inet_addr_ptr, ip_address, INET_ADDRSTRLEN);
-    uint32_t port = ntohl(sockaddr_inet_ptr->sin_port);
+    uint32_t port = ntohs(sockaddr_inet_ptr->sin_port);
 
     ipv4_bind_callback(
         net_info->return_val,
@@ -247,21 +256,13 @@ void after_net_ipc_bind(void* data, void* arg){
     );
 }
 
-void async_net_socket_task(void* socket_task_data){
-    async_net_info* socket_info = (async_net_info*)socket_task_data;
-
-    socket_info->return_val = socket(
-        socket_info->domain,
-        socket_info->type,
-        socket_info->protocol
-    );
-}
+void async_net_socket_task(void* socket_task_data);
 
 void async_net_socket(
     int domain, 
     int type, 
     int protocol,
-    void(*socket_callback)(int, void*),
+    void(*socket_callback)(int, int, void*),
     void* arg
 ){
     async_net_info socket_info = {
@@ -280,13 +281,29 @@ void async_net_socket(
     );
 }
 
+void async_net_socket_task(void* socket_task_data){
+    async_net_info* socket_info = (async_net_info*)socket_task_data;
+
+    socket_info->return_val = socket(
+        socket_info->domain,
+        socket_info->type,
+        socket_info->protocol
+    );
+
+    socket_info->task_errno = errno;
+}
+
 void after_socket_task(void* socket_data, void* arg){
     async_net_info* socket_info = (async_net_info*)socket_data;
 
-    void(*socket_callback)(int, void*) = 
-        (void(*)(int, void*))socket_info->async_net_callback;
+    void(*socket_callback)(int, int, void*) = 
+        (void(*)(int, int, void*))socket_info->async_net_callback;
 
-    socket_callback(socket_info->return_val, arg);
+    socket_callback(
+        socket_info->return_val, 
+        socket_info->task_errno,
+        arg
+    );
 }
 
 void async_net_connect_template(
@@ -348,10 +365,12 @@ void async_net_after_connect(void* data, void* arg){
     async_net_info* connect_info = (async_net_info*)data;
 
     int connect_status;
-    async_getsockopt_connect_status(
+    int curr_errno = async_getsockopt_connect_status(
         connect_info->socket_fd, 
         &connect_status
     );
+
+    printf("errno is %d\n", curr_errno);
     
     if(connect_status == 0){
         connect_info->after_connect_complete(connect_info);
@@ -361,7 +380,7 @@ void async_net_after_connect(void* data, void* arg){
 
     event_node* connect_node = 
         async_event_loop_create_new_bound_event(
-            &connect_info,
+            connect_info,
             sizeof(async_net_info)
         );
     
@@ -374,10 +393,12 @@ void connect_event_handler(event_node* connect_node, uint32_t events){
     async_net_info* connect_info = (async_net_info*)connect_node->data_ptr;
     
     int connect_status;
-    async_getsockopt_connect_status(
+    int curr_errno = async_getsockopt_connect_status(
         connect_info->socket_fd, 
         &connect_status
     );
+
+    printf("errno is %d\n", curr_errno);
 
     epoll_remove(connect_info->socket_fd);
 
@@ -542,5 +563,133 @@ void async_net_after_listen(void* listen_data, void* arg){
         listen_info->return_val,
         listen_info->socket_fd,
         arg
+    );
+}
+
+void async_recvfrom_task(void* recvfrom_task_info);
+void after_recvfrom_task(void* data, void* arg);
+
+void async_net_recvfrom(
+    int socket_fd,
+    void* buffer,
+    size_t max_recv_bytes,
+    int flags,
+    void(*recvfrom_callback)(int, void*, size_t, struct sockaddr*, socklen_t, void*),
+    void* arg
+){
+
+    async_net_info recv_from_info = {
+        .socket_fd = socket_fd,
+        .buffer = buffer,
+        .max_num_bytes = max_recv_bytes,
+        .flags = flags,
+        .async_net_callback = recvfrom_callback,
+        .arg = arg
+    };
+
+    async_thread_pool_create_task_copied(
+        async_recvfrom_task,
+        after_recvfrom_task,
+        &recv_from_info,
+        sizeof(async_net_info),
+        arg
+    );
+}
+
+void async_recvfrom_task(void* recvfrom_task_info){
+    async_net_info* recvfrom_info = (async_net_info*)recvfrom_task_info;
+
+    recvfrom_info->return_val = 
+        recvfrom(
+            recvfrom_info->socket_fd,
+            recvfrom_info->buffer,
+            recvfrom_info->max_num_bytes,
+            recvfrom_info->flags,
+            &recvfrom_info->sockaddr.sockaddr_generic,
+            &recvfrom_info->socket_length
+        );
+}
+
+void after_recvfrom_task(void* data, void* arg){
+    async_net_info* recvfrom_info = (async_net_info*)data;
+
+    void(*recvfrom_callback)(int, void*, size_t, struct sockaddr*, socklen_t, void*) =
+        (void(*)(int, void*, size_t, struct sockaddr*, socklen_t, void*))recvfrom_info->async_net_callback;
+
+    recvfrom_callback(
+        recvfrom_info->socket_fd,
+        recvfrom_info->buffer,
+        recvfrom_info->return_val,
+        &recvfrom_info->sockaddr.sockaddr_generic,
+        recvfrom_info->socket_length,
+        arg
+    );
+}
+
+void async_sendto_thread_task(void* sendto_task_info);
+void after_async_sendto_task(void* data, void* arg);
+
+void async_net_sendto(
+    int socket_fd, 
+    void* buffer, 
+    size_t num_bytes, 
+    int flags,
+    struct sockaddr* sockaddr_ptr, 
+    socklen_t socket_length,
+    void(*sendto_callback)(int, void*, size_t, struct sockaddr*, socklen_t, void*),
+    void* arg
+){
+    async_net_info sendto_info = {
+        .socket_fd = socket_fd,
+        .buffer = buffer,
+        .max_num_bytes = num_bytes,
+        .flags = flags,
+        .socket_length = socket_length,
+        .async_net_callback = sendto_callback,
+        .arg = arg
+    };
+
+    memcpy(
+        &sendto_info.sockaddr.sockaddr_generic,
+        sockaddr_ptr,
+        socket_length
+    );
+
+    async_thread_pool_create_task_copied(
+        async_sendto_thread_task,
+        after_async_sendto_task,
+        &sendto_info,
+        sizeof(async_net_info),
+        arg
+    );
+}
+
+void async_sendto_thread_task(void* sendto_task_info){
+    async_net_info* sendto_info = (async_net_info*)sendto_task_info;
+
+    sendto_info->return_val = 
+        sendto(
+            sendto_info->socket_fd,
+            sendto_info->buffer,
+            sendto_info->max_num_bytes,
+            sendto_info->flags,
+            &sendto_info->sockaddr.sockaddr_generic,
+            sendto_info->socket_length
+        );
+}
+
+void after_async_sendto_task(void* data, void* arg){
+    async_net_info* sendto_info = (async_net_info*)data;
+
+    void(*sendto_callback)(int, void*, size_t, struct sockaddr*, socklen_t, void*) =
+        (void(*)(int, void*, size_t, struct sockaddr*, socklen_t, void*))sendto_info->async_net_callback;
+
+    sendto_callback(
+        sendto_info->socket_fd,
+        sendto_info->buffer,
+        sendto_info->return_val,
+        &sendto_info->sockaddr.sockaddr_generic,
+        sendto_info->socket_length,
+        sendto_info->arg
     );
 }

@@ -171,7 +171,7 @@ void async_http_request_set_method_and_url(async_outgoing_http_request* http_req
     template_ptr->request_url = url;
 }
 
-char* async_http_request_parse(async_outgoing_http_request* new_http_request, char* host_url, int* bytes_ptr){
+char* async_http_request_parse(async_outgoing_http_request* new_http_request, char* host_url, int* host_str_len_ptr){
     //find length of host url string and traverse backwards to find index of last period character
     size_t host_url_length = strnlen(host_url, LONGEST_ALLOWED_URL);
 
@@ -227,15 +227,15 @@ char* async_http_request_parse(async_outgoing_http_request* new_http_request, ch
 
     //the host string lenght is the difference between where 
     //the first slash after it is and where the first slash before it is - 1
-    int host_str_len = colon_index - first_slash_index_before_dot - 1;
+    *host_str_len_ptr = colon_index - first_slash_index_before_dot - 1;
     
     //ptr to host string starts right after first slash before dot
     char* host_str = &host_url[first_slash_index_before_dot + 1];
     
     //TODO: edge case where host string length is negative?? explain this??
     //host string length may be negative if no slashes were in provided string
-    if(host_str_len < 0){
-        host_str_len = strnlen(host_str, LONGEST_ALLOWED_URL);
+    if(*host_str_len_ptr < 0){
+        *host_str_len_ptr = strnlen(host_str, LONGEST_ALLOWED_URL);
     }
 
     return host_str;

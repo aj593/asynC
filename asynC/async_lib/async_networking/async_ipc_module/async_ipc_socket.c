@@ -39,7 +39,7 @@ async_socket* async_ipc_socket_create_return_wrapped_socket(struct sockaddr* soc
     return &async_ipc_socket_create(NULL, ipc_sockaddr->sun_path)->wrapped_socket;
 }
 
-void after_ipc_socket_callback(int, void*);
+void after_ipc_socket_callback(int, int, void*);
 void after_unlink_callback(int, void*);
 
 async_ipc_socket* async_ipc_create_connection(
@@ -66,6 +66,7 @@ void async_ipc_socket_connect(
 ){
     async_socket_connect(
         &connecting_ipc_socket->wrapped_socket,
+        connecting_ipc_socket,
         AF_UNIX, SOCK_STREAM, 0,
         after_ipc_socket_callback,
         connecting_ipc_socket,
@@ -74,7 +75,7 @@ void async_ipc_socket_connect(
     );
 }
 
-void after_ipc_socket_callback(int socket_fd, void* arg){
+void after_ipc_socket_callback(int socket_fd, int errno, void* arg){
     async_ipc_socket* ipc_socket_ptr = (async_ipc_socket*)arg;
     ipc_socket_ptr->wrapped_socket.socket_fd = socket_fd;
 

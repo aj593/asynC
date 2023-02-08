@@ -17,7 +17,7 @@ typedef struct async_tcp_socket {
     async_inet_address remote_address;
 } async_tcp_socket;
 
-void after_tcp_socket_callback(int socket_fd, void* arg);
+void after_tcp_socket_callback(int socket_fd, int errno, void* arg);
 
 void after_connect_callback(
     int result, 
@@ -82,6 +82,7 @@ void async_tcp_socket_connect(
 
     async_socket_connect(
         &connecting_tcp_socket->wrapped_socket,
+        connecting_tcp_socket,
         AF_INET, SOCK_STREAM, 0,
         after_tcp_socket_callback,
         connecting_tcp_socket,
@@ -90,7 +91,7 @@ void async_tcp_socket_connect(
     );
 }
 
-void after_tcp_socket_callback(int socket_fd, void* arg){
+void after_tcp_socket_callback(int socket_fd, int errno, void* arg){
     async_tcp_socket* tcp_socket = (async_tcp_socket*)arg;
     tcp_socket->wrapped_socket.socket_fd = socket_fd;
 

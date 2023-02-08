@@ -10,6 +10,12 @@ typedef struct async_http_server_response async_http_server_response;
 
 async_http_server* async_create_http_server(void);
 
+void async_http_server_on_connection(
+    async_http_server* listening_http_server,
+    void(*http_connection_callback)(async_http_server*, async_tcp_socket*, void*),
+    void* arg, int is_temp_subscriber, int num_times_listen
+);
+
 void async_http_server_listen(
     async_http_server* listening_server, 
     char* ip_address, 
@@ -17,6 +23,8 @@ void async_http_server_listen(
     void(*http_listen_callback)(async_http_server*, void*), 
     void* arg
 );
+
+async_inet_address* async_http_server_address(async_http_server* http_server);
 
 void async_http_server_on_request(
     async_http_server* http_server, 

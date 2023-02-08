@@ -49,12 +49,14 @@ void async_dns_lookup_task(void* async_dns_info){
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags |= AI_CANONNAME;
     //TODO: use err_code for error checking
-    /*int err_code = */getaddrinfo(
+    int err_code = getaddrinfo(
         dns_info->domain_name,
         NULL,
         &hints,
         &result
     );
+
+    printf("dns lookup errcode is %d\n", err_code);
 
     struct addrinfo* result_copy = result;
     dns_info->num_addresses = 0;
