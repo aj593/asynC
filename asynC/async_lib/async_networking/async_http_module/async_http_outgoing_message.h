@@ -22,14 +22,11 @@ void async_http_outgoing_message_init(
 
 void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_msg);
 
-/*
 void async_http_outgoing_message_set_header(
-    hash_table* table_ptr,
-    async_byte_buffer** header_buffer,
+    async_http_outgoing_message* outgoing_msg,
     char* header_key, 
     char* header_val
 );
-*/
 
 void async_http_outgoing_message_write_head(async_http_outgoing_message* outgoing_msg_ptr);
 

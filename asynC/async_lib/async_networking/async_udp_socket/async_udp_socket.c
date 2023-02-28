@@ -26,14 +26,7 @@ typedef struct async_udp_socket {
     unsigned int num_connect_listeners;
 } async_udp_socket;
 
-typedef struct async_udp_msg_holder {
-    void* buffer;
-    size_t num_bytes;
-    char* ip_address;
-    int port;
-} async_udp_msg_holder;
-
-typedef struct async_udp_send_buffer_entry {
+typedef struct async_udp_buffer_entry {
     void* buffer;
     size_t num_bytes;
     void(*send_callback)(async_udp_socket*, char*, int, void*);
@@ -41,10 +34,10 @@ typedef struct async_udp_send_buffer_entry {
 
     char ip_address[INET_ADDRSTRLEN];
     int port;
-} async_udp_send_buffer_entry;
+} async_udp_buffer_entry;
 
 enum async_udp_socket_events {
-    async_udp_socket_bind_event = 4,
+    async_udp_socket_bind_event = async_socket_num_events,
     async_udp_socket_message_event,
     async_udp_socket_connect_event
 };
@@ -259,8 +252,8 @@ void async_udp_socket_send_attempt(async_udp_socket* udp_socket){
         async_util_linked_list_start_iterator(&wrapped_socket->buffer_list);
     async_util_linked_list_iterator_next(&start_iterator, NULL);
 
-    async_udp_send_buffer_entry* entry_to_send =
-        (async_udp_send_buffer_entry*)async_util_linked_list_iterator_get(&start_iterator);
+    async_udp_buffer_entry* entry_to_send =
+        (async_udp_buffer_entry*)async_util_linked_list_iterator_get(&start_iterator);
 
     struct sockaddr_in inet_sockaddr = {
         .sin_family = AF_INET,
@@ -299,9 +292,13 @@ void async_udp_socket_send(
     void(*send_callback)(async_udp_socket*, char*, int, void*),
     void* arg
 ){
+    if(!udp_socket->wrapped_socket.is_writable){
+        return;
+    }
+
     async_util_linked_list_set_entry_size(
         &udp_socket->wrapped_socket.buffer_list,
-        sizeof(async_udp_send_buffer_entry) + num_bytes
+        sizeof(async_udp_buffer_entry) + num_bytes
     );
 
     async_util_linked_list_append(&udp_socket->wrapped_socket.buffer_list, NULL);
@@ -311,8 +308,8 @@ void async_udp_socket_send(
     
     async_util_linked_list_iterator_prev(&new_iterator, NULL);
     
-    async_udp_send_buffer_entry* recently_added_entry =
-        (async_udp_send_buffer_entry*)async_util_linked_list_iterator_get(&new_iterator);
+    async_udp_buffer_entry* recently_added_entry =
+        (async_udp_buffer_entry*)async_util_linked_list_iterator_get(&new_iterator);
 
     recently_added_entry->buffer = recently_added_entry + 1;
     memcpy(recently_added_entry->buffer, buffer, num_bytes);
@@ -345,8 +342,8 @@ void after_udp_sendto(
         async_util_linked_list_start_iterator(&udp_socket->wrapped_socket.buffer_list);
     async_util_linked_list_iterator_next(&remove_first_iterator, NULL);
 
-    async_udp_send_buffer_entry* entry_to_remove =
-        (async_udp_send_buffer_entry*)async_util_linked_list_iterator_get(&remove_first_iterator);
+    async_udp_buffer_entry* entry_to_remove =
+        (async_udp_buffer_entry*)async_util_linked_list_iterator_get(&remove_first_iterator);
 
     if(entry_to_remove->send_callback != NULL){
         entry_to_remove->send_callback(
@@ -421,10 +418,6 @@ void async_udp_socket_connect(
     strncpy(udp_socket->remote_address.ip_address, ip_address, INET_ADDRSTRLEN);
     udp_socket->remote_address.port = port;
     udp_socket->has_connect_queued = 1;
-
-    if(udp_socket->is_bound){
-        return;
-    }
 
     if(!udp_socket->has_called_socket || !udp_socket->has_created_socket){
         udp_call_socket(udp_socket, after_socket_before_connect);
@@ -540,12 +533,13 @@ void async_udp_socket_emit_message(
     char* ip_address,
     int port
 ){
-    async_udp_msg_holder new_msg_holder = {
+    async_udp_buffer_entry new_msg_holder = {
         .buffer = buffer,
         .num_bytes = num_bytes,
-        .ip_address = ip_address,
         .port = port
     };
+
+    strncpy(new_msg_holder.ip_address, ip_address, INET_ADDRSTRLEN);
 
     async_event_emitter_emit_event(
         &udp_socket->wrapped_socket.socket_event_emitter,
@@ -558,7 +552,7 @@ void message_event_converter(void(*message_callback)(), void* type_arg, void* da
     void(*udp_msg_callback)(void*, async_byte_buffer*, char*, int, void*) =
         (void(*)(void*, async_byte_buffer*, char*, int, void*))message_callback;
 
-    async_udp_msg_holder* new_msg_holder_ptr = (async_udp_msg_holder*)data;
+    async_udp_buffer_entry* new_msg_holder_ptr = (async_udp_buffer_entry*)data;
 
     async_byte_buffer* new_buffer = 
         buffer_from_array(
@@ -573,4 +567,9 @@ void message_event_converter(void(*message_callback)(), void* type_arg, void* da
         new_msg_holder_ptr->port,
         arg
     );
+}
+
+
+void async_udp_socket_close(async_udp_socket* udp_socket){
+    //TODO: implement this
 }

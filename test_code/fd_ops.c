@@ -13,11 +13,38 @@ void recv_callback(int, void*, size_t, void*);
 void response_handler(async_http_incoming_response* res, void* arg);
 void response_data_handler(async_http_incoming_response*, async_byte_buffer*, void*);
 
+void bind_callback(async_udp_socket* udp_socket, void* arg);
+
+void msg_callback(async_udp_socket* udp_socket, async_byte_buffer* buffer, char* ip_address, int port, void* arg);
+
 int main(void){
     asynC_init();
 
-    async_net_socket(AF_INET, SOCK_DGRAM, 0, after_socket, NULL);
-    async_http_request("example.com", GET, NULL, response_handler, NULL);
+    async_http2_client_session* new_session = 
+        async_http2_connect("localhost", NULL, NULL);
+    
+    async_http2_options new_options;
+    async_http2_options_init(&new_options);
+    
+    async_http2_options_set_name_value(&new_options, ":path", "/index.html");
+    async_http2_options_set_name_value(&new_options, ":method", "GET");
+    async_http2_options_set_name_value(&new_options, ":scheme", "scheme");
+    async_http2_options_set_name_value(&new_options, ":authority", "authority");
+
+    async_http2_client_stream* new_stream = async_http2_client_session_request(new_session, &new_options);
+    async_http2_client_stream_write(new_stream, "hi", 2);
+
+    //async_http2_options_destroy(&new_options);
+
+    //async_net_socket(AF_INET, SOCK_DGRAM, 0, after_socket, NULL);
+    //async_http_request("example.com", GET, NULL, response_handler, NULL);
+    /*
+    async_udp_socket* udp_socket = async_udp_socket_create();
+    int port;
+    scanf("%d", &port);
+    async_udp_socket_bind(udp_socket, "127.0.0.1", port, bind_callback, NULL);
+    async_udp_socket_on_message(udp_socket, msg_callback, NULL, 0, 0);
+    */
 
     //char* array[] = { "/bin/ls", NULL};
     //async_child_process* proc = async_child_process_exec("/bin/ls", array);
@@ -32,6 +59,21 @@ int main(void){
     */
 
     asynC_cleanup();
+}
+
+void send_callback(async_udp_socket* udp_socket, char* ip_address, int port, void* arg){
+    printf("sent msg!\n");
+}
+
+void bind_callback(async_udp_socket* udp_socket, void* arg){
+    int port;
+    scanf("%d", &port);
+    async_udp_socket_send(udp_socket, "hi", 2, "127.0.0.1", port, send_callback, arg);
+}
+
+void msg_callback(async_udp_socket* udp_socket, async_byte_buffer* buffer, char* ip_address, int port, void* arg){
+    printf("%s\n", (char*)get_internal_buffer(buffer));
+    destroy_buffer(buffer);
 }
 
 void response_handler(async_http_incoming_response* res, void* arg){

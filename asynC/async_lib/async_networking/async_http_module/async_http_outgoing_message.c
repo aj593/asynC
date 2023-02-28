@@ -45,10 +45,45 @@ void async_http_outgoing_message_init(
         start_line_second_token_ptr,
         start_line_third_token_ptr
     );
+
+    outgoing_msg->incoming_msg_template_info.header_buffer = create_buffer(STARTING_HEADER_BUFF_SIZE);
 }
 
 void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_msg){
     async_http_message_template_destroy(&outgoing_msg->incoming_msg_template_info);
+}
+
+void async_http_outgoing_message_set_header(
+    async_http_outgoing_message* outgoing_msg,
+    char* header_key, 
+    char* header_val
+){
+    async_byte_buffer** header_buffer_ptr = &outgoing_msg->incoming_msg_template_info.header_buffer;
+
+    size_t key_length = strlen(header_key);
+    size_t val_length = strlen(header_val);
+
+    size_t capacity_before_append = get_buffer_capacity(*header_buffer_ptr);
+
+    size_t key_offset = get_buffer_length(*header_buffer_ptr);
+    buffer_append_bytes(header_buffer_ptr, header_key, key_length);
+    buffer_append_bytes(header_buffer_ptr, "\0", 1);
+
+    size_t val_offset = get_buffer_length(*header_buffer_ptr);
+    buffer_append_bytes(header_buffer_ptr, header_val, val_length);
+    buffer_append_bytes(header_buffer_ptr, "\0", 1);
+
+    size_t capacity_after_append = get_buffer_capacity(*header_buffer_ptr);
+
+    char* internal_header_buffer = get_internal_buffer(*header_buffer_ptr);
+    char* key_string = internal_header_buffer + key_offset;
+    char* val_string = internal_header_buffer + val_offset;
+
+    async_util_hash_map_set(&outgoing_msg->incoming_msg_template_info.header_map, key_string, val_string);
+
+    if(capacity_before_append != capacity_after_append){
+        //TODO: finish this
+    }
 }
 
 void async_http_outgoing_message_set_trailer_header(async_http_outgoing_message* outgoing_msg_ptr){

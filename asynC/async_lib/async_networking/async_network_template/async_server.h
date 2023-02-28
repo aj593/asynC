@@ -16,6 +16,12 @@ enum inet_family {
     ipv6
 };
 
+enum async_server_events {
+    async_server_listen_event,
+    async_server_connection_event,
+    async_server_num_events
+};
+
 typedef struct async_inet_address {
     enum inet_family address_family;
     char ip_address[INET_ADDRSTRLEN];

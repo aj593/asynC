@@ -82,6 +82,7 @@ typedef struct async_http_message_template {
     char* start_line_third_token;
 
     async_util_vector* trailer_vector;
+    async_byte_buffer* header_buffer;
 } async_http_message_template;
 
 void async_http_message_template_init(

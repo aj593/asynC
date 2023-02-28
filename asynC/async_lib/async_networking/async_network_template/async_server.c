@@ -18,11 +18,6 @@
 #include <string.h>
 #include <stdio.h>
 
-enum async_server_events {
-    async_server_listen_event,
-    async_server_connection_event
-};
-
 #ifndef SERVER_INFO
 #define SERVER_INFO
 
@@ -149,26 +144,14 @@ void async_server_event_handler(event_node* server_info_node, uint32_t events){
 
     if(events & EPOLLIN){
         curr_server->has_connection_waiting = 1;
-
         curr_server->is_currently_accepting = 1;
-        //async_accept(curr_server);
-        //curr_server->accept_initiator(curr_server);
+
         async_io_uring_accept(
             curr_server->listening_socket,
             0,
             accept_callback,
             curr_server
         );
-
-        /*
-        if(
-            curr_server->is_listening && 
-            curr_server->has_connection_waiting && 
-            !curr_server->is_currently_accepting
-        ){
-            
-        }
-        */
     }
 }
 

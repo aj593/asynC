@@ -33,7 +33,7 @@ typedef struct async_http_server {
 } async_http_server;
 
 enum async_http_server_events {
-    async_http_server_request_event = 2 //TODO: change this in case wrapped server has more events?
+    async_http_server_request_event = async_server_num_events //TODO: change this in case wrapped server has more events?
 };
 
 typedef struct async_http_server_request {
@@ -591,6 +591,12 @@ void async_http_server_response_write(
     );
 }
 
+void async_http_server_response_end(async_http_server_response* curr_http_response){
+    async_http_outgoing_message_end(&curr_http_response->outgoing_msg_info);
+
+    http_server_decrement_request_counter(curr_http_response);
+}
+
 void http_server_decrement_request_counter(async_http_server_response* curr_http_response){
     if(curr_http_response->has_decremented_request_counter){
         return;
@@ -598,12 +604,6 @@ void http_server_decrement_request_counter(async_http_server_response* curr_http
 
     curr_http_response->http_server_ptr->curr_num_requests--;
     curr_http_response->has_decremented_request_counter = 1;
-}
-
-void async_http_server_response_end(async_http_server_response* curr_http_response){
-    async_http_outgoing_message_end(&curr_http_response->outgoing_msg_info);
-
-    http_server_decrement_request_counter(curr_http_response);
 }
 
 void async_http_server_response_end_connection(async_http_server_response* curr_http_response){
