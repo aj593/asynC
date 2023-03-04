@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS = -g -lrt -luring -pthread -Wall -Werror -pedantic -pipe -fPIC
+CFLAGS = -g -lrt -luring -lnghttp2 -pthread -Wall -Werror -pedantic -pipe -fPIC
 
 SRCS := $(shell find ./asynC -type f -name '*c')
 OBJS := $(SRCS:.c=.o)
@@ -9,13 +9,13 @@ ASYNC_SHARED_LIB_NAME=libasynC.so
 all: $(ASYNC_SHARED_LIB_NAME)
 
 $(ASYNC_SHARED_LIB_NAME): $(OBJS)
-	$(CC)  $(CFLAGS) -shared $(OBJS) -o $(ASYNC_SHARED_LIB_NAME)
+	$(CC) -shared $(OBJS) $(CFLAGS) -o $(ASYNC_SHARED_LIB_NAME)
 
 static: $(OBJS)
 	ar -rc libasynC.a $(OBJS) 
 
 %.o : %.c  asynC.h
-	$(CC) $(CLFAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 
 # chat_client
@@ -65,21 +65,21 @@ multiple_connections: multiple_connections/multiple_connections
 
 # readstream
 
-readstream/readstream:
-	$(MAKE) -C readstream
+examples/readstream/readstream:
+	$(MAKE) -C examples/readstream
 
-readstream: readstream/readstream
+readstream: examples/readstream/readstream
 	mkdir -p bin 
-	mv readstream/readstream ./bin/
+	mv examples/readstream/readstream ./bin/
 
 # writestream
 
-writestream/writestream:
-	$(MAKE) -C writestream
+examples/writestream/writestream:
+	$(MAKE) -C examples/writestream
 
-writestream: writestream/writestream
+writestream: examples/writestream/writestream
 	mkdir -p bin 
-	mv writestream/writestream ./bin/
+	mv examples/writestream/writestream ./bin/
 
 
 
@@ -125,4 +125,3 @@ clean:
 	rm $(OBJS)
 	rm libasynC.so 
 	rm libasynC.a
-

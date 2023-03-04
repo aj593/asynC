@@ -20,7 +20,7 @@ typedef struct async_http_incoming_message {
     unsigned int num_end_listeners;
     unsigned int num_trailer_listeners;
 
-    async_byte_buffer* header_buffer;
+    //async_byte_buffer* header_buffer;
     
     size_t trailer_buffer_start_index;
 

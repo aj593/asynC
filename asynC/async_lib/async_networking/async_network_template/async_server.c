@@ -18,11 +18,6 @@
 #include <string.h>
 #include <stdio.h>
 
-enum async_server_events {
-    async_server_listen_event,
-    async_server_connection_event
-};
-
 #ifndef SERVER_INFO
 #define SERVER_INFO
 
@@ -33,7 +28,7 @@ typedef struct server_info {
 #endif
 
 void after_server_listen(int, int, void*);
-void closing_server_callback(int result_val, void* cb_arg);
+void closing_server_callback(int close_fd, int close_errno, void* cb_arg);
 
 void accept_callback(
     int new_socket_fd, 
@@ -112,7 +107,7 @@ void async_server_listen(async_server* server_ptr){
 
 void async_server_event_handler(event_node* server_info_node, uint32_t events);
 
-void after_server_listen(int result, int socket_fd, void* arg){
+void after_server_listen(int socket_fd, int listen_errno, void* arg){
     //TODO: add error checking here
     //async_listen_info* listen_node_info = (async_listen_info*)thread_data;
     //async_server* newly_listening_server = listen_node_info->listening_server;
@@ -149,26 +144,14 @@ void async_server_event_handler(event_node* server_info_node, uint32_t events){
 
     if(events & EPOLLIN){
         curr_server->has_connection_waiting = 1;
-
         curr_server->is_currently_accepting = 1;
-        //async_accept(curr_server);
-        //curr_server->accept_initiator(curr_server);
+
         async_io_uring_accept(
             curr_server->listening_socket,
             0,
             accept_callback,
             curr_server
         );
-
-        /*
-        if(
-            curr_server->is_listening && 
-            curr_server->has_connection_waiting && 
-            !curr_server->is_currently_accepting
-        ){
-            
-        }
-        */
     }
 }
 
@@ -223,8 +206,9 @@ void async_server_close(async_server* closing_server){
     async_fs_close(closing_server->listening_socket, closing_server_callback, NULL);
 }
 
-void closing_server_callback(int result_val, void* cb_arg){
+void closing_server_callback(int server_fd, int close_errno, void* cb_arg){
     //TODO: need to do anything here?
+    //TODO: emit close event callback with errno?
     //TODO: make int field for server that shows that listening fd was properly closed?
 }
 

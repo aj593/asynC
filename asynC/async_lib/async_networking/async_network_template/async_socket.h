@@ -42,7 +42,16 @@ typedef struct async_socket {
     int is_queued_for_writing;
     int is_queueable_for_writing;
     void* upper_socket_ptr;
+    uint32_t curr_events;
 } async_socket;
+
+enum async_socket_events {
+    async_socket_connect_event,
+    async_socket_data_event,
+    async_socket_end_event,
+    async_socket_close_event,
+    async_socket_num_events
+};
 
 /*
 typedef struct connect_info {

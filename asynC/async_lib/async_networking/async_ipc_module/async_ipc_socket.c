@@ -86,7 +86,7 @@ void after_ipc_socket_callback(int socket_fd, int errno, void* arg){
     );
 }
 
-void ipc_socket_bind_callback(int, int, char*, void*);
+void ipc_socket_bind_callback(int, char*, int, void*);
 
 void after_unlink_callback(int return_val, void* arg){
     async_ipc_socket* ipc_socket_ptr = (async_ipc_socket*)arg;
@@ -99,8 +99,13 @@ void after_unlink_callback(int return_val, void* arg){
     );
 }
 
-void ipc_socket_bind_callback(int result, int socket_fd, char* local_path, void* arg){
+void ipc_socket_bind_callback(int socket_fd, char* local_path, int bind_errno, void* arg){
     async_ipc_socket* ipc_socket_ptr = (async_ipc_socket*)arg;
+
+    if(bind_errno != 0){
+        //TODO: emit ipc socket error event
+        return;
+    }
     
     struct sockaddr_un ipc_sockaddr = { .sun_family = AF_UNIX };
     

@@ -18,6 +18,8 @@
 #include "util/async_util_hash_map.h"
 #include "async_runtime/io_uring_ops.h"
 #include "async_lib/async_networking/async_net.h"
+#include "async_lib/async_networking/async_udp_socket/async_udp_socket.h"
+#include "async_lib/async_networking/async_http2_module/async_http2_client.h"
 
 //#include "async_lib/async_networking/async_http_module/http_utility.h"
 

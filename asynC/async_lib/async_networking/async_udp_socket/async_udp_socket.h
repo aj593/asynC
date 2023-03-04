@@ -58,4 +58,6 @@ void async_udp_socket_on_connect(
     int num_times_listen
 );
 
+void async_udp_socket_close(async_udp_socket* udp_socket);
+
 #endif

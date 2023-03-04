@@ -45,10 +45,76 @@ void async_http_outgoing_message_init(
         start_line_second_token_ptr,
         start_line_third_token_ptr
     );
+
+    outgoing_msg->incoming_msg_template_info.header_buffer = create_buffer(STARTING_HEADER_BUFF_SIZE);
+    outgoing_msg->internal_buffer_ptr = get_internal_buffer(outgoing_msg->incoming_msg_template_info.header_buffer);
 }
 
 void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_msg){
     async_http_message_template_destroy(&outgoing_msg->incoming_msg_template_info);
+}
+
+void async_http_outgoing_message_set_header(
+    async_http_outgoing_message* outgoing_msg,
+    char* header_key, 
+    char* header_val
+){
+    async_byte_buffer** header_buffer_ptr = &outgoing_msg->incoming_msg_template_info.header_buffer;
+
+    size_t key_length = strlen(header_key);
+    size_t val_length = strlen(header_val);
+
+    size_t capacity_before_append = get_buffer_capacity(*header_buffer_ptr);
+
+    size_t key_offset = get_buffer_length(*header_buffer_ptr);
+    buffer_append_bytes(header_buffer_ptr, header_key, key_length);
+    buffer_append_bytes(header_buffer_ptr, "\0", 1);
+
+    size_t val_offset = get_buffer_length(*header_buffer_ptr);
+    buffer_append_bytes(header_buffer_ptr, header_val, val_length);
+    buffer_append_bytes(header_buffer_ptr, "\0", 1);
+
+    size_t capacity_after_append = get_buffer_capacity(*header_buffer_ptr);
+
+    char* internal_header_buffer = get_internal_buffer(*header_buffer_ptr);
+    char* key_string = internal_header_buffer + key_offset;
+    char* val_string = internal_header_buffer + val_offset;
+
+    async_util_hash_map* map_ptr = &outgoing_msg->incoming_msg_template_info.header_map;
+
+    async_util_hash_map_set(map_ptr, key_string, val_string);
+
+    if(capacity_before_append == capacity_after_append){
+        return;
+    }
+
+    //TODO: check if next 15-20 lines are valid to resetting ptrs in hashmap
+    size_t curr_num_entries = map_ptr->size;
+    async_util_hash_map_iterator_entry entry_array[curr_num_entries];
+    size_t curr_index = 0;
+    
+    async_util_hash_map_iterator new_hm_iterator = 
+        async_util_hash_map_iterator_init(map_ptr);
+
+    async_util_hash_map_iterator_entry* entry;
+    while((entry = async_util_hash_map_iterator_next(&new_hm_iterator)) != NULL){
+        entry_array[curr_index].key = entry->key;
+        entry_array[curr_index].value = entry->value;
+        curr_index++;
+
+        async_util_hash_map_remove(map_ptr, entry->key);
+    }
+
+    char* curr_buffer = get_internal_buffer(outgoing_msg->incoming_msg_template_info.header_buffer);
+
+    for(int i = 0; i < curr_num_entries; i++){
+        size_t key_offset = entry_array[i].key   - outgoing_msg->internal_buffer_ptr;
+        size_t val_offset = entry_array[i].value - outgoing_msg->internal_buffer_ptr;
+
+        async_util_hash_map_set(map_ptr, curr_buffer + key_offset, curr_buffer + val_offset);
+    }
+
+    outgoing_msg->internal_buffer_ptr = get_internal_buffer(outgoing_msg->incoming_msg_template_info.header_buffer);
 }
 
 void async_http_outgoing_message_set_trailer_header(async_http_outgoing_message* outgoing_msg_ptr){

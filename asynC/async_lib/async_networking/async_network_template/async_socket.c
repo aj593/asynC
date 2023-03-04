@@ -19,16 +19,6 @@
 #include "../../../util/async_byte_stream.h"
 #include "../async_net.h"
 
-//TODO: temporary, get rid of this
-#include "../async_udp_socket/async_udp_socket.h"
-
-enum async_socket_events {
-    async_socket_connect_event,
-    async_socket_data_event,
-    async_socket_end_event,
-    async_socket_close_event
-};
-
 //this struct is used for both end and close events for async sockets
 typedef struct socket_end_info {
     async_socket* socket_ptr;
@@ -62,8 +52,8 @@ int async_socket_send_initiator(void* socket_arg);
 
 //#define MAX_IP_ADDR_LEN 50
 //TODO: change these values back later
-#define DEFAULT_SEND_BUFFER_SIZE 64 * 1024 //1
-#define DEFAULT_RECV_BUFFER_SIZE 64 * 1024 //1
+#define DEFAULT_SEND_BUFFER_SIZE 64 * 1024
+#define DEFAULT_RECV_BUFFER_SIZE 64 * 1024
 
 void async_socket_init(async_socket* socket_ptr, void* upper_socket_ptr){
     socket_ptr->is_writable = 1;
@@ -114,10 +104,10 @@ async_socket* async_socket_connect(
 }
 
 void connect_callback(
-    int result, 
     int fd, 
     struct sockaddr* sockaddr_ptr, 
     socklen_t socket_length, 
+    int connect_errno,
     void* arg
 );
 
@@ -136,15 +126,15 @@ void async_socket_connect_task(
 }
 
 void connect_callback(
-    int result, 
     int fd, 
     struct sockaddr* sockaddr_ptr, 
     socklen_t socket_length, 
+    int connect_errno,
     void* arg
 ){
     async_socket* connected_socket = (async_socket*)arg;
 
-    if(result == -1){
+    if(connect_errno != 0){
         //TODO: emit error for connection here?
         return;
     }
@@ -188,6 +178,7 @@ async_socket* create_socket_node(
 
     socket_event_node->event_handler = custom_socket_event_handler;
     epoll_add(new_socket_fd, socket_event_node, events);
+    new_socket->curr_events = events;
 
     new_socket->socket_fd = new_socket_fd;
     new_socket->is_open = 1;
@@ -256,25 +247,24 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
 
     if(events & EPOLLIN){
         curr_socket->data_available_to_read = 1;
+        curr_socket->is_reading = 1;
+        
+        curr_socket->curr_events &= ~EPOLLIN;
+        
+        epoll_mod(
+            curr_socket->socket_fd, 
+            curr_socket->socket_event_node_ptr, 
+            curr_socket->curr_events
+        );
 
-        if(
-            curr_socket->is_readable &&
-            !curr_socket->is_reading &&
-            curr_socket->is_open &&
-            curr_socket->is_flowing &&
-            !curr_socket->set_to_destroy
-        ){
-            async_io_uring_recv(
-                curr_socket->socket_fd,
-                get_internal_buffer(curr_socket->receive_buffer),
-                get_buffer_capacity(curr_socket->receive_buffer),
-                0,
-                after_socket_recv,
-                curr_socket
-            );
-
-            curr_socket->is_reading = 1; //TODO: keep this inside this function?
-        }
+        async_io_uring_recv(
+            curr_socket->socket_fd,
+            get_internal_buffer(curr_socket->receive_buffer),
+            get_buffer_capacity(curr_socket->receive_buffer),
+            0,
+            after_socket_recv,
+            curr_socket
+        );
     }
 
     if(events & EPOLLRDHUP){
@@ -282,17 +272,21 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
         curr_socket->peer_closed = 1;
         curr_socket->is_writable = 0;
 
+        curr_socket->curr_events &= ~EPOLLRDHUP;
+        
+        epoll_mod(
+            curr_socket->socket_fd, 
+            curr_socket->socket_event_node_ptr, 
+            curr_socket->curr_events
+        );
+
         //TODO: need this here?, add condition in case socket allows or doesn't allow half-closure?
         if(
             !curr_socket->data_available_to_read ||
             curr_socket->num_data_listeners == 0
         ){
-            //curr_socket->is_open = 0;
-
             async_socket_open_checker(curr_socket);
         }
-
-        //epoll_mod(curr_socket->socket_fd, curr_socket_node, EPOLLIN);
     }
 }
 
@@ -301,6 +295,14 @@ void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, vo
 
     reading_socket->is_reading = 0;
     reading_socket->data_available_to_read = 0;
+
+    reading_socket->curr_events |= EPOLLIN;
+
+    epoll_mod(
+        reading_socket->socket_fd,
+        reading_socket->socket_event_node_ptr,
+        reading_socket->curr_events
+    );
 
     //TODO: take care of error values here or above where == 0 currently is? check for -104 errno val?
     //in case nonblocking recv() call did not read anything
@@ -422,10 +424,10 @@ void async_socket_destroy(async_socket* socket_to_destroy){
     async_socket_open_checker(socket_to_destroy);
 }
 
-void after_socket_close(int success, void* arg){
+void after_socket_close(int close_fd, int close_errno, void* arg){
     async_socket* closed_socket = (async_socket*)arg;
 
-    async_socket_emit_close(closed_socket, success);
+    async_socket_emit_close(closed_socket, close_errno);
 
     destroy_buffer(closed_socket->receive_buffer);
     

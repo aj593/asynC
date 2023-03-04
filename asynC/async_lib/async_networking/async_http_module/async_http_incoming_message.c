@@ -157,7 +157,7 @@ int async_http_incoming_message_double_CRLF_check(
         return -1;
     }
 
-    async_byte_buffer** incoming_msg_buffer = &incoming_message_ptr->header_buffer;
+    async_byte_buffer** incoming_msg_buffer = &incoming_message_ptr->incoming_msg_template_info.header_buffer;
     if(*incoming_msg_buffer == NULL){
         *incoming_msg_buffer = create_buffer(STARTING_HEADER_BUFF_SIZE);
     }
@@ -203,7 +203,7 @@ void async_http_incoming_message_parse(void* incoming_msg_ptr_arg){
     async_http_incoming_message* incoming_msg_ptr = 
         *(async_http_incoming_message**)incoming_msg_ptr_arg;
 
-    char* header_string = (char*)get_internal_buffer(incoming_msg_ptr->header_buffer);
+    char* header_string = (char*)get_internal_buffer(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
     //int buffer_capacity = get_buffer_capacity((*info_to_parse)->http_header_data);
     
     char* rest_of_str = header_string;
@@ -372,7 +372,8 @@ int async_http_incoming_message_chunk_handler(
                                 *is_reading_trailers_ptr = 1;
                                 *num_bytes_to_dequeue_ptr = zero_CRLF_len;
 
-                                incoming_msg_ptr->trailer_buffer_start_index = get_buffer_length(incoming_msg_ptr->header_buffer);
+                                incoming_msg_ptr->trailer_buffer_start_index = 
+                                    get_buffer_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
                             }
                         }
                     }
@@ -424,7 +425,7 @@ void async_http_incoming_message_parse_trailers(void* incoming_msg_arg){
     async_http_message_template* template_ptr = &incoming_msg_ptr->incoming_msg_template_info;
 
     char* trailer_buffer = 
-        (char*)incoming_msg_ptr->header_buffer + 
+        (char*)incoming_msg_ptr->incoming_msg_template_info.header_buffer + 
         incoming_msg_ptr->trailer_buffer_start_index;
 
     char* curr_line_token = strtok_r(trailer_buffer, CRLF_STR, &trailer_buffer);
@@ -492,17 +493,17 @@ int async_http_incoming_message_process_trailers(
     async_byte_stream_ptr_data* stream_ptr_data
 ){
     buffer_append_bytes(
-        &incoming_msg_ptr->header_buffer, 
+        &incoming_msg_ptr->incoming_msg_template_info.header_buffer, 
         stream_ptr_data->ptr,
         stream_ptr_data->num_bytes
     );
     
-    size_t length_before_append_null_byte = get_buffer_length(incoming_msg_ptr->header_buffer);
-    buffer_append_bytes(&incoming_msg_ptr->header_buffer, "\0", 1);
-    set_buffer_length(incoming_msg_ptr->header_buffer, length_before_append_null_byte);
+    size_t length_before_append_null_byte = get_buffer_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
+    buffer_append_bytes(&incoming_msg_ptr->incoming_msg_template_info.header_buffer, "\0", 1);
+    set_buffer_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer, length_before_append_null_byte);
 
     char* trailer_internal_buffer = 
-        (char*)get_internal_buffer(incoming_msg_ptr->header_buffer) + 
+        (char*)get_internal_buffer(incoming_msg_ptr->incoming_msg_template_info.header_buffer) + 
         incoming_msg_ptr->trailer_buffer_start_index;
 
     char* double_CRLF_ptr = strstr(trailer_internal_buffer, "\r\n\r\n");
@@ -607,7 +608,7 @@ void async_http_incoming_message_clear(async_http_incoming_message* incoming_msg
     incoming_msg_info->trailer_buffer_start_index = 0;
     
     //TODO: change capacity for some of these data structures too? like for buffer, map, vectors
-    set_buffer_length(incoming_msg_info->header_buffer, 0);
+    set_buffer_length(incoming_msg_info->incoming_msg_template_info.header_buffer, 0);
     async_byte_stream_destroy(&incoming_msg_info->incoming_data_stream); //TODO: does this clear byte stream?
 }
 

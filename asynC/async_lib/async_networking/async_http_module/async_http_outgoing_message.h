@@ -10,6 +10,7 @@ typedef struct async_http_outgoing_message {
     async_http_message_template incoming_msg_template_info;
     int was_header_written;
     int has_ended;
+    void* internal_buffer_ptr;
 } async_http_outgoing_message;
 
 void async_http_outgoing_message_init(
@@ -22,14 +23,11 @@ void async_http_outgoing_message_init(
 
 void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_msg);
 
-/*
 void async_http_outgoing_message_set_header(
-    hash_table* table_ptr,
-    async_byte_buffer** header_buffer,
+    async_http_outgoing_message* outgoing_msg,
     char* header_key, 
     char* header_val
 );
-*/
 
 void async_http_outgoing_message_write_head(async_http_outgoing_message* outgoing_msg_ptr);
 

@@ -20,7 +20,7 @@ typedef struct async_tcp_server {
 //void tcp_server_accept_task(void* accept_task);
 
 void after_tcp_server_socket(int socket_fd, int errno, void* arg);
-void after_tcp_server_bind(int, int, char*, int, void*);
+void after_tcp_server_bind(int, char*, int, int, void*);
 void after_tcp_server_listen(int, int, void*);
 
 async_tcp_server* async_tcp_server_create(void){
@@ -91,13 +91,18 @@ void after_tcp_server_socket(int socket_fd, int errno, void* arg){
 }
 
 void after_tcp_server_bind(
-    int bind_ret_val, 
     int socket_fd,
     char* ip_address, 
     int port, 
+    int bind_errno,
     void* arg
 ){
     async_tcp_server* tcp_server = (async_tcp_server*)arg;
+
+    if(bind_errno != 0){
+        //TODO: emit server bind error event
+        return;
+    }
 
     async_server_listen(&tcp_server->wrapped_server);
 }

@@ -20,7 +20,7 @@ typedef struct async_ipc_server {
 
 void after_ipc_server_socket(int socket_fd, int errno, void* arg);
 void after_unlink(int, void*);
-void ipc_server_bind_callback(int, int, char*, void*);
+void ipc_server_bind_callback(int, char*, int, void*);
 
 async_ipc_server* async_ipc_server_create(void){
     async_ipc_server* ipc_server = calloc(1, sizeof(async_ipc_server));
@@ -80,8 +80,13 @@ void after_unlink(int return_val, void* arg){
     );
 }
 
-void ipc_server_bind_callback(int result_val, int socket_fd, char* binded_name, void* arg){
+void ipc_server_bind_callback(int socket_fd, char* binded_name, int bind_errno, void* arg){
     async_ipc_server* ipc_server = (async_ipc_server*)arg;
+
+    if(bind_errno != 0){
+        //TODO: bind ipc server error event
+        return;
+    }
 
     async_server_listen(&ipc_server->wrapped_server);
 }

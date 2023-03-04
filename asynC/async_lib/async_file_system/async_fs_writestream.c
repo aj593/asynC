@@ -17,15 +17,14 @@
 #include <pthread.h>
 
 //TODO: make separate queue for writestreams and other items that don't keep event loop from exiting
-typedef struct fs_writable_stream {
+typedef struct async_fs_writestream {
     int write_fd;
     int is_writable;
-    atomic_int is_writing;
+    int is_writing;
     int is_open;
     int is_done;
-    char filename[PATH_MAX]; //TODO: need this to be PATH_MAX, or need this at all, use strlen to find string length first?
+    char* filename; //TODO: need this to be PATH_MAX, or need this at all, use strlen to find string length first?
     async_byte_stream writestream;
-    pthread_mutex_t buffer_stream_lock;
     //TODO: add event handler vectors? will have to be destroyed when writestream is closed
     int is_queueable_for_writing;
     int is_queued_for_writing;
@@ -57,12 +56,12 @@ typedef struct buffer_holder {
 
 int basic_async_write(void* arg);
 void basic_async_write_thread_task(void* write_task_data);
-void after_writestream_open(int new_writestream_fd, void* writestream_ptr);
+void after_writestream_open(int new_writestream_fd, int open_errno, void* writestream_ptr);
 void writestream_finish_handler(void* writestream_node);
 int is_writestream_done(void* writestream_node);
-void after_async_write(int write_fd, void* array, size_t num_bytes_written, void* arg);
+void after_async_write(int write_fd, void* array, size_t num_bytes_written, int write_errno, void* arg);
 size_t min_size(size_t num1, size_t num2);
-void after_writestream_close(int err, void* writestream_cb_arg);
+void after_writestream_close(int close_fd, int close_errno, void* writestream_cb_arg);
 
 /*
 int fs_writestream_future_task_queue_checker(void* arg){
@@ -71,15 +70,16 @@ int fs_writestream_future_task_queue_checker(void* arg){
 */
 
 async_fs_writestream* create_fs_writestream(char* filename){
-    async_fs_writestream* new_writestream = (async_fs_writestream*)calloc(1, sizeof(async_fs_writestream));
+    size_t filename_length = strlen(filename) + 1;
+
+    async_fs_writestream* new_writestream = (async_fs_writestream*)calloc(1, sizeof(async_fs_writestream) + filename_length);
     new_writestream->is_writable = 1;
 
-    strncpy(new_writestream->filename, filename, PATH_MAX);
+    new_writestream->filename = (char*)(new_writestream + 1);
+    strncpy(new_writestream->filename, filename, filename_length);
 
     async_byte_stream_init(&new_writestream->writestream, DEFAULT_WRITE_BUFFER_SIZE);
 
-    pthread_mutex_init(&new_writestream->buffer_stream_lock, NULL);
-    
     async_fs_open(
         new_writestream->filename, 
         O_CREAT | O_WRONLY,
@@ -91,10 +91,10 @@ async_fs_writestream* create_fs_writestream(char* filename){
     return new_writestream;
 }
 
-void after_writestream_open(int new_writestream_fd, void* writestream_ptr){
+void after_writestream_open(int new_writestream_fd, int open_errno, void* writestream_ptr){
     async_fs_writestream* fs_writestream_ptr = (async_fs_writestream*)writestream_ptr;
 
-    if(new_writestream_fd == -1){
+    if(open_errno != 0){
         //TODO: emit error and return
         return;
     }
@@ -169,7 +169,7 @@ int basic_async_write(void* arg){
     return 0;
 }
 
-void after_async_write(int write_fd, void* array, size_t num_bytes_written, void* arg){
+void after_async_write(int write_fd, void* array, size_t num_bytes_written, int write_errno, void* arg){
     async_fs_writestream* current_writestream = (async_fs_writestream*)arg;
     
     current_writestream->is_writing = 0;
@@ -192,7 +192,7 @@ void after_async_write(int write_fd, void* array, size_t num_bytes_written, void
     }
 }
 
-void after_writestream_close(int err, void* writestream_cb_arg){
+void after_writestream_close(int close_fd, int close_errno, void* writestream_cb_arg){
     async_fs_writestream* closed_writestream = (async_fs_writestream*)writestream_cb_arg;
     closed_writestream->is_done = 1;
 
@@ -200,7 +200,6 @@ void after_writestream_close(int err, void* writestream_cb_arg){
     destroy_event_node(removed_node);
 
     async_byte_stream_destroy(&closed_writestream->writestream);
-    pthread_mutex_destroy(&closed_writestream->buffer_stream_lock);
 
     free(closed_writestream);
 }

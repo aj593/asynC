@@ -33,7 +33,7 @@ typedef struct async_http_server {
 } async_http_server;
 
 enum async_http_server_events {
-    async_http_server_request_event = 2 //TODO: change this in case wrapped server has more events?
+    async_http_server_request_event = async_server_num_events //TODO: change this in case wrapped server has more events?
 };
 
 typedef struct async_http_server_request {
@@ -293,10 +293,10 @@ char* async_http_server_request_get(async_http_server_request* http_req, char* h
 
 void after_socket(int new_socket_fd, int errno, void* arg);
 void after_ipv4_bind(
-    int bind_ret_val, 
     int socket_fd,
     char* ip_address, 
     int port, 
+    int bind_errno,
     void* arg
 );
 
@@ -334,8 +334,14 @@ void async_http_server_listen(
     );
 }
 
-void after_socket(int new_socket_fd, int errno, void* arg){
+void after_socket(int new_socket_fd, int socket_errno, void* arg){
     async_http_server* http_server = (async_http_server*)arg;
+
+    if(socket_errno != 0){
+        //TODO: emit socket error event
+        return;
+    }
+
     http_server->wrapped_server.listening_socket = new_socket_fd;
 
     async_net_ipv4_bind(
@@ -348,13 +354,18 @@ void after_socket(int new_socket_fd, int errno, void* arg){
 }
 
 void after_ipv4_bind(
-    int bind_ret_val, 
     int socket_fd,
     char* ip_address, 
     int port, 
+    int bind_errno,
     void* arg
 ){
     async_http_server* http_server = (async_http_server*)arg;
+
+    if(bind_errno != 0){
+        //TODO: emit server error event
+        return;
+    }
 
     async_server_listen(&http_server->wrapped_server);
 }
@@ -591,6 +602,12 @@ void async_http_server_response_write(
     );
 }
 
+void async_http_server_response_end(async_http_server_response* curr_http_response){
+    async_http_outgoing_message_end(&curr_http_response->outgoing_msg_info);
+
+    http_server_decrement_request_counter(curr_http_response);
+}
+
 void http_server_decrement_request_counter(async_http_server_response* curr_http_response){
     if(curr_http_response->has_decremented_request_counter){
         return;
@@ -598,12 +615,6 @@ void http_server_decrement_request_counter(async_http_server_response* curr_http
 
     curr_http_response->http_server_ptr->curr_num_requests--;
     curr_http_response->has_decremented_request_counter = 1;
-}
-
-void async_http_server_response_end(async_http_server_response* curr_http_response){
-    async_http_outgoing_message_end(&curr_http_response->outgoing_msg_info);
-
-    http_server_decrement_request_counter(curr_http_response);
 }
 
 void async_http_server_response_end_connection(async_http_server_response* curr_http_response){

@@ -5,6 +5,7 @@
 #include "../../async_runtime/thread_pool.h"
 #include "../../async_runtime/event_loop.h"
 #include "../../async_runtime/io_uring_ops.h"
+#include "../../async_err.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -29,6 +30,7 @@ typedef struct async_fs_readstream {
     size_t curr_file_offset;
     unsigned int num_data_event_listeners;
     unsigned int num_end_event_listeners;
+    unsigned int num_error_event_listeners;
 
     event_node* event_node_ptr;
 } async_fs_readstream;
@@ -36,6 +38,7 @@ typedef struct async_fs_readstream {
 enum readstream_events {
     async_fs_readstream_data_event,
     async_fs_readstream_end_event,
+    async_fs_readstream_close_event,
     async_fs_readstream_error_event
 };
 
@@ -49,10 +52,32 @@ typedef struct buffer_info {
     int num_bytes;
 } buffer_info;
 
-void after_readstream_open(int readstream_fd, void* arg);
-void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg);
+void after_readstream_open(int readstream_fd, int open_errno, void* arg);
+
+void after_readstream_read(
+    int readstream_fd, 
+    async_byte_buffer* filled_readstream_buffer, 
+    size_t num_bytes_read, 
+    int read_errno,
+    void* buffer_cb_arg
+);
+
 void async_fs_readstream_emit_data(async_fs_readstream* readstream, async_byte_buffer* data_buffer, size_t num_bytes);
 void async_fs_readstream_emit_end(async_fs_readstream* readstream);
+
+void async_fs_readstream_on_error(
+    async_fs_readstream* readstream, 
+    void(*error_handler)(async_fs_readstream*, async_err*, void*), 
+    void* arg,
+    int is_temp_subscriber,
+    int num_times_listen
+);
+
+void async_fs_readstream_emit_error(
+    async_fs_readstream* readstream, 
+    enum async_fs_readstream_error error, 
+    int std_errno
+);
 
 async_fs_readstream* create_async_fs_readstream(char* filename){
     async_fs_readstream* new_readstream_ptr = calloc(1, sizeof(async_fs_readstream));
@@ -84,13 +109,14 @@ void async_fs_readstream_attempt_read(async_fs_readstream* readstream_ptr){
     }
 }
 
-void after_readstream_open(int readstream_fd, void* arg){
-    if(readstream_fd == -1){
-        //TODO: emit error here
+void after_readstream_open(int readstream_fd, int open_errno, void* arg){
+    async_fs_readstream* readstream_ptr = (async_fs_readstream*)arg;
+
+    if(open_errno != 0){
+        async_fs_readstream_emit_error(readstream_ptr, ASYNC_FS_READSTREAM_OPEN_ERROR, open_errno);
         return;
     }
 
-    async_fs_readstream* readstream_ptr = (async_fs_readstream*)arg;
     readstream_ptr->read_fd = readstream_fd;
     readstream_ptr->is_open = 1;
     readstream_ptr->is_readable = 1;
@@ -109,7 +135,7 @@ void after_readstream_open(int readstream_fd, void* arg){
     async_fs_readstream_attempt_read(readstream_ptr);
 }
 
-void after_readstream_close(int success, void* arg){
+void after_readstream_close(int close_fd, int close_errno, void* arg){
     async_fs_readstream* closed_readstream = (async_fs_readstream*)arg;
     //TODO: emit close event here on this line
 
@@ -120,8 +146,19 @@ void after_readstream_close(int success, void* arg){
 
 
 
-void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstream_buffer, size_t num_bytes_read, void* buffer_cb_arg){
+void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstream_buffer, size_t num_bytes_read, int read_errno, void* buffer_cb_arg){
     async_fs_readstream* readstream_ptr = (async_fs_readstream*)buffer_cb_arg;
+
+    if(read_errno != 0){
+        async_fs_readstream_emit_error(readstream_ptr, ASYNC_FS_READSTERAM_READ_ERROR, read_errno);
+
+        async_fs_close(readstream_ptr->read_fd, after_readstream_close, readstream_ptr);
+
+        event_node* readstream_node = remove_curr(readstream_ptr->event_node_ptr);
+        destroy_event_node(readstream_node);
+
+        return;
+    }
     
     if(num_bytes_read > 0){
         readstream_ptr->curr_file_offset += num_bytes_read;
@@ -130,9 +167,6 @@ void after_readstream_read(int readstream_fd, async_byte_buffer* filled_readstre
     else if(num_bytes_read == 0){
         readstream_ptr->reached_EOF = 1;
         readstream_ptr->is_readable = 0;
-    }
-    else{
-        //TODO: emit error becuase num bytes read is negative?
     }
 
     readstream_ptr->is_currently_reading = 0;
@@ -171,6 +205,49 @@ void data_event_routine(void(*readstream_data_callback)(), void* type_arg, void*
     buffer_info* read_buffer_info = (buffer_info*)data;
     async_byte_buffer* buffer_copy = buffer_copy_num_bytes(read_buffer_info->read_buffer, read_buffer_info->num_bytes);
     readstream_data_handler(read_buffer_info->readstream_ptr, buffer_copy, arg);
+}
+
+void readstream_error_event_converter(void(*callback)(), void* type_arg, void* data, void* arg){
+    void(*error_handler)(async_fs_readstream*, async_err*, void*) = callback;
+
+    error_handler(type_arg, data, arg);
+}
+
+void async_fs_readstream_on_error(
+    async_fs_readstream* readstream, 
+    void(*error_handler)(async_fs_readstream*, async_err*, void*), 
+    void* arg,
+    int is_temp_subscriber,
+    int num_times_listen
+){
+    async_event_emitter_on_event(
+        &readstream->readstream_event_emitter,
+        readstream,
+        async_fs_readstream_error_event,
+        error_handler,
+        readstream_error_event_converter,
+        &readstream->num_error_event_listeners,
+        arg,
+        is_temp_subscriber,
+        num_times_listen
+    );
+}
+
+void async_fs_readstream_emit_error(
+    async_fs_readstream* readstream, 
+    enum async_fs_readstream_error error, 
+    int std_errno
+){
+    async_err new_readstream_err = {
+        .async_errno = error,
+        .std_errno = std_errno
+    };
+
+    async_event_emitter_emit_event(
+        &readstream->readstream_event_emitter,
+        async_fs_readstream_error_event,
+        &new_readstream_err
+    );
 }
 
 void async_fs_readstream_on_data(

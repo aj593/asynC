@@ -89,13 +89,13 @@ void async_http_message_template_init(
 
     async_util_hash_map_init(
         &msg_template_ptr->header_map, 
-        MAX_KEY_VALUE_LENGTH, 
-        MAX_KEY_VALUE_LENGTH, 
+        sizeof(char*), 
+        sizeof(char*), 
         DEFAULT_STARTING_CAPACITY,
         DEFAULT_LOAD_FACTOR,
         async_util_Fowler_Noll_Vo_hash_function,
-        strncpy_wrapper,
-        strncmp_wrapper,
+        memcpy_wrapper,
+        memcpy_wrapper,
         NULL
     );
 

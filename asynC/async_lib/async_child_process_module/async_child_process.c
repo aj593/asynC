@@ -164,7 +164,7 @@ int sync_connect_ipc_socket(
 void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg);
 void async_ipc_socket_connection_handler(async_ipc_server*, async_ipc_socket*, void* arg);
 void async_ipc_socket_data_handler(async_ipc_socket* ipc_socket, async_byte_buffer* data_buffer, void* arg);
-void after_fork_pipe_write(int pipe_fd, async_byte_buffer* child_info_buffer, size_t num_bytes_written, void* arg);
+void after_fork_pipe_write(int pipe_fd, async_byte_buffer* child_info_buffer, size_t num_bytes_written, int write_errno, void* arg);
 
 void exec_task(void);
 void fork_task(char* server_name);
@@ -511,6 +511,16 @@ async_child_process* async_child_process_exec(char* executable_name, char* args[
     return new_child_process;
 }
 
+int async_child_process_kill(async_child_process* child_process, int signal){
+    int result = kill(child_process->subprocess_pid, signal);
+
+    if(result == -1){
+        //TODO: emit error here
+    }
+
+    return result;
+}
+
 void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg){
     async_child_process* new_child_process = (async_child_process*)arg;
     async_ipc_server_on_connection(ipc_server, async_ipc_socket_connection_handler, new_child_process, 0, 0);
@@ -524,7 +534,8 @@ void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg){
     );
 }
 
-void after_fork_pipe_write(int pipe_fd, async_byte_buffer* child_info_buffer, size_t num_bytes_written, void* arg){
+void after_fork_pipe_write(int pipe_fd, async_byte_buffer* child_info_buffer, size_t num_bytes_written, int write_errno, void* arg){
+    //TODO: check write_errno here
     destroy_buffer(child_info_buffer);
 }
 
@@ -534,6 +545,11 @@ void async_ipc_socket_connection_handler(
     void* arg
 ){
     async_child_process* new_child_process = (async_child_process*)arg;
+
+    if(async_ipc_server_num_connections(ipc_server) == 1){
+        //TODO: emit spawn event here too
+    }
+
     async_ipc_socket_on_data(
         ipc_socket, 
         async_ipc_socket_data_handler, 
@@ -562,7 +578,7 @@ void async_child_process_on_custom_connection(async_child_process* child_process
     async_child_process_on_socket_connection(child_process, ipc_socket_custom_connection_handler, custom_arg, CUSTOM_IPC_SOCKET_FLAG);
 }
 
-void after_pidfd_close(int success, void* arg){
+void after_pidfd_close(int close_fd, int close_errno, void* arg){
     async_child_process* child_proc = (async_child_process*)arg;
 
     //TODO: also know to end based on when server calls end event?
@@ -632,8 +648,6 @@ void async_ipc_socket_data_handler(
     ){
         return;
     }
-
-    //TODO: emit spawn event here too
 
     new_child_process->subprocess_pid = *(pid_t*)(internal_socket_buffer + 1);
     new_child_process->pid_fd = pidfd_open(new_child_process->subprocess_pid, 0);
