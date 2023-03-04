@@ -2,6 +2,7 @@
 #define ASYNC_FS_READSTREAM_H
 
 #include "../../util/async_byte_buffer.h"
+#include "../../async_err.h"
 
 typedef struct async_fs_readstream async_fs_readstream;
 

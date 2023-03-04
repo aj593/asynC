@@ -108,8 +108,8 @@ void async_http_outgoing_message_set_header(
     char* curr_buffer = get_internal_buffer(outgoing_msg->incoming_msg_template_info.header_buffer);
 
     for(int i = 0; i < curr_num_entries; i++){
-        size_t key_offset = entry_array[i].key   - outgoing_msg->internal_buffer_ptr;
-        size_t val_offset = entry_array[i].value - outgoing_msg->internal_buffer_ptr;
+        size_t key_offset = (char*)entry_array[i].key   - (char*)outgoing_msg->internal_buffer_ptr;
+        size_t val_offset = (char*)entry_array[i].value - (char*)outgoing_msg->internal_buffer_ptr;
 
         async_util_hash_map_set(map_ptr, curr_buffer + key_offset, curr_buffer + val_offset);
     }

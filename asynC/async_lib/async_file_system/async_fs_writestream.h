@@ -3,7 +3,7 @@
 
 #include "../../util/async_byte_buffer.h"
 
-typedef struct fs_writable_stream async_fs_writestream;
+typedef struct async_fs_writestream async_fs_writestream;
 
 //TODO: add vectors to writestream struct and implement event handler functions for them
 async_fs_writestream* create_fs_writestream(char* filename);
