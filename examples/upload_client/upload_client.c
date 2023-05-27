@@ -24,15 +24,15 @@ void connection_handler(async_socket* socket, void* cb_arg){
 }
 
 void readstream_data_handler(async_fs_readstream* readstream, async_byte_buffer* read_buffer, void* arg){
-    char* str_buf = (char*)get_internal_buffer(read_buffer);
+    char* str_buf = (char*)async_byte_buffer_internal_array(read_buffer);
     async_socket_write(
         connecting_socket, 
         read_buffer, 
-        get_buffer_capacity(read_buffer), 
+        async_byte_buffer_capacity(read_buffer), 
         NULL
     );
 
-    destroy_buffer(read_buffer);
+    async_byte_buffer_destroy(read_buffer);
 }
 
 void readstream_end_handler(async_fs_readstream* ending_readstream, void* arg){

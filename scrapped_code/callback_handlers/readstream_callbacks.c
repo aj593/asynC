@@ -16,7 +16,7 @@ void readstream_data_interm(event_node* readstream_data_node){
         *new_readstream_data = *old_readstream_data;
 
         //creating buffer here in case use makes async call to use old buffer, so we dont reuse same buffer between different readstream data calls
-        new_readstream_data->read_buffer = create_buffer(get_buffer_capacity(old_readstream_data->read_buffer), sizeof(char));
+        new_readstream_data->read_buffer = async_byte_buffer_create(async_byte_buffer_capacity(old_readstream_data->read_buffer), sizeof(char));
 
         //TODO: copy data_buffer between separate calls to each data handler?
 
@@ -28,7 +28,7 @@ void readstream_data_interm(event_node* readstream_data_node){
         make_aio_request(
             &new_readstream_data->aio_block,
             new_readstream_data->read_file_descriptor,
-            get_internal_buffer(new_readstream_data->read_buffer),
+            async_byte_buffer_internal_array(new_readstream_data->read_buffer),
             new_readstream_data->num_bytes_per_read,
             new_readstream_data->file_offset,
             aio_read

@@ -46,8 +46,8 @@ void async_http_outgoing_message_init(
         start_line_third_token_ptr
     );
 
-    outgoing_msg->incoming_msg_template_info.header_buffer = create_buffer(STARTING_HEADER_BUFF_SIZE);
-    outgoing_msg->internal_buffer_ptr = get_internal_buffer(outgoing_msg->incoming_msg_template_info.header_buffer);
+    outgoing_msg->incoming_msg_template_info.header_buffer = async_byte_buffer_create(STARTING_HEADER_BUFF_SIZE);
+    outgoing_msg->internal_buffer_ptr = async_byte_buffer_internal_array(outgoing_msg->incoming_msg_template_info.header_buffer);
 }
 
 void async_http_outgoing_message_destroy(async_http_outgoing_message* outgoing_msg){
@@ -64,19 +64,19 @@ void async_http_outgoing_message_set_header(
     size_t key_length = strlen(header_key);
     size_t val_length = strlen(header_val);
 
-    size_t capacity_before_append = get_buffer_capacity(*header_buffer_ptr);
+    size_t capacity_before_append = async_byte_buffer_capacity(*header_buffer_ptr);
 
-    size_t key_offset = get_buffer_length(*header_buffer_ptr);
-    buffer_append_bytes(header_buffer_ptr, header_key, key_length);
-    buffer_append_bytes(header_buffer_ptr, "\0", 1);
+    size_t key_offset = async_byte_buffer_length(*header_buffer_ptr);
+    async_byte_buffer_append_bytes(header_buffer_ptr, header_key, key_length);
+    async_byte_buffer_append_bytes(header_buffer_ptr, "\0", 1);
 
-    size_t val_offset = get_buffer_length(*header_buffer_ptr);
-    buffer_append_bytes(header_buffer_ptr, header_val, val_length);
-    buffer_append_bytes(header_buffer_ptr, "\0", 1);
+    size_t val_offset = async_byte_buffer_length(*header_buffer_ptr);
+    async_byte_buffer_append_bytes(header_buffer_ptr, header_val, val_length);
+    async_byte_buffer_append_bytes(header_buffer_ptr, "\0", 1);
 
-    size_t capacity_after_append = get_buffer_capacity(*header_buffer_ptr);
+    size_t capacity_after_append = async_byte_buffer_capacity(*header_buffer_ptr);
 
-    char* internal_header_buffer = get_internal_buffer(*header_buffer_ptr);
+    char* internal_header_buffer = async_byte_buffer_internal_array(*header_buffer_ptr);
     char* key_string = internal_header_buffer + key_offset;
     char* val_string = internal_header_buffer + val_offset;
 
@@ -105,7 +105,7 @@ void async_http_outgoing_message_set_header(
         async_util_hash_map_remove(map_ptr, entry->key);
     }
 
-    char* curr_buffer = get_internal_buffer(outgoing_msg->incoming_msg_template_info.header_buffer);
+    char* curr_buffer = async_byte_buffer_internal_array(outgoing_msg->incoming_msg_template_info.header_buffer);
 
     for(int i = 0; i < curr_num_entries; i++){
         size_t key_offset = (char*)entry_array[i].key   - (char*)outgoing_msg->internal_buffer_ptr;
@@ -114,7 +114,7 @@ void async_http_outgoing_message_set_header(
         async_util_hash_map_set(map_ptr, curr_buffer + key_offset, curr_buffer + val_offset);
     }
 
-    outgoing_msg->internal_buffer_ptr = get_internal_buffer(outgoing_msg->incoming_msg_template_info.header_buffer);
+    outgoing_msg->internal_buffer_ptr = async_byte_buffer_internal_array(outgoing_msg->incoming_msg_template_info.header_buffer);
 }
 
 void async_http_outgoing_message_set_trailer_header(async_http_outgoing_message* outgoing_msg_ptr){

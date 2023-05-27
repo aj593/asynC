@@ -37,7 +37,7 @@ void data_handler(async_byte_buffer* data, void* arg){
 
 void end_handler(void* arg){
     vector* req_data_vector = (vector*)arg;
-    async_byte_buffer* concatted_buffer = buffer_concat(req_data_vector->array, req_data_vector->size);
+    async_byte_buffer* concatted_buffer = async_byte_buffer_concat(req_data_vector->array, req_data_vector->size);
     for(int i = 0; i < vector_size(req_data_vector); i++){
         free(get_index(req_data_vector, i));
     }
@@ -53,21 +53,21 @@ void response_writer(async_fs_readstream* readstream, async_byte_buffer* html_bu
     async_http_server_response* res = (async_http_server_response*)res_arg;
     async_http_server_response_write(
         res, 
-        get_internal_buffer(html_buffer), 
-        get_buffer_capacity(html_buffer),
+        async_byte_buffer_internal_array(html_buffer), 
+        async_byte_buffer_capacity(html_buffer),
         NULL, 
         NULL
     );
-    //total_num_bytes_read += get_buffer_capacity(html_buffer);
+    //total_num_bytes_read += async_byte_buffer_capacity(html_buffer);
     //printf("i read %d bytes\n", total_num_bytes_read);
 
     write(
         STDOUT_FILENO,
-        get_internal_buffer(html_buffer),
-        get_buffer_capacity(html_buffer)
+        async_byte_buffer_internal_array(html_buffer),
+        async_byte_buffer_capacity(html_buffer)
     );
 
-    destroy_buffer(html_buffer);
+    async_byte_buffer_destroy(html_buffer);
 }
 
 void response_stream_ender(async_fs_readstream* readstream, void* arg){
@@ -80,7 +80,7 @@ void response_stream_ender(async_fs_readstream* readstream, void* arg){
 }
 
 void data_handler(async_http_server_request* server_request, async_byte_buffer* buffer, void*){
-    printf("got a buffer of size %ld\n", get_buffer_capacity(buffer));
+    printf("got a buffer of size %ld\n", async_byte_buffer_capacity(buffer));
 }
 
 void http_server_on_request(async_http_server* http_server, async_http_server_request* req, async_http_server_response* res, void* arg){
@@ -148,7 +148,7 @@ void http_server_on_request(async_http_server* http_server, async_http_server_re
     //async_http_response_write_head(res);
     //char html_string[] = "<!DOCTYPE html><html>hello world!</html>";
 
-    //async_http_response_write(res, buffer_from_array(html_string, sizeof(html_string)));
+    //async_http_response_write(res, async_byte_buffer_from_array(html_string, sizeof(html_string)));
     //async_http_response_end(res);
     //async_http_server_close(http_server);
 }

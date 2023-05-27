@@ -72,8 +72,8 @@ void bind_callback(async_udp_socket* udp_socket, void* arg){
 }
 
 void msg_callback(async_udp_socket* udp_socket, async_byte_buffer* buffer, char* ip_address, int port, void* arg){
-    printf("%s\n", (char*)get_internal_buffer(buffer));
-    destroy_buffer(buffer);
+    printf("%s\n", (char*)async_byte_buffer_internal_array(buffer));
+    async_byte_buffer_destroy(buffer);
 }
 
 void response_handler(async_http_incoming_response* res, void* arg){
@@ -81,10 +81,10 @@ void response_handler(async_http_incoming_response* res, void* arg){
 }
 
 void response_data_handler(async_http_incoming_response* res, async_byte_buffer* buffer, void* arg){
-    char* array = get_internal_buffer(buffer);
+    char* array = async_byte_buffer_internal_array(buffer);
     printf("curr buffer is:\n%s\n", array);
     
-    destroy_buffer(buffer);
+    async_byte_buffer_destroy(buffer);
 }
 
 void recv_callback(int fd, void* buffer, size_t num, void* arg){

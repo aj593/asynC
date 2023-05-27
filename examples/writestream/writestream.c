@@ -35,8 +35,8 @@ int main(int argc, char* argv[]){
     async_fs_writestream* new_writestream = create_fs_writestream("../test_files/test.txt");
     char message[] = "mary had a little lamb\n";
     int num_bytes = sizeof(message) - 1;
-    //async_byte_buffer* new_buffer = buffer_from_array(message, num_bytes);
-    //char* internal_buffer = get_internal_buffer(new_buffer);
+    //async_byte_buffer* new_buffer = async_byte_buffer_from_array(message, num_bytes);
+    //char* internal_buffer = async_byte_buffer_internal_array(new_buffer);
     //write(STDOUT_FILENO, internal_buffer, num_bytes);
     async_fs_writestream_write(new_writestream, message, num_bytes, first_chunk, new_writestream);
 

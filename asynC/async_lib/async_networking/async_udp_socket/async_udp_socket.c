@@ -377,8 +377,8 @@ void inet_dgram_handler(event_node* curr_socket_node, uint32_t events){
     if(events & EPOLLIN){
         async_net_recvfrom(
             curr_socket->socket_fd,
-            get_internal_buffer(curr_socket->receive_buffer),
-            get_buffer_capacity(curr_socket->receive_buffer),
+            async_byte_buffer_internal_array(curr_socket->receive_buffer),
+            async_byte_buffer_capacity(curr_socket->receive_buffer),
             0, recvfrom_callback, curr_socket
         );
     }
@@ -578,7 +578,7 @@ void message_event_converter(void(*message_callback)(), void* type_arg, void* da
     async_udp_buffer_entry* new_msg_holder_ptr = (async_udp_buffer_entry*)data;
 
     async_byte_buffer* new_buffer = 
-        buffer_from_array(
+        async_byte_buffer_from_array(
             new_msg_holder_ptr->buffer, 
             new_msg_holder_ptr->num_bytes
         );

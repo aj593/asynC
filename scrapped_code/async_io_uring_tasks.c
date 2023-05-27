@@ -71,7 +71,7 @@ void uring_write(){
         io_uring_prep_write(
             write_sqe, 
             write_fd,
-            get_internal_buffer(write_buff_ptr),
+            async_byte_buffer_internal_array(write_buff_ptr),
             num_bytes_to_write,
             lseek(write_fd, num_bytes_to_write, SEEK_CUR) - num_bytes_to_write
         );
@@ -106,7 +106,7 @@ async_io_uring_read(){
         io_uring_prep_read(
             read_sqe, 
             read_fd, 
-            get_internal_buffer(read_buff_ptr),
+            async_byte_buffer_internal_array(read_buff_ptr),
             num_bytes_to_read,
             lseek(read_fd, num_bytes_to_read, SEEK_CUR) - num_bytes_to_read
         );
@@ -140,7 +140,7 @@ void async_io_uring_pread(){
         io_uring_prep_read(
             pread_sqe,
             pread_fd,
-            get_internal_buffer(pread_buffer_ptr),
+            async_byte_buffer_internal_array(pread_buffer_ptr),
             num_bytes_to_read,
             offset
         );
@@ -233,8 +233,8 @@ int async_recv(void* receiving_socket_ptr){
     io_uring_prep_recv(
         recv_sqe, 
         recv_uring_data->fd,
-        get_internal_buffer(recv_uring_data->buffer),
-        get_buffer_capacity(recv_uring_data->buffer),
+        async_byte_buffer_internal_array(recv_uring_data->buffer),
+        async_byte_buffer_capacity(recv_uring_data->buffer),
         MSG_DONTWAIT
     );
 

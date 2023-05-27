@@ -28,11 +28,20 @@ void async_fs_buffer_read(
     void* cb_arg
 );
 
+void async_fs_pread(
+    int pread_fd, 
+    void* pread_buffer_ptr, 
+    size_t num_bytes_to_read, 
+    off_t offset, 
+    void(*read_callback)(int, void*, size_t, int, void*), 
+    void* cb_arg
+);
+
 void async_fs_buffer_pread(
     int pread_fd, 
     async_byte_buffer* pread_buffer_ptr, 
     size_t num_bytes_to_read, 
-    int offset, 
+    off_t offset, 
     void(*read_callback)(int, async_byte_buffer*, size_t, int, void*), 
     void* cb_arg
 );

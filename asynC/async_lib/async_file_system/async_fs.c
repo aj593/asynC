@@ -50,8 +50,11 @@ void async_fs_buffer_read(int read_fd, async_byte_buffer* read_buff_ptr, size_t 
 void async_fs_buffer_read_thread_task(void* read_task);
 void async_fs_after_thread_buffer_read(void* buffer_read_info, void* arg);
 
+void async_fs_pread(int pread_fd, void* pread_buffer_ptr, size_t num_bytes_to_read, off_t offset, void(*read_callback)(int, void*, size_t, int, void*), void* cb_arg);
+void async_fs_pread_thread_task(void* async_pread_task_info);
+
 //TODO: find way to condense code for pread() with regular read()?
-void async_fs_buffer_pread(int pread_fd, async_byte_buffer* pread_buffer_ptr, size_t num_bytes_to_read, int offset, void(*read_callback)(int, async_byte_buffer*, size_t, int, void*), void* cb_arg);
+void async_fs_buffer_pread(int pread_fd, async_byte_buffer* pread_buffer_ptr, size_t num_bytes_to_read, off_t offset, void(*read_callback)(int, async_byte_buffer*, size_t, int, void*), void* cb_arg);
 void async_fs_buffer_pread_thread_task(void* async_pread_task_info);
 
 void async_fs_write(int write_fd, void* write_array, size_t num_bytes_to_write, void(*write_callback)(int, void*, size_t, int, void*), void* arg);
@@ -67,7 +70,7 @@ void async_unlink_thread_task(void* thread_unlink_info);
 void after_async_unlink(void* unlink_data, void* arg);
 
 void async_fs_open(char* filename, int flags, int mode, void(*open_callback)(int, int, void*), void* cb_arg){
-    size_t filename_length = strnlen(filename, FILENAME_MAX) + 1;
+    size_t filename_length = strnlen(filename, FILENAME_MAX) + 1; //TODO: use std lib's PATHMAX?
 
     async_fs_task_info new_open_info = {
         .flags = flags,
@@ -217,11 +220,11 @@ void async_fs_buffer_read(
 void async_fs_buffer_read_thread_task(void* read_task){
     async_fs_task_info* read_info = (async_fs_task_info*)read_task;
 
-    size_t num_bytes_to_read = min(read_info->max_num_bytes, get_buffer_capacity(read_info->buffer));
+    size_t num_bytes_to_read = min(read_info->max_num_bytes, async_byte_buffer_capacity(read_info->buffer));
 
     read_info->return_val = read(
         read_info->fs_task_fd,
-        get_internal_buffer(read_info->buffer),
+        async_byte_buffer_internal_array(read_info->buffer),
         num_bytes_to_read
     );
 
@@ -230,7 +233,7 @@ void async_fs_buffer_read_thread_task(void* read_task){
         return;
     }
 
-    set_buffer_length(read_info->buffer, read_info->return_val);
+    async_byte_buffer_set_length(read_info->buffer, read_info->return_val);
 }
 
 void async_fs_after_thread_buffer_read(void* buffer_read_info, void* arg){
@@ -247,15 +250,53 @@ void async_fs_after_thread_buffer_read(void* buffer_read_info, void* arg){
     );
 }
 
+void async_fs_pread(
+    int pread_fd, 
+    void* pread_buffer_ptr, 
+    size_t num_bytes_to_read, 
+    off_t offset, 
+    void(*read_callback)(int, void*, size_t, int, void*), 
+    void* cb_arg
+){
+    async_fs_task_info new_pread_info = {
+        .fs_task_fd = pread_fd,
+        .array = pread_buffer_ptr,
+        .max_num_bytes = num_bytes_to_read,
+        .offset = offset,
+        .generic_fs_callback = (void(*)())read_callback
+    };
+
+    async_thread_pool_create_task_copied(
+        async_fs_pread_thread_task,
+        async_fs_after_thread_read,
+        &new_pread_info,
+        sizeof(async_fs_task_info),
+        cb_arg
+    );
+}
+
+void async_fs_pread_thread_task(void* async_pread_task_info){
+    async_fs_task_info* pread_params = (async_fs_task_info*)async_pread_task_info;
+
+    pread_params->return_val = pread(
+        pread_params->fs_task_fd,
+        async_byte_buffer_internal_array(pread_params->buffer),
+        pread_params->max_num_bytes,
+        pread_params->offset
+    );
+
+    pread_params->task_errno = errno;
+}
+
 void async_fs_buffer_pread(
     int pread_fd, 
     async_byte_buffer* pread_buffer_ptr, 
     size_t num_bytes_to_read, 
-    int offset, 
+    off_t offset, 
     void(*buffer_pread_callback)(int, async_byte_buffer*, size_t, int, void*), 
     void* cb_arg
 ){
-    async_fs_task_info new_pread_info = {
+    async_fs_task_info new_buffer_pread_info = {
         .fs_task_fd = pread_fd,
         .buffer = pread_buffer_ptr,
         .max_num_bytes = num_bytes_to_read,
@@ -266,7 +307,7 @@ void async_fs_buffer_pread(
     async_thread_pool_create_task_copied(
         async_fs_buffer_pread_thread_task,
         async_fs_after_thread_buffer_read,
-        &new_pread_info,
+        &new_buffer_pread_info,
         sizeof(async_fs_task_info),
         cb_arg
     );
@@ -275,11 +316,11 @@ void async_fs_buffer_pread(
 void async_fs_buffer_pread_thread_task(void* async_pread_task_info){
     async_fs_task_info* pread_params = (async_fs_task_info*)async_pread_task_info;
 
-    size_t num_bytes_to_read = min(pread_params->max_num_bytes, get_buffer_capacity(pread_params->buffer));
+    size_t num_bytes_to_read = min(pread_params->max_num_bytes, async_byte_buffer_capacity(pread_params->buffer));
     
     pread_params->return_val = pread(
         pread_params->fs_task_fd,
-        get_internal_buffer(pread_params->buffer),
+        async_byte_buffer_internal_array(pread_params->buffer),
         num_bytes_to_read,
         pread_params->offset
     );
@@ -365,12 +406,12 @@ void async_fs_buffer_write_thread_task(void* write_task){
 
     size_t num_bytes_to_write = min(
         write_task_info->max_num_bytes, 
-        get_buffer_capacity(write_task_info->buffer)
+        async_byte_buffer_capacity(write_task_info->buffer)
     );
 
     write_task_info->return_val = write(
         write_task_info->fs_task_fd,
-        get_internal_buffer(write_task_info->buffer),
+        async_byte_buffer_internal_array(write_task_info->buffer),
         num_bytes_to_write
     );
 

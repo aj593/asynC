@@ -152,24 +152,24 @@ int async_http_incoming_message_double_CRLF_check(
     void data_handler_to_remove(async_tcp_socket*, async_byte_buffer*, void*)
 ){
     if(incoming_message_ptr->found_double_CRLF){
-        destroy_buffer(new_data_buffer);
+        async_byte_buffer_destroy(new_data_buffer);
         printf("executing this though I shouldn't be??\n");
         return -1;
     }
 
     async_byte_buffer** incoming_msg_buffer = &incoming_message_ptr->incoming_msg_template_info.header_buffer;
     if(*incoming_msg_buffer == NULL){
-        *incoming_msg_buffer = create_buffer(STARTING_HEADER_BUFF_SIZE);
+        *incoming_msg_buffer = async_byte_buffer_create(STARTING_HEADER_BUFF_SIZE);
     }
 
-    buffer_append_buffer(incoming_msg_buffer, new_data_buffer);
-    buffer_append_bytes(incoming_msg_buffer, "\0", 1);
-    char* char_buffer_check_array = (char*)get_internal_buffer(*incoming_msg_buffer);
+    async_byte_buffer_append_buffer(incoming_msg_buffer, new_data_buffer);
+    async_byte_buffer_append_bytes(incoming_msg_buffer, "\0", 1);
+    char* char_buffer_check_array = (char*)async_byte_buffer_internal_array(*incoming_msg_buffer);
 
-    size_t curr_buff_len = get_buffer_length(*incoming_msg_buffer);
-    set_buffer_length(*incoming_msg_buffer, curr_buff_len - 1);
+    size_t curr_buff_len = async_byte_buffer_length(*incoming_msg_buffer);
+    async_byte_buffer_set_length(*incoming_msg_buffer, curr_buff_len - 1);
 
-    destroy_buffer(new_data_buffer);
+    async_byte_buffer_destroy(new_data_buffer);
 
     char* double_CRLF_ptr = strstr(char_buffer_check_array, "\r\n\r\n");
     if(double_CRLF_ptr == NULL){
@@ -180,7 +180,7 @@ int async_http_incoming_message_double_CRLF_check(
 
     char* start_of_body_ptr = double_CRLF_ptr + 4;
     size_t header_len = start_of_body_ptr - char_buffer_check_array;
-    size_t start_of_body_len = get_buffer_length(*incoming_msg_buffer) - header_len;
+    size_t start_of_body_len = async_byte_buffer_length(*incoming_msg_buffer) - header_len;
     async_byte_stream_enqueue(&incoming_message_ptr->incoming_data_stream, start_of_body_ptr, start_of_body_len, NULL, NULL);
 
     //remove "data_handler_to_remove" data handler here
@@ -203,8 +203,8 @@ void async_http_incoming_message_parse(void* incoming_msg_ptr_arg){
     async_http_incoming_message* incoming_msg_ptr = 
         *(async_http_incoming_message**)incoming_msg_ptr_arg;
 
-    char* header_string = (char*)get_internal_buffer(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
-    //int buffer_capacity = get_buffer_capacity((*info_to_parse)->http_header_data);
+    char* header_string = (char*)async_byte_buffer_internal_array(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
+    //int buffer_capacity = async_byte_buffer_capacity((*info_to_parse)->http_header_data);
     
     char* rest_of_str = header_string;
     char* curr_line_token = strtok_r(rest_of_str, "\r", &rest_of_str);
@@ -251,13 +251,13 @@ void async_http_incoming_message_data_handler(async_tcp_socket* socket, async_by
     //TODO: need mutex lock here?
     async_byte_stream_enqueue(
         &incoming_msg_ptr->incoming_data_stream,
-        get_internal_buffer(data),
-        get_buffer_capacity(data),
+        async_byte_buffer_internal_array(data),
+        async_byte_buffer_capacity(data),
         NULL,
         NULL 
     );
 
-    destroy_buffer(data);
+    async_byte_buffer_destroy(data);
 
     async_http_incoming_message_check_data(incoming_msg_ptr);
 }
@@ -373,7 +373,7 @@ int async_http_incoming_message_chunk_handler(
                                 *num_bytes_to_dequeue_ptr = zero_CRLF_len;
 
                                 incoming_msg_ptr->trailer_buffer_start_index = 
-                                    get_buffer_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
+                                    async_byte_buffer_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
                             }
                         }
                     }
@@ -492,18 +492,18 @@ int async_http_incoming_message_process_trailers(
     async_http_incoming_message* incoming_msg_ptr,
     async_byte_stream_ptr_data* stream_ptr_data
 ){
-    buffer_append_bytes(
+    async_byte_buffer_append_bytes(
         &incoming_msg_ptr->incoming_msg_template_info.header_buffer, 
         stream_ptr_data->ptr,
         stream_ptr_data->num_bytes
     );
     
-    size_t length_before_append_null_byte = get_buffer_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
-    buffer_append_bytes(&incoming_msg_ptr->incoming_msg_template_info.header_buffer, "\0", 1);
-    set_buffer_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer, length_before_append_null_byte);
+    size_t length_before_append_null_byte = async_byte_buffer_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer);
+    async_byte_buffer_append_bytes(&incoming_msg_ptr->incoming_msg_template_info.header_buffer, "\0", 1);
+    async_byte_buffer_set_length(incoming_msg_ptr->incoming_msg_template_info.header_buffer, length_before_append_null_byte);
 
     char* trailer_internal_buffer = 
-        (char*)get_internal_buffer(incoming_msg_ptr->incoming_msg_template_info.header_buffer) + 
+        (char*)async_byte_buffer_internal_array(incoming_msg_ptr->incoming_msg_template_info.header_buffer) + 
         incoming_msg_ptr->trailer_buffer_start_index;
 
     char* double_CRLF_ptr = strstr(trailer_internal_buffer, "\r\n\r\n");
@@ -566,7 +566,7 @@ void incoming_msg_data_converter(void(*generic_callback)(void), void* type_arg, 
     
     incoming_msg_data_handler(
         type_arg,
-        buffer_from_array(
+        async_byte_buffer_from_array(
             curr_http_incoming_info->data_ptr, 
             curr_http_incoming_info->num_bytes
         ),
@@ -608,7 +608,7 @@ void async_http_incoming_message_clear(async_http_incoming_message* incoming_msg
     incoming_msg_info->trailer_buffer_start_index = 0;
     
     //TODO: change capacity for some of these data structures too? like for buffer, map, vectors
-    set_buffer_length(incoming_msg_info->incoming_msg_template_info.header_buffer, 0);
+    async_byte_buffer_set_length(incoming_msg_info->incoming_msg_template_info.header_buffer, 0);
     async_byte_stream_destroy(&incoming_msg_info->incoming_data_stream); //TODO: does this clear byte stream?
 }
 

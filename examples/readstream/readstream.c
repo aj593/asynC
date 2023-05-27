@@ -9,12 +9,12 @@
 async_fs_writestream* output_file;
 
 void readstream_data_callback(async_fs_readstream* readstream, async_byte_buffer* read_data, void* arg){
-    printf("%s\n", (char*)get_internal_buffer(read_data));
+    printf("%s\n", (char*)async_byte_buffer_internal_array(read_data));
 
     async_fs_writestream_write(
         output_file, 
-        get_internal_buffer(read_data), 
-        get_buffer_capacity(read_data),
+        async_byte_buffer_internal_array(read_data), 
+        async_byte_buffer_capacity(read_data),
         NULL,
         NULL
     );

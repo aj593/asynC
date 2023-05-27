@@ -68,7 +68,7 @@
 
     /*int fd = open(argv[1], O_RDONLY);
     int max_bytes = 3000;
-    thread_read(fd, create_buffer(max_bytes), NULL, NULL);*/
+    thread_read(fd, async_byte_buffer_create(max_bytes), NULL, NULL);*/
     
     /*char greetings[] = "greetings";
     void* greetings_ptr = &greetings;
@@ -87,7 +87,7 @@
 
     void read_file_cb(async_byte_buffer* rf_buffer, int num_bytes_read, callback_arg* output_filename_arg){
     if(num_bytes_read > 0){
-        char* file_string = get_internal_buffer(rf_buffer);
+        char* file_string = async_byte_buffer_internal_array(rf_buffer);
         write(STDOUT_FILENO, file_string, num_bytes_read);
     }
     else{
@@ -97,12 +97,12 @@
 }
 
 void after_file_write(async_byte_buffer* wf_buffer, int num_bytes_written, callback_arg* cb_arg){
-    destroy_buffer(wf_buffer);
+    async_byte_buffer_destroy(wf_buffer);
     destroy_cb_arg(cb_arg); //TODO: is it ok to put destroy() call after write_file() in read_file_cb?
 }
 
 void after_test_read(int fd, async_byte_buffer* buff, int num_bytes_read, callback_arg* cb_arg){
-    destroy_buffer(buff);
+    async_byte_buffer_destroy(buff);
 }
 
 void say_msg(event_emitter* emitter, event_arg* emitter_arg){
@@ -153,7 +153,7 @@ void child_fcn_callback(pid_t pid, int status, callback_arg* cb_arg){
     fd_array[1] = open2_fd;
 
     int num_bytes = 1000;
-    async_byte_buffer* read_buff = create_buffer(num_bytes, sizeof(char));
+    async_byte_buffer* read_buff = async_byte_buffer_create(num_bytes, sizeof(char));
 
     thread_read(fd_array[0], read_buff, num_bytes, after_read, arg);
 }
@@ -164,12 +164,12 @@ void after_read(int read_fd, async_byte_buffer* read_buff, int num_bytes_read, c
     //also destroy buffer and free() fd_array
     
     int* fd_array = (int*)get_arg_data(arg);
-    char* char_buff = (char*)get_internal_buffer(read_buff);
+    char* char_buff = (char*)async_byte_buffer_internal_array(read_buff);
     write(STDOUT_FILENO, char_buff, num_bytes_read);
     if(num_bytes_read == 0){
         close(fd_array[0]);
         close(fd_array[1]);
-        destroy_buffer(read_buff);
+        async_byte_buffer_destroy(read_buff);
         destroy_cb_arg(arg);
     }
     else{
@@ -179,7 +179,7 @@ void after_read(int read_fd, async_byte_buffer* read_buff, int num_bytes_read, c
 
 void after_write(int write_fd, async_byte_buffer* write_buff, int num_bytes_written, callback_arg* arg){
     int* fd_array = (int*)get_arg_data(arg);
-    thread_read(fd_array[0], write_buff, get_buffer_capacity(write_buff), after_read, arg);
+    thread_read(fd_array[0], write_buff, async_byte_buffer_capacity(write_buff), after_read, arg);
 }*/
 
 //TODO: error check for NULL with malloc and calloc
@@ -209,11 +209,11 @@ void after_test_read(int, async_byte_buffer*, int, callback_arg*);
 int open_fd;
 
 void after_write_from_rs(int fd, async_byte_buffer* written_buffer, int num_bytes, callback_arg* cb_arg){
-    destroy_buffer(written_buffer);
+    async_byte_buffer_destroy(written_buffer);
 }
 
 /*void readstream_callback(readstream* rs, async_byte_buffer* buffer, int num_bytes_read, callback_arg* cb_arg){
-    //printf("curr data: %s\n\n", (char*)get_internal_buffer(buffer));
+    //printf("curr data: %s\n\n", (char*)async_byte_buffer_internal_array(buffer));
 
     int* num_bytes_ptr = (int*)get_arg_data(cb_arg);
     *num_bytes_ptr += num_bytes_read;
@@ -221,7 +221,7 @@ void after_write_from_rs(int fd, async_byte_buffer* written_buffer, int num_byte
 
     //pause_readstream(rs);
     //async_write(open_fd, buffer, num_bytes_read, after_write_from_rs, NULL);
-    write(STDOUT_FILENO, get_internal_buffer(buffer), num_bytes_read);
+    write(STDOUT_FILENO, async_byte_buffer_internal_array(buffer), num_bytes_read);
 }*/
 
 char* input_filename;
@@ -270,7 +270,7 @@ void after_open_test(int new_fd, callback_arg* cb_arg){
     int* fds = (int*)get_arg_data(cb_arg);
     fds[1] = new_fd;
 
-    async_byte_buffer* read_buff = create_buffer(num_read_bytes, sizeof(char));
+    async_byte_buffer* read_buff = async_byte_buffer_create(num_read_bytes, sizeof(char));
 
     before_read = clock();
     thread_read(fds[0], read_buff, num_read_bytes, after_read_test, cb_arg);
@@ -311,7 +311,7 @@ int num_bytes = 100;
 void read_cb(int fd, async_byte_buffer* buffer, int num_bytes_read, void* cb_arg);
 
 void after_write(int fd, async_byte_buffer* buffer, int num_bytes_written, void* cb_arg){
-    //char* char_buffer = get_internal_buffer(buffer);
+    //char* char_buffer = async_byte_buffer_internal_array(buffer);
     //printf("my internal buffer is %s\n", char_buffer);
     int* fds = (int*)cb_arg;
     async_read(fds[0], buffer, num_bytes, read_cb, cb_arg);
@@ -337,7 +337,7 @@ void read_cb(int fd, async_byte_buffer* buffer, int num_bytes_read, void* cb_arg
         async_write(fds[1], buffer, num_bytes_read, after_write, cb_arg);
     }
     else{
-        destroy_buffer(buffer);
+        async_byte_buffer_destroy(buffer);
         for(int i = 0; i < 2; i++){
             async_close(fds[i], after_close, cb_arg);
         }
@@ -348,7 +348,7 @@ void after_second_open(int second_fd, void* cb_arg){
     int* fd_array = (int*)(cb_arg);
     fd_array[1] = second_fd;
 
-    async_byte_buffer* read_buffer = create_buffer(num_bytes, sizeof(char));
+    async_byte_buffer* read_buffer = async_byte_buffer_create(num_bytes, sizeof(char));
 
     async_read(fd_array[0], read_buffer, num_bytes, read_cb, cb_arg);
 }

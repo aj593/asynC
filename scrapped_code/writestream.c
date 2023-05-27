@@ -1,19 +1,19 @@
 /* belonged to async_fs_writestream_write
-    int num_bytes_able_to_write = min_size(num_bytes_to_write, get_buffer_capacity(write_buffer));
+    int num_bytes_able_to_write = min_size(num_bytes_to_write, async_byte_buffer_capacity(write_buffer));
 
     int buff_highwatermark_size = DEFAULT_WRITE_BUFFER_SIZE;
     int num_bytes_left_to_parse = num_bytes_able_to_write;
 
     event_node* curr_buffer_node;
-    char* buffer_to_copy = (char*)get_internal_buffer(write_buffer);
+    char* buffer_to_copy = (char*)async_byte_buffer_internal_array(write_buffer);
 
     while(num_bytes_left_to_parse > 0){
         curr_buffer_node = create_event_node(sizeof(writestream_buffer_item), NULL, NULL);
         int curr_buff_size = min_size(num_bytes_left_to_parse, buff_highwatermark_size);
         writestream_buffer_item* write_buffer_node_info = (writestream_buffer_item*)curr_buffer_node->data_ptr;
-        write_buffer_node_info->writing_buffer = create_buffer(curr_buff_size, sizeof(char));
+        write_buffer_node_info->writing_buffer = async_byte_buffer_create(curr_buff_size, sizeof(char));
     
-        void* destination_internal_buffer = get_internal_buffer(write_buffer_node_info->writing_buffer);
+        void* destination_internal_buffer = async_byte_buffer_internal_array(write_buffer_node_info->writing_buffer);
         memcpy(destination_internal_buffer, buffer_to_copy, curr_buff_size);
         buffer_to_copy += curr_buff_size;
         num_bytes_left_to_parse -= curr_buff_size;
@@ -46,7 +46,7 @@
         async_write(
             writestream->write_fd,
             buffer_to_write,
-            get_buffer_capacity(buffer_to_write),
+            async_byte_buffer_capacity(buffer_to_write),
             after_writestream_write,
             writestream_buffer_node
         );
@@ -68,7 +68,7 @@ void after_writestream_write(int writestream_fd, async_byte_buffer* removed_buff
         buffer_item->writestream_write_callback(0); 
     }
 
-    destroy_buffer(removed_buffer);
+    async_byte_buffer_destroy(removed_buffer);
     destroy_event_node(writestream_buffer_node);
 }
 */

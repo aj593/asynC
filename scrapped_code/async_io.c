@@ -100,7 +100,7 @@ void async_read(int read_fd, async_byte_buffer* read_buff_ptr, int num_bytes_to_
     make_aio_request(
         &io_read_block->aio_block,                                          //use the aiocb from our async_io struct
         read_fd,                                                            //use the file descriptor passed-in for reading
-        get_internal_buffer(read_buff_ptr),                                 //void* data we fill buffer with from aio_read
+        async_byte_buffer_internal_array(read_buff_ptr),                                 //void* data we fill buffer with from aio_read
         num_bytes_to_read,                                                  //number of bytes to read from file, TODO:make min(num_bytes_to_read, buffer.capacity)?
         lseek(read_fd, num_bytes_to_read, SEEK_CUR) - num_bytes_to_read,                                         //offset from which we start reading file
         aio_read                                                            //function pointer for our aio_read() operation
@@ -134,7 +134,7 @@ void async_write(int write_fd, async_byte_buffer* write_buff_ptr, int num_bytes_
     make_aio_request(
         &io_write_block->aio_block,                                             //aio block we assign field values into
         write_fd,                                                               //file descriptor we write into
-        get_internal_buffer(write_buff_ptr),                                    //void* data buffer we copy bytes from into file
+        async_byte_buffer_internal_array(write_buff_ptr),                                    //void* data buffer we copy bytes from into file
         num_bytes_to_write,                                                     //number of bytes to write to file
         lseek(write_fd, num_bytes_to_write, SEEK_CUR) - num_bytes_to_write,
         //io_write_block->file_offset,                                            //file offset we start writing from
@@ -163,7 +163,7 @@ void read_file(char* file_name, readfile_callback rf_callback, callback_arg* cb_
     event_node* new_readfile_event = 
         io_event_init(
             READ_FILE_INDEX,            //we use the index corresponding to the intermediate callback handler's function in the function pointer array
-            create_buffer(file_size, sizeof(char)),   //buffer of size "file_size"
+            async_byte_buffer_create(file_size, sizeof(char)),   //buffer of size "file_size"
             read_file_cb_interm, 
             cb_arg                      //callback argument that will be passed into callback
         );
@@ -176,7 +176,7 @@ void read_file(char* file_name, readfile_callback rf_callback, callback_arg* cb_
     make_aio_request(
         &readfile_data->aio_block,                      //aiocb we're using to make aio request
         read_fd,                                        //file descriptor we're reading with
-        get_internal_buffer(readfile_data->buff_ptr),   //void* data we fill in buffer
+        async_byte_buffer_internal_array(readfile_data->buff_ptr),   //void* data we fill in buffer
         file_size,                                      //number of bytes we read from file
         0,                                              //starting offset from where we read in file
         aio_read                                        //aio function pointer we execute in make_aio_request to read from file
@@ -207,7 +207,7 @@ void write_file(char* file_name, async_byte_buffer* write_buff, int num_bytes_to
     make_aio_request(
         &io_wf_block->aio_block,            //aiocb pointer we're using to make aio request
         open(file_name, flags, mode),       //file descriptor we're using to write to file
-        get_internal_buffer(write_buff),    //void* data in async_byte_buffer* write_buff that we copy bytes from into file
+        async_byte_buffer_internal_array(write_buff),    //void* data in async_byte_buffer* write_buff that we copy bytes from into file
         num_bytes_to_write,                 //number of bytes to write from the buffer to the file
         0,                                  //starting offset for file for where we're writing
         aio_write                           //aio_op we're passing in as function pointer to make async request

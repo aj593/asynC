@@ -11,8 +11,6 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#include <arpa/inet.h>
-
 #include <stdarg.h>
 
 //TODO: find cross-platform/standard version to do this?
@@ -433,13 +431,6 @@ void async_http_server_connection_handler(async_http_server* http_server, async_
         async_http_server_socket_data_handler,
         http_req_res_single_block, 0, 0
     );
-
-    //TODO: is this good place to register close event for underlying tcp socket of http request?
-    async_tcp_socket_on_close(
-        new_http_socket,
-        async_http_server_after_socket_close,
-        new_http_request->event_queue_node->data_ptr, 0, 0
-    );
 }
 
 //TODO: remove this data handler using off_data() after implementing it?
@@ -466,6 +457,13 @@ void async_http_server_socket_data_handler(async_tcp_socket* read_socket, async_
         new_response,
         read_socket,
         new_request->http_server_ptr
+    );
+
+    //TODO: is this good place to register close event for underlying tcp socket of http request?
+    async_tcp_socket_on_close(
+        read_socket,
+        async_http_server_after_socket_close,
+        new_request->event_queue_node->data_ptr, 0, 0
     );
 }
 
@@ -580,7 +578,7 @@ void async_http_server_response_write_head(async_http_server_response* curr_http
     async_http_outgoing_message_write_head(&curr_http_response->outgoing_msg_info);
 
     //TODO: need to destroy this here?
-    //destroy_buffer(msg_template_ptr->header_buffer);
+    //async_byte_buffer_destroy(msg_template_ptr->header_buffer);
 }
 
 void async_http_server_response_write(

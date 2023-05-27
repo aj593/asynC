@@ -65,7 +65,7 @@ void async_socket_init(async_socket* socket_ptr, void* upper_socket_ptr){
 
     async_util_linked_list_init(&socket_ptr->buffer_list, 0);
     
-    socket_ptr->receive_buffer = create_buffer(DEFAULT_RECV_BUFFER_SIZE);
+    socket_ptr->receive_buffer = async_byte_buffer_create(DEFAULT_RECV_BUFFER_SIZE);
 }
 
 async_socket* async_socket_connect(
@@ -259,8 +259,8 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
 
         async_io_uring_recv(
             curr_socket->socket_fd,
-            get_internal_buffer(curr_socket->receive_buffer),
-            get_buffer_capacity(curr_socket->receive_buffer),
+            async_byte_buffer_internal_array(curr_socket->receive_buffer),
+            async_byte_buffer_capacity(curr_socket->receive_buffer),
             0,
             after_socket_recv,
             curr_socket
@@ -429,7 +429,7 @@ void after_socket_close(int close_fd, int close_errno, void* arg){
 
     async_socket_emit_close(closed_socket, close_errno);
 
-    destroy_buffer(closed_socket->receive_buffer);
+    async_byte_buffer_destroy(closed_socket->receive_buffer);
     
     async_byte_stream_destroy(&closed_socket->socket_send_stream);
 
@@ -517,7 +517,7 @@ void socket_data_routine(void(*data_callback)(void), void* type_arg, void* data 
     
     socket_data_info* new_socket_data = (socket_data_info*)data;
     async_byte_buffer* socket_buffer_copy = 
-        buffer_copy_num_bytes(
+        async_byte_buffer_copy_num_bytes(
             new_socket_data->curr_buffer, 
             new_socket_data->num_bytes_read
         );

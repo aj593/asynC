@@ -61,7 +61,7 @@ void async_http_request_options_init(http_request_options* http_options_ptr){
 
 /*
 void async_http_request_options_destroy(http_request_options* http_options_ptr){
-    destroy_buffer(http_options_ptr->header_buffer);
+    async_byte_buffer_destroy(http_options_ptr->header_buffer);
     ht_destroy(http_options_ptr->table_ptr);
 }
 */

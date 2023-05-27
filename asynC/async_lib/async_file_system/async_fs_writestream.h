@@ -6,7 +6,7 @@
 typedef struct async_fs_writestream async_fs_writestream;
 
 //TODO: add vectors to writestream struct and implement event handler functions for them
-async_fs_writestream* create_fs_writestream(char* filename);
+async_fs_writestream* async_fs_writestream_create(char* filename);
 void async_fs_writestream_write(async_fs_writestream* writestream, void* write_buffer, int num_bytes_to_write, void(*write_callback)(void*), void* arg);
 void async_fs_writestream_end(async_fs_writestream* ending_writestream);
 

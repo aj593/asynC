@@ -173,23 +173,23 @@ async_http2_client_session* async_http2_client_session_create(void){
 
 void async_http2_options_init(async_http2_options* options_ptr){
     options_ptr->http2_header_vector = async_util_vector_create(10, 2, sizeof(nghttp2_nv));
-    options_ptr->header_buffer = create_buffer(50);
+    options_ptr->header_buffer = async_byte_buffer_create(50);
 }
 
 void async_http2_options_destroy(async_http2_options* options_ptr){
-    destroy_buffer(options_ptr->header_buffer);
+    async_byte_buffer_destroy(options_ptr->header_buffer);
     async_util_vector_destroy(options_ptr->http2_header_vector);
 }
 
 void async_http2_options_set_name_value(async_http2_options* options_ptr, uint8_t* name, uint8_t* value){
-    size_t buffer_length_before_append = get_buffer_length(options_ptr->header_buffer);
-    uint8_t* http2_nv_curr_ptr = (uint8_t*)get_internal_buffer(options_ptr->header_buffer) + buffer_length_before_append;
+    size_t buffer_length_before_append = async_byte_buffer_length(options_ptr->header_buffer);
+    uint8_t* http2_nv_curr_ptr = (uint8_t*)async_byte_buffer_internal_array(options_ptr->header_buffer) + buffer_length_before_append;
 
     int name_len = strlen((char*)name);
     int val_len  = strlen((char*)value);
 
-    buffer_append_bytes(&options_ptr->header_buffer, name, name_len);
-    buffer_append_bytes(&options_ptr->header_buffer, value, val_len);
+    async_byte_buffer_append_bytes(&options_ptr->header_buffer, name, name_len);
+    async_byte_buffer_append_bytes(&options_ptr->header_buffer, value, val_len);
 
     nghttp2_nv new_nv_pair = {
         .name = http2_nv_curr_ptr,
@@ -360,11 +360,11 @@ void http2_data_callback(async_tcp_socket* tcp_socket, async_byte_buffer* buffer
 
     nghttp2_session_mem_recv(
         new_session->session_ptr,
-        get_internal_buffer(buffer),
-        get_buffer_capacity(buffer)
+        async_byte_buffer_internal_array(buffer),
+        async_byte_buffer_capacity(buffer)
     );
 
-    destroy_buffer(buffer);
+    async_byte_buffer_destroy(buffer);
 }
 
 int async_http2_send_data_callback(

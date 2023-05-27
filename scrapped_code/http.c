@@ -5,11 +5,11 @@ void async_http_incoming_response_check_data(async_http_incoming_response* res_p
     while(!is_async_byte_stream_empty(stream_ptr)){
         async_byte_stream_ptr_data ptr_to_data = async_byte_stream_get_buffer_stream_ptr(stream_ptr);
         //TODO: need to create buffer in here, to do in emit_data function?
-        async_byte_buffer* curr_buffer = buffer_from_array(ptr_to_data.ptr, ptr_to_data.num_bytes);
+        async_byte_buffer* curr_buffer = async_byte_buffer_from_array(ptr_to_data.ptr, ptr_to_data.num_bytes);
 
         response_data_emit_data(res_ptr, curr_buffer);
 
-        destroy_buffer(curr_buffer);
+        async_byte_buffer_destroy(curr_buffer);
         async_byte_stream_dequeue(stream_ptr, ptr_to_data.num_bytes);
     }
 }
@@ -36,13 +36,13 @@ void response_data_handler(async_socket* socket_with_response, async_byte_buffer
 
     async_byte_stream_enqueue(
         &incoming_response->incoming_response.incoming_data_stream,
-        get_internal_buffer(response_data),
-        get_buffer_capacity(response_data),
+        async_byte_buffer_internal_array(response_data),
+        async_byte_buffer_capacity(response_data),
         NULL,
         NULL
     );
 
-    destroy_buffer(response_data);
+    async_byte_buffer_destroy(response_data);
 
     //TODO: add is_flowing field and use that instead, and set is_flowing based on if num_data_listeners > 0?
     if(incoming_response->num_data_listeners > 0){

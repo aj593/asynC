@@ -69,7 +69,7 @@ int fs_writestream_future_task_queue_checker(void* arg){
 }
 */
 
-async_fs_writestream* create_fs_writestream(char* filename){
+async_fs_writestream* async_fs_writestream_create(char* filename){
     size_t filename_length = strlen(filename) + 1;
 
     async_fs_writestream* new_writestream = (async_fs_writestream*)calloc(1, sizeof(async_fs_writestream) + filename_length);

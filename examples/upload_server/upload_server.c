@@ -52,16 +52,16 @@ void upload_connection_handler(async_socket* new_socket, void* arg){
 void write_status(int);
 
 void socket_on_data(async_socket* socket_data, async_byte_buffer* data_buffer, void* arg){
-    //char* str_buf = (char*)get_internal_buffer(data_buffer);
+    //char* str_buf = (char*)async_byte_buffer_internal_array(data_buffer);
     
     async_fs_writestream_write(
         linux_writestream, 
         data_buffer, 
-        get_buffer_capacity(data_buffer), 
+        async_byte_buffer_capacity(data_buffer), 
         NULL //write_status
     );
 
-    destroy_buffer(data_buffer);
+    async_byte_buffer_destroy(data_buffer);
 }
 
 void write_status(int status){

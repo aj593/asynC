@@ -434,8 +434,8 @@ async_child_process* async_child_process_fork(void(*child_func)(async_ipc_socket
     total_buffer_length += server_name_num_bytes_formatted;
     total_buffer_length += sizeof(func_ptr_holder);
 
-    new_child_process->child_info_buffer = create_buffer(total_buffer_length);
-    char* internal_msg_buffer = get_internal_buffer(new_child_process->child_info_buffer);
+    new_child_process->child_info_buffer = async_byte_buffer_create(total_buffer_length);
+    char* internal_msg_buffer = async_byte_buffer_internal_array(new_child_process->child_info_buffer);
     char* curr_buffer_offset = internal_msg_buffer;
     memcpy(curr_buffer_offset, &total_buffer_length, sizeof(total_buffer_length));
     curr_buffer_offset += sizeof(total_buffer_length);
@@ -493,8 +493,8 @@ async_child_process* async_child_process_exec(char* executable_name, char* args[
 
     total_buffer_length += args_len;
 
-    new_child_process->child_info_buffer = create_buffer(total_buffer_length);
-    char* child_internal_buffer = get_internal_buffer(new_child_process->child_info_buffer);
+    new_child_process->child_info_buffer = async_byte_buffer_create(total_buffer_length);
+    char* child_internal_buffer = async_byte_buffer_internal_array(new_child_process->child_info_buffer);
     char* curr_child_buffer_offset = child_internal_buffer;
     memcpy(curr_child_buffer_offset, &total_buffer_length, sizeof(total_buffer_length));
     curr_child_buffer_offset += sizeof(total_buffer_length);
@@ -528,7 +528,7 @@ void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg){
     async_fs_buffer_write(
         forker_pipe[PIPE_WRITE_END],
         new_child_process->child_info_buffer,
-        get_buffer_capacity(new_child_process->child_info_buffer),
+        async_byte_buffer_capacity(new_child_process->child_info_buffer),
         after_fork_pipe_write, 
         new_child_process
     );
@@ -536,7 +536,7 @@ void after_child_process_server_listen(async_ipc_server* ipc_server, void* arg){
 
 void after_fork_pipe_write(int pipe_fd, async_byte_buffer* child_info_buffer, size_t num_bytes_written, int write_errno, void* arg){
     //TODO: check write_errno here
-    destroy_buffer(child_info_buffer);
+    async_byte_buffer_destroy(child_info_buffer);
 }
 
 void async_ipc_socket_connection_handler(
@@ -615,13 +615,13 @@ void async_ipc_socket_data_handler(
 ){
     async_child_process* new_child_process = (async_child_process*)arg;
 
-    char* internal_socket_buffer = get_internal_buffer(data_buffer);
+    char* internal_socket_buffer = async_byte_buffer_internal_array(data_buffer);
 
     int buffer_first_char_index = internal_socket_buffer[0];
     char array[] = { buffer_first_char_index };
-    //async_byte_buffer* resume_signal_buffer = buffer_from_array(array, 1);
+    //async_byte_buffer* resume_signal_buffer = async_byte_buffer_from_array(array, 1);
     async_ipc_socket_write(ipc_socket, array, 1, NULL, NULL);
-    //destroy_buffer(resume_signal_buffer);
+    //async_byte_buffer_destroy(resume_signal_buffer);
 
     new_child_process->async_ipc_sockets[buffer_first_char_index] = ipc_socket;
     void(*curr_ipc_socket_connection_handler)(async_ipc_socket*, void*) = 

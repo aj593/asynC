@@ -21,13 +21,13 @@ void listen_callback(){
 }
 
 void data_handler(async_socket* socket, async_byte_buffer* read_buffer, void* arg){
-    //printf("buffer is %ld bytes long\n", get_buffer_capacity(read_buffer));
-    void* char_buff = get_internal_buffer(read_buffer);
+    //printf("buffer is %ld bytes long\n", async_byte_buffer_capacity(read_buffer));
+    void* char_buff = async_byte_buffer_internal_array(read_buffer);
 
-    write(STDOUT_FILENO, char_buff, get_buffer_capacity(read_buffer));
+    write(STDOUT_FILENO, char_buff, async_byte_buffer_capacity(read_buffer));
     //write(STDOUT_FILENO, " ", 1);
 
-    destroy_buffer(read_buffer);
+    async_byte_buffer_destroy(read_buffer);
 }
 
 async_byte_buffer* file_copied_buffer;
@@ -39,11 +39,11 @@ void connection_handler(async_socket* new_socket){
     char hello_str[] = "hi there";
     int hello_str_len = sizeof(hello_str);
 
-    async_byte_buffer* new_buffer = create_buffer(hello_str_len, sizeof(char));
-    char* char_buffer = (char*)get_internal_buffer(new_buffer);
+    async_byte_buffer* new_buffer = async_byte_buffer_create(hello_str_len, sizeof(char));
+    char* char_buffer = (char*)async_byte_buffer_internal_array(new_buffer);
     memcpy(char_buffer, hello_str, hello_str_len);
 
-    async_socket_write(new_socket, file_copied_buffer, get_buffer_capacity(file_copied_buffer), NULL);
+    async_socket_write(new_socket, file_copied_buffer, async_byte_buffer_capacity(file_copied_buffer), NULL);
     async_socket_on_data(new_socket, data_handler, NULL, 0, 0);
 }
 */
@@ -63,8 +63,8 @@ void connection_done_handler(async_socket* socket, void* arg){
         printf("connection done\n");
         char item[] = "mary had a little lamb as white as snow\n";
         int item_size = sizeof(item);
-        async_byte_buffer* new_buffer = create_buffer(item_size, sizeof(char));
-        char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
+        async_byte_buffer* new_buffer = async_byte_buffer_create(item_size, sizeof(char));
+        char* str_internal_buffer = (char*)async_byte_buffer_internal_array(new_buffer);
         memcpy(str_internal_buffer, item, item_size);
         async_socket_on_data(socket, data_handler, NULL, 0, 0);
         async_socket_write(socket, new_buffer, item_size, NULL);
@@ -84,11 +84,11 @@ void send_cb(async_socket* socket_ptr, void* cb_arg){
     async_socket_write(
         socket_ptr, 
         send_buffer, 
-        get_buffer_capacity(send_buffer), 
+        async_byte_buffer_capacity(send_buffer), 
         send_cb
     );
 
-    destroy_buffer(send_buffer);
+    async_byte_buffer_destroy(send_buffer);
 }
 */
 
@@ -99,22 +99,22 @@ void read_chat_input(async_socket* socket_ptr){
     async_socket_write(
         socket_ptr, 
         send_buffer, 
-        get_buffer_capacity(send_buffer), 
+        async_byte_buffer_capacity(send_buffer), 
         NULL
     );
 
-    destroy_buffer(send_buffer);
+    async_byte_buffer_destroy(send_buffer);
 }
 */
 
 void chat_data_handler(async_tcp_socket* data_socket, async_byte_buffer* chat_buffer, void* arg){
     write(
         STDOUT_FILENO,
-        get_internal_buffer(chat_buffer),
-        get_buffer_capacity(chat_buffer)
+        async_byte_buffer_internal_array(chat_buffer),
+        async_byte_buffer_capacity(chat_buffer)
     );
 
-    destroy_buffer(chat_buffer);
+    async_byte_buffer_destroy(chat_buffer);
 }
 
 void chat_connection_handler(async_tcp_socket* socket, void* arg){
@@ -123,11 +123,11 @@ void chat_connection_handler(async_tcp_socket* socket, void* arg){
     async_tcp_socket_on_data(socket, chat_data_handler, NULL, 0, 0);
 
     //char mary[] = "mary had a little lamb as white as snow\n";
-    //async_byte_buffer* mary_buffer = buffer_from_array(mary, sizeof(mary));
-    //async_socket_write(socket, mary_buffer, get_buffer_capacity(mary_buffer), NULL);
+    //async_byte_buffer* mary_buffer = async_byte_buffer_from_array(mary, sizeof(mary));
+    //async_socket_write(socket, mary_buffer, async_byte_buffer_capacity(mary_buffer), NULL);
     //async_socket_end(socket);
     //async_socket_destroy(socket);
-    //destroy_buffer(mary_buffer);
+    //async_byte_buffer_destroy(mary_buffer);
 
     //async_socket* new_socket = async_tcp_connect("127.0.0.1", 3000, chat_connection_handler, NULL);
 }
@@ -137,8 +137,8 @@ async_byte_buffer* read_and_make_buffer(){
     char stdin_buffer[max_num_bytes];
     int num_bytes_read = read(STDIN_FILENO, stdin_buffer, max_num_bytes);
 
-    async_byte_buffer* send_buffer = create_buffer(num_bytes_read);
-    char* internal_dest_buffer = (char*)get_internal_buffer(send_buffer);
+    async_byte_buffer* send_buffer = async_byte_buffer_create(num_bytes_read);
+    char* internal_dest_buffer = (char*)async_byte_buffer_internal_array(send_buffer);
     memcpy(internal_dest_buffer, stdin_buffer, num_bytes_read);
 
     return send_buffer;
@@ -164,12 +164,12 @@ void* chat_input(void* arg){
             );
 
             async_tcp_socket_end(new_socket);
-            //destroy_buffer(mary_buffer);
+            //async_byte_buffer_destroy(mary_buffer);
 
             break;
         }
 
-        async_byte_buffer* send_buffer = buffer_from_array(stdin_buffer, num_bytes_read);
+        async_byte_buffer* send_buffer = async_byte_buffer_from_array(stdin_buffer, num_bytes_read);
 
         async_tcp_socket_write(
             new_socket, 
@@ -182,7 +182,7 @@ void* chat_input(void* arg){
         //async_tcp_socket_end(new_socket);
         //break;
 
-        destroy_buffer(send_buffer);
+        async_byte_buffer_destroy(send_buffer);
     }
 
     pthread_exit(NULL);
@@ -212,8 +212,8 @@ int main(int argc, char* argv[]){
     /* from send_cb
     char end_str[] = "z\n";
     int end_str_size = sizeof(end_str);
-    async_byte_buffer* end_buffer = create_buffer(end_str_size, sizeof(char));
-    char* end_str_buff = (char*)get_internal_buffer(end_buffer);
+    async_byte_buffer* end_buffer = async_byte_buffer_create(end_str_size, sizeof(char));
+    char* end_str_buff = (char*)async_byte_buffer_internal_array(end_buffer);
     memcpy(end_str_buff, end_str, end_str_size);
 
     async_socket_write(socket_ptr, end_buffer, end_str_size, NULL);
@@ -232,8 +232,8 @@ int main(int argc, char* argv[]){
     }
     char read_bytes[MAX_BYTES_TO_READ];
     int num_bytes_read = read(read_fd, read_bytes, MAX_BYTES_TO_READ);
-    file_copied_buffer = create_buffer(num_bytes_read, sizeof(char));
-    char* char_buffer = get_internal_buffer(file_copied_buffer);
+    file_copied_buffer = async_byte_buffer_create(num_bytes_read, sizeof(char));
+    char* char_buffer = async_byte_buffer_internal_array(file_copied_buffer);
     memcpy(char_buffer, read_bytes, num_bytes_read);
 
     async_server* new_server = async_create_server();
@@ -249,13 +249,13 @@ int main(int argc, char* argv[]){
     /*
     char item[] = "mary had a little lamb as white as snow\n";
     int item_size = sizeof(item);
-    async_byte_buffer* new_buffer = create_buffer(item_size, sizeof(char));
-    char* str_internal_buffer = (char*)get_internal_buffer(new_buffer);
+    async_byte_buffer* new_buffer = async_byte_buffer_create(item_size, sizeof(char));
+    char* str_internal_buffer = (char*)async_byte_buffer_internal_array(new_buffer);
     memcpy(str_internal_buffer, item, item_size);
 
     async_fs_writestream* writestream = create_fs_writestream("writestream_test.txt");
     async_fs_writestream_write(writestream, new_buffer, item_size, write_callback);
-    destroy_buffer(new_buffer);
+    async_byte_buffer_destroy(new_buffer);
     async_fs_writestream_end(writestream);
     */
     
