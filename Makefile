@@ -1,5 +1,6 @@
 CC=gcc
-CFLAGS = -g -lrt -luring -lnghttp2 -pthread -Wall -Werror -pedantic -pipe -fPIC
+CFLAGS  = -g -lrt -pthread -luring -lnghttp2 -Wall -Werror -pedantic -pipe -fPIC
+#OCFLAGS = -luring -lnghttp2
 
 SRCS := $(shell find ./asynC -type f -name '*c')
 OBJS := $(SRCS:.c=.o)

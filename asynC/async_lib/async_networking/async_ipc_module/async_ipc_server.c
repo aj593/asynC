@@ -42,7 +42,7 @@ void async_ipc_server_listen(
 ){
     async_server_listen_init_template(
         &listening_ipc_server->wrapped_server,
-        listen_callback,
+        (void(*)())listen_callback,
         arg,
         AF_UNIX,
         SOCK_STREAM,
@@ -105,7 +105,7 @@ void async_ipc_server_on_listen(
     async_server_on_listen(
         &ipc_server->wrapped_server,
         ipc_server,
-        listen_handler,
+        (void(*)())listen_handler,
         arg,
         is_temp_subscriber,
         num_listens
@@ -122,7 +122,7 @@ void async_ipc_server_on_connection(
     async_server_on_connection(
         &ipc_server->wrapped_server,
         ipc_server,
-        ipc_connection_handler,
+        (void(*)())ipc_connection_handler,
         arg,
         is_temp_subscriber,
         num_listens

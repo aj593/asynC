@@ -523,7 +523,7 @@ int async_http_incoming_message_process_trailers(
 void async_http_incoming_message_on_data(
     async_http_incoming_message* incoming_msg_ptr, 
     void* type_arg,
-    void(*http_incoming_msg_data_callback)(), 
+    void(*http_incoming_msg_data_callback)(async_byte_buffer*, void*), 
     void* arg, 
     int is_temp, 
     int num_listens
@@ -532,7 +532,7 @@ void async_http_incoming_message_on_data(
         &incoming_msg_ptr->incoming_msg_template_info.http_msg_event_emitter,
         type_arg,
         async_http_incoming_message_data_event,
-        http_incoming_msg_data_callback,
+        (void(*)())http_incoming_msg_data_callback,
         incoming_msg_data_converter,
         &incoming_msg_ptr->num_data_listeners,
         arg,
@@ -577,14 +577,16 @@ void incoming_msg_data_converter(void(*generic_callback)(void), void* type_arg, 
 void async_http_incoming_message_on_end(
     async_http_incoming_message* incoming_msg,
     void* type_arg,
-    void(*req_end_handler)(), 
-    void* arg, int is_temp, int num_listens
+    void(*req_end_handler)(void*), 
+    void* arg, 
+    int is_temp, 
+    int num_listens
 ){
     async_event_emitter_on_event(
         &incoming_msg->incoming_msg_template_info.http_msg_event_emitter,
         type_arg,
         async_http_incoming_message_end_event,
-        req_end_handler,
+        (void(*)())req_end_handler,
         req_end_converter,
         &incoming_msg->num_end_listeners,
         arg,

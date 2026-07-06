@@ -308,7 +308,7 @@ void async_http_server_listen(
 ){
     async_server_listen_init_template(
         &listening_server->wrapped_server,
-        http_listen_callback,
+        (void(*)())http_listen_callback,
         arg,
         AF_INET,
         SOCK_STREAM,
@@ -376,7 +376,7 @@ void async_http_server_on_listen(
     async_server_on_listen(
         &listening_http_server->wrapped_server,
         listening_http_server,
-        http_listen_callback,
+        (void(*)())http_listen_callback,
         arg,
         is_temp_subscriber,
         num_times_listen
@@ -391,7 +391,7 @@ void async_http_server_on_connection(
     async_server_on_connection(
         &listening_http_server->wrapped_server,
         listening_http_server,
-        http_connection_callback,
+        (void(*)())http_connection_callback,
         arg, is_temp_subscriber, num_times_listen
     );
 }
@@ -636,7 +636,7 @@ void async_http_server_request_on_data(
     async_http_incoming_message_on_data(
         &incoming_request->incoming_msg_info,
         incoming_request,
-        request_data_handler,
+        (void(*)(async_byte_buffer*, void*))request_data_handler,
         cb_arg,
         is_temp,
         num_times_listen

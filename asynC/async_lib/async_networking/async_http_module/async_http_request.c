@@ -397,7 +397,7 @@ void async_http_incoming_response_on_data(
     async_http_incoming_message_on_data(
         &response_ptr->incoming_response,
         response_ptr,
-        incoming_response_data_handler,
+        (void(*)(async_byte_buffer*, void*))incoming_response_data_handler,
         cb_arg,
         is_temp,
         num_times_listen

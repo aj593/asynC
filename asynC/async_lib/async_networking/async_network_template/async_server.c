@@ -40,7 +40,7 @@ void accept_callback(
 void async_server_on_listen(
     async_server* listening_server,
     void* type_arg, 
-    void(*listen_handler)(void*, void*), 
+    void(*listen_handler)(), 
     void* arg, 
     int is_temp_subscriber, 
     int num_listens
@@ -84,7 +84,7 @@ void async_server_listen_init_template(
         async_server_on_listen(
             newly_listening_server_ptr, 
             socket_callback_arg,
-            listen_callback, 
+            (void(*)())listen_callback,
             arg, 0, 0
         );
     }

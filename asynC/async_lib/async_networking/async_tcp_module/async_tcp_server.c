@@ -59,7 +59,7 @@ void async_tcp_server_listen(
 ){
     async_server_listen_init_template(
         &listening_tcp_server->wrapped_server,
-        listen_callback,
+        (void(*)())listen_callback,
         arg,
         AF_INET,
         SOCK_STREAM,
@@ -117,7 +117,7 @@ void async_tcp_server_on_listen(
     async_server_on_listen(
         &tcp_server->wrapped_server,
         tcp_server,
-        listen_handler,
+        (void(*)())listen_handler,
         arg,
         is_temp_subscriber,
         num_listens
@@ -134,7 +134,7 @@ void async_tcp_server_on_connection(
     async_server_on_connection(
         &tcp_server->wrapped_server,
         tcp_server,
-        tcp_connection_handler,
+        (void(*)())tcp_connection_handler,
         arg,
         is_temp_subscriber,
         num_listens

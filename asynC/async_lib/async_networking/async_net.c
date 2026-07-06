@@ -82,6 +82,9 @@ void async_net_after_connect(void* data, void* arg);
 void connect_event_handler(event_node* connect_node, uint32_t events);
 void after_ipv4_connect(async_net_info* net_info);
 
+void async_ssl_connect_task(void* ssl_connect_info_ptr);
+void after_ssl_connect(void* ssl_connect_info_ptr, void* arg);
+
 void async_net_connect(
     int socket_fd,
     struct sockaddr* sockaddr_ptr,
@@ -155,7 +158,7 @@ void async_net_bind(
         &sockaddr_union,
         socket_length,
         after_generic_bind,
-        generic_bind_callback,
+        (void(*)())generic_bind_callback,
         arg
     );
 }
@@ -194,7 +197,7 @@ void async_net_ipv4_bind(
         &sockaddr_union,
         sizeof(struct sockaddr_in),
         async_net_after_ipv4_bind,
-        ipv4_bind_callback,
+        (void(*)())ipv4_bind_callback,
         arg
     );
 }
@@ -239,7 +242,7 @@ void async_net_ipc_bind(
         &sockaddr_union,
         sizeof(struct sockaddr_un),
         after_net_ipc_bind,
-        ipc_bind_callback,
+        (void(*)())ipc_bind_callback,
         arg
     );
 }
@@ -271,7 +274,7 @@ void async_net_socket(
         .domain = domain,
         .type = type,
         .protocol = protocol,
-        .async_net_callback = socket_callback
+        .async_net_callback = (void(*)())socket_callback
     };
 
     async_thread_pool_create_task_copied(
@@ -420,7 +423,7 @@ void async_net_connect(
         &plain_sockaddr,
         socket_len,
         after_plain_connect,
-        connect_callback,
+        (void(*)())connect_callback,
         arg
     );
 }
@@ -456,7 +459,7 @@ void async_net_ipv4_connect(
         &ipv4_sockaddr,
         sizeof(struct sockaddr_in),
         after_ipv4_connect,
-        connect_callback,
+        (void(*)())connect_callback,
         arg
     );
 }
@@ -503,7 +506,67 @@ void async_net_ipc_connect(
         &ipc_sockaddr,
         sizeof(struct sockaddr_un),
         after_net_ipc_connect,
-        connect_callback,
+        (void(*)())connect_callback,
+        arg
+    );
+}
+
+typedef struct async_ssl_connect_info {
+    SSL* ssl;
+    int socket_fd;
+    union async_sockaddr_types sockaddr;
+    socklen_t socket_length;
+    void(*ssl_connect_callback)();
+    int return_val;
+    int task_errno;
+    void* arg;
+} async_ssl_connect_info;
+
+void async_ssl_connect(
+    SSL* ssl,
+    int socket_fd,
+    struct sockaddr* sockaddr_ptr,
+    socklen_t socket_len,
+    void(*ssl_connect_callback)(int, struct sockaddr*, socklen_t, int, void*),
+    void* arg
+){
+    union async_sockaddr_types plain_sockaddr;
+    memcpy(&plain_sockaddr.sockaddr_generic, sockaddr_ptr, socket_len);
+
+    async_ssl_connect_info ssl_connect_info = {
+        .ssl = ssl,
+        .socket_fd = socket_fd,
+        .sockaddr = plain_sockaddr,
+        .socket_length = socket_len,
+        .ssl_connect_callback = (void(*)())ssl_connect_callback
+    };
+
+    async_thread_pool_create_task_copied(
+        async_ssl_connect_task,
+        after_ssl_connect,
+        &ssl_connect_info,
+        sizeof(async_ssl_connect_info),
+        arg
+    );
+}
+
+void async_ssl_connect_task(void* ssl_connect_info_ptr){
+    async_ssl_connect_info* ssl_connect_info = (async_ssl_connect_info*)ssl_connect_info_ptr;
+
+    ssl_connect_info->return_val = SSL_connect(ssl_connect_info->ssl);
+}
+
+void after_ssl_connect(void* ssl_connect_info_ptr, void* arg){
+    async_ssl_connect_info* ssl_connect_info = (async_ssl_connect_info*)ssl_connect_info_ptr;
+
+    void(*ssl_connect_callback)(int, struct sockaddr*, socklen_t, int, void*) = 
+        (void(*)(int, struct sockaddr*, socklen_t, int, void*))ssl_connect_info->ssl_connect_callback;
+
+    ssl_connect_callback(
+        ssl_connect_info->socket_fd,
+        &ssl_connect_info->sockaddr.sockaddr_generic,
+        ssl_connect_info->socket_length,
+        ssl_connect_info->task_errno,
         arg
     );
 }
@@ -529,7 +592,7 @@ void async_net_listen(
     async_net_info listen_info = {
         .socket_fd = socket_fd,
         .backlog_max = backlog,
-        .async_net_callback = listen_callback
+        .async_net_callback = (void(*)())listen_callback
     };
 
     async_thread_pool_create_task_copied(
@@ -581,7 +644,7 @@ void async_net_recvfrom(
         .buffer = buffer,
         .max_num_bytes = max_recv_bytes,
         .flags = flags,
-        .async_net_callback = recvfrom_callback,
+        .async_net_callback = (void(*)())recvfrom_callback,
         .arg = arg
     };
 
@@ -646,7 +709,7 @@ void async_net_sendto(
         .max_num_bytes = num_bytes,
         .flags = flags,
         .socket_length = socket_length,
-        .async_net_callback = sendto_callback,
+        .async_net_callback = (void(*)())sendto_callback,
         .arg = arg
     };
 

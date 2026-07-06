@@ -484,7 +484,7 @@ void async_udp_socket_on_connect(
         &udp_socket->wrapped_socket.socket_event_emitter,
         udp_socket,
         async_udp_socket_connect_event,
-        connect_handler,
+        (void(*)())connect_handler,
         udp_connect_converter,
         &udp_socket->num_connect_listeners,
         arg,
@@ -512,7 +512,7 @@ void async_udp_socket_on_bind(
         &udp_socket->wrapped_socket.socket_event_emitter,
         udp_socket,
         async_udp_socket_bind_event,
-        bind_callback,
+        (void(*)())bind_callback,
         bind_event_converter,
         &udp_socket->num_bind_listeners,
         arg, is_temp_listener, num_times_listen
@@ -542,7 +542,7 @@ void async_udp_socket_on_message(
         &udp_socket->wrapped_socket.socket_event_emitter,
         udp_socket,
         async_udp_socket_message_event,
-        message_callback,
+        (void(*)())message_callback,
         message_event_converter,
         &udp_socket->num_message_listeners,
         arg, is_temp_listener, num_times_listen

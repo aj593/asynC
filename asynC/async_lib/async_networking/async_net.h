@@ -3,6 +3,10 @@
 
 #include <sys/socket.h>
 
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
+
 void async_net_socket(
     int domain, 
     int type, 
@@ -54,6 +58,15 @@ void async_net_ipc_connect(
     int socket_fd,
     char* remote_path,
     void(*connect_callback)(int, char*, int, void*),
+    void* arg
+);
+
+void async_ssl_connect(
+    SSL* ssl,
+    int socket_fd,
+    struct sockaddr* sockaddr_ptr,
+    socklen_t socket_len,
+    void(*ssl_connect_callback)(int, struct sockaddr*, socklen_t, int, void*),
     void* arg
 );
 

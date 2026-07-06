@@ -300,7 +300,7 @@ void async_fs_readstream_on_open(
         &readstream->readstream_event_emitter,
         readstream,
         async_fs_readstream_open_event,
-        open_handler,
+        (void(*)(void))open_handler,
         async_fs_readstream_open_routine,
         &readstream->num_open_event_listeners,
         arg,
@@ -320,7 +320,8 @@ void async_fs_readstream_emit_open(async_fs_readstream* readstream){
 void async_fs_readstream_open_routine(void(*generic_callback)(), void* type_arg, void* data, void* arg){
     async_fs_readstream* readstream = (async_fs_readstream*)type_arg;
 
-    void(*open_handler)(async_fs_readstream*, void*) = generic_callback;
+    void(*open_handler)(async_fs_readstream*, void*) = 
+        (void(*)(async_fs_readstream*, void*))generic_callback;
     open_handler(readstream, arg);
 }
 
@@ -335,7 +336,7 @@ void async_fs_readstream_on_data(
         &readstream->readstream_event_emitter,
         readstream,
         async_fs_readstream_data_event,
-        data_handler,
+        (void(*)(void))data_handler,
         data_event_routine,
         &readstream->num_data_event_listeners,
         arg,
@@ -347,7 +348,8 @@ void async_fs_readstream_on_data(
 }
 
 void data_event_routine(void(*readstream_data_callback)(), void* type_arg, void* data, void* arg){
-    void(*readstream_data_handler)(async_fs_readstream*, async_byte_buffer*, void*) = readstream_data_callback;
+    void(*readstream_data_handler)(async_fs_readstream*, async_byte_buffer*, void*) = 
+        (void(*)(async_fs_readstream*, async_byte_buffer*, void*))readstream_data_callback;
 
     buffer_info* read_buffer_info = (buffer_info*)data;
     async_byte_buffer* buffer_copy = async_byte_buffer_copy_num_bytes(read_buffer_info->read_buffer, read_buffer_info->num_bytes);
@@ -369,7 +371,8 @@ void async_fs_readstream_emit_data(async_fs_readstream* readstream, async_byte_b
 }
 
 void readstream_error_event_converter(void(*callback)(), void* type_arg, void* data, void* arg){
-    void(*error_handler)(async_fs_readstream*, async_err*, void*) = callback;
+    void(*error_handler)(async_fs_readstream*, async_err*, void*) = 
+        (void(*)(async_fs_readstream*, async_err*, void*))callback;
 
     error_handler(type_arg, data, arg);
 }
@@ -385,7 +388,7 @@ void async_fs_readstream_on_error(
         &readstream->readstream_event_emitter,
         readstream,
         async_fs_readstream_error_event,
-        error_handler,
+        (void(*)(void))error_handler,
         readstream_error_event_converter,
         &readstream->num_error_event_listeners,
         arg,

@@ -70,7 +70,7 @@ void async_ipc_socket_connect(
         AF_UNIX, SOCK_STREAM, 0,
         after_ipc_socket_callback,
         connecting_ipc_socket,
-        connection_handler,
+        (void(*)())connection_handler,
         arg
     );
 }
@@ -132,7 +132,7 @@ void async_ipc_socket_on_data(
     async_socket_on_data(
         &ipc_socket->wrapped_socket,
         ipc_socket,
-        data_callback,
+        (void(*)())data_callback,
         arg,
         is_temp_listener,
         num_times_listen
@@ -150,7 +150,7 @@ void async_ipc_socket_write(
         &ipc_socket->wrapped_socket,
         buffer,
         num_bytes,
-        ipc_send_callback,
+        (void(*)())ipc_send_callback,
         arg
     );
 }

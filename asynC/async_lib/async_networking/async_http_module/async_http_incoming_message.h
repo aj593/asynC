@@ -52,7 +52,7 @@ int double_CRLF_check_and_enqueue_parse_task(
 void async_http_incoming_message_on_data(
     async_http_incoming_message* incoming_msg_ptr,
     void* type_arg, 
-    void(*http_incoming_msg_data_callback)(), 
+    void(*http_incoming_msg_data_callback)(async_byte_buffer*, void*), 
     void* arg, 
     int is_temp, 
     int num_listens
@@ -60,8 +60,8 @@ void async_http_incoming_message_on_data(
 
 void async_http_incoming_message_on_end(
     async_http_incoming_message* incoming_msg,
-    void* type_arg, 
-    void(*req_end_handler)(), 
+    void* type_arg,
+    void(*req_end_handler)(void*), 
     void* arg, 
     int is_temp, 
     int num_listens

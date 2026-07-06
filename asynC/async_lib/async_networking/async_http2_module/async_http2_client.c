@@ -235,15 +235,17 @@ async_http2_client_stream* async_http2_client_session_request(
 
     new_client_stream->session_ptr = client_session;
 
-    /*
-    nghttp2_nv request_nv = {
+    
+    /*nghttp2_nv request_nv = {
         .name = (uint8_t*)":path",
         .namelen = 5,
         .value = (uint8_t*)"/index.html",
         .valuelen = 11,
         .flags = 0
-    };
-    */
+    };*/
+    
+
+    
 
     new_client_stream->stream_id = 
         nghttp2_submit_request(
@@ -473,3 +475,4 @@ int async_http2_on_frame_send_callback(
 
     return 0;
 }
+
