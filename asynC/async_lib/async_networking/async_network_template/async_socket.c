@@ -159,6 +159,8 @@ void connect_callback(
     //create node in event queue for this socket and add it to epoll
     create_socket_node(NULL, NULL, connected_socket, fd, NULL, 0);
 
+    printf("Socket connected, emitting connection event for registered connect callback(s)...\n");
+
     //emit connection event for registered connect callback(s)
     async_socket_emit_connection(connected_socket);
 

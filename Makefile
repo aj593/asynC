@@ -1,6 +1,5 @@
 CC=gcc
-CFLAGS  = -g -lrt -pthread -luring -lnghttp2 -Wall -Werror -pedantic -pipe -fPIC
-#OCFLAGS = -luring -lnghttp2
+CFLAGS  = -g -lrt -pthread -luring -lnghttp2 -lssl -lcrypto -Wall -Werror -pedantic -pipe -fPIC
 
 SRCS := $(shell find ./asynC -type f -name '*c')
 OBJS := $(SRCS:.c=.o)
@@ -10,7 +9,7 @@ ASYNC_SHARED_LIB_NAME=libasynC.so
 all: $(ASYNC_SHARED_LIB_NAME)
 
 $(ASYNC_SHARED_LIB_NAME): $(OBJS)
-	$(CC) -shared $(OBJS) $(CFLAGS) -o $(ASYNC_SHARED_LIB_NAME)
+	$(CC) -shared $(OBJS) $(CFLAGS) -o $(ASYNC_SHARED_LIB_NAME) -lssl -lcrypto
 
 static: $(OBJS)
 	ar -rc libasynC.a $(OBJS) 
