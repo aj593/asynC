@@ -18,6 +18,13 @@ static: $(OBJS)
 %.o : %.c  asynC.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
+#ssl_test
+examples/ssl_test/ssl_test:
+	$(MAKE) -C examples/ssl_test
+
+ssl_test: examples/ssl_test/ssl_test
+	mkdir -p bin 
+	mv examples/ssl_test/ssl_test ./bin/
 
 # chat_client
 

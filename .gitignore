@@ -4,6 +4,7 @@ obj
 bin
 .vscode
 test_files
+*.o
 
 #files
 main

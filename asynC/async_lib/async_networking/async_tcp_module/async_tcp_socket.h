@@ -3,7 +3,17 @@
 
 #include "../async_network_template/async_socket.h"
 
-typedef struct async_tcp_socket async_tcp_socket;
+//struct used for TCP socket
+typedef struct async_tcp_socket {
+    //underlying generic socket
+    async_socket wrapped_socket;
+
+    //This device's address
+    async_inet_address local_address;
+
+    //Peer/remote device's address
+    async_inet_address remote_address;
+} async_tcp_socket;
 
 async_tcp_socket* async_tcp_socket_create(char* ip_address, int port);
 async_socket* async_tcp_socket_create_return_wrapped_socket(struct sockaddr* sockaddr_ptr);

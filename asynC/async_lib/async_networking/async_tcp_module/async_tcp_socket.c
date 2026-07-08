@@ -11,19 +11,7 @@
 #include <string.h>
 #include <stdio.h>
 
-//struct used for TCP socket
-typedef struct async_tcp_socket {
-    //underlying generic socket
-    async_socket wrapped_socket;
-
-    //This device's address
-    async_inet_address local_address;
-
-    //Peer/remote device's address
-    async_inet_address remote_address;
-} async_tcp_socket;
-
-void after_tcp_socket_callback(int socket_fd, int errno, void* arg);
+void after_tcp_socket_callback(int socket_fd, int err_num, void* arg);
 
 void after_connect_callback(
     int result, 
@@ -99,7 +87,9 @@ void async_tcp_socket_connect(
     async_socket_connect(
         &connecting_tcp_socket->wrapped_socket,
         connecting_tcp_socket,
-        AF_INET, SOCK_STREAM, 0,
+        AF_INET, 
+        SOCK_STREAM, 
+        0,
         after_tcp_socket_callback,
         connecting_tcp_socket,
         (void(*)())connection_handler,
@@ -108,7 +98,7 @@ void async_tcp_socket_connect(
 }
 
 //callback function that is called after the TCP socket has been created
-void after_tcp_socket_callback(int socket_fd, int errno, void* arg){
+void after_tcp_socket_callback(int socket_fd, int err_num, void* arg){
     //typecast to get our socket and copy socket_fd
     async_tcp_socket* tcp_socket = (async_tcp_socket*)arg;
     tcp_socket->wrapped_socket.socket_fd = socket_fd;
