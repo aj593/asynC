@@ -43,6 +43,9 @@ typedef struct async_net_info {
     int task_errno;
 
     void* arg;
+
+    SSL* ssl;
+    SSL_CTX* ssl_ctx;
 } async_net_info;
 
 void async_net_bind_template(
@@ -82,7 +85,7 @@ void async_net_after_connect(void* data, void* arg);
 void connect_event_handler(event_node* connect_node, uint32_t events);
 void after_ipv4_connect(async_net_info* net_info);
 
-void async_ssl_connect_task(void* ssl_connect_info_ptr);
+void async_net_ssl_connect_task(void* ssl_connect_info_ptr);
 void after_ssl_connect(void* ssl_connect_info_ptr, void* arg);
 
 void async_net_connect(
@@ -511,66 +514,6 @@ void async_net_ipc_connect(
     );
 }
 
-typedef struct async_ssl_connect_info {
-    SSL* ssl;
-    int socket_fd;
-    union async_sockaddr_types sockaddr;
-    socklen_t socket_length;
-    void(*ssl_connect_callback)();
-    int return_val;
-    int task_errno;
-    void* arg;
-} async_ssl_connect_info;
-
-void async_ssl_connect(
-    SSL* ssl,
-    int socket_fd,
-    struct sockaddr* sockaddr_ptr,
-    socklen_t socket_len,
-    void(*ssl_connect_callback)(int, struct sockaddr*, socklen_t, int, void*),
-    void* arg
-){
-    union async_sockaddr_types plain_sockaddr;
-    memcpy(&plain_sockaddr.sockaddr_generic, sockaddr_ptr, socket_len);
-
-    async_ssl_connect_info ssl_connect_info = {
-        .ssl = ssl,
-        .socket_fd = socket_fd,
-        .sockaddr = plain_sockaddr,
-        .socket_length = socket_len,
-        .ssl_connect_callback = (void(*)())ssl_connect_callback
-    };
-
-    async_thread_pool_create_task_copied(
-        async_ssl_connect_task,
-        after_ssl_connect,
-        &ssl_connect_info,
-        sizeof(async_ssl_connect_info),
-        arg
-    );
-}
-
-void async_ssl_connect_task(void* ssl_connect_info_ptr){
-    async_ssl_connect_info* ssl_connect_info = (async_ssl_connect_info*)ssl_connect_info_ptr;
-
-    ssl_connect_info->return_val = SSL_connect(ssl_connect_info->ssl);
-}
-
-void after_ssl_connect(void* ssl_connect_info_ptr, void* arg){
-    async_ssl_connect_info* ssl_connect_info = (async_ssl_connect_info*)ssl_connect_info_ptr;
-
-    void(*ssl_connect_callback)(int, struct sockaddr*, socklen_t, int, void*) = 
-        (void(*)(int, struct sockaddr*, socklen_t, int, void*))ssl_connect_info->ssl_connect_callback;
-
-    ssl_connect_callback(
-        ssl_connect_info->socket_fd,
-        &ssl_connect_info->sockaddr.sockaddr_generic,
-        ssl_connect_info->socket_length,
-        ssl_connect_info->task_errno,
-        arg
-    );
-}
-
 void after_net_ipc_connect(async_net_info* net_info){
     void(*connect_callback)(int, char*, int, void*) = 
         (void(*)(int, char*, int, void*))net_info->async_net_callback;
@@ -625,6 +568,103 @@ void async_net_after_listen(void* listen_data, void* arg){
         listen_info->socket_fd,
         listen_info->task_errno,
         arg
+    );
+}
+
+
+void after_ssl_read(void* data, void* arg){
+    async_net_info* net_ssl_read_info = (async_net_info*)data;
+    void(*ssl_read_callback)(SSL*, void*, int, void*) =
+        (void(*)(SSL*, void*, int, void*))(net_ssl_read_info->async_net_callback);
+
+    ssl_read_callback(
+        net_ssl_read_info->ssl,
+        net_ssl_read_info->buffer,
+        net_ssl_read_info->max_num_bytes,
+        net_ssl_read_info->arg
+    );
+}
+
+void async_ssl_read_task(void* data_arg){
+    async_net_info* ssl_read_info = (async_net_info*)data_arg;
+
+    SSL_read(
+        ssl_read_info->ssl, 
+        ssl_read_info->buffer, 
+        ssl_read_info->max_num_bytes
+    );
+}
+
+void async_net_ssl_read(
+    SSL* ssl,
+    void* buffer, 
+    size_t num_bytes_to_read, 
+    void(*ssl_read_callback)(SSL*, void*, int, void*),
+    void* arg
+){
+     async_net_info ssl_read_info = {
+        .ssl = ssl,
+        .buffer = buffer,
+        .max_num_bytes = num_bytes_to_read,
+        .async_net_callback = (void(*)())ssl_read_callback,
+        .arg = arg
+    };
+
+    async_thread_pool_create_task_copied(
+        async_ssl_read_task,
+        after_ssl_read,
+        &ssl_read_info,
+        sizeof(async_net_info),
+        NULL
+    );
+}
+
+void after_ssl_write(void* data, void* arg){
+    //printf("i'm here after ssl write!\n");
+
+    async_net_info* net_ssl_write_info = (async_net_info*)data;
+    void(*ssl_write_callback)(SSL*, void*, int, void*) =
+        (void(*)(SSL*, void*, int, void*))(net_ssl_write_info->async_net_callback);
+
+    ssl_write_callback(
+        net_ssl_write_info->ssl,
+        net_ssl_write_info->buffer,
+        net_ssl_write_info->max_num_bytes,
+        net_ssl_write_info->arg
+    );
+}
+
+void async_ssl_write_task(void* data_arg){
+    async_net_info* ssl_write_info = (async_net_info*)data_arg;
+
+    SSL_write(
+        ssl_write_info->ssl, 
+        ssl_write_info->buffer, 
+        ssl_write_info->max_num_bytes
+    );
+}
+
+void async_net_ssl_write(
+    SSL* ssl,
+    void* buffer, 
+    size_t num_bytes_to_write, 
+    void(*ssl_write_callback)(SSL*, void*, int, void*),
+    void* arg
+){
+    async_net_info ssl_write_info = {
+        .ssl = ssl,
+        .buffer = buffer,
+        .max_num_bytes = num_bytes_to_write,
+        .async_net_callback = (void(*)())ssl_write_callback,
+        .arg = arg
+    };
+
+    async_thread_pool_create_task_copied(
+        async_ssl_write_task,
+        after_ssl_write,
+        &ssl_write_info,
+        sizeof(async_net_info),
+        NULL
     );
 }
 

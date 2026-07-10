@@ -61,12 +61,19 @@ void async_net_ipc_connect(
     void* arg
 );
 
-void async_ssl_connect(
+void async_net_ssl_read(
     SSL* ssl,
-    int socket_fd,
-    struct sockaddr* sockaddr_ptr,
-    socklen_t socket_len,
-    void(*ssl_connect_callback)(int, struct sockaddr*, socklen_t, int, void*),
+    void* buffer, 
+    size_t num_bytes_to_read, 
+    void(*ssl_read_callback)(SSL*, void*, int, void*),
+    void* arg
+);
+
+void async_net_ssl_write(
+    SSL* ssl,
+    void* buffer, 
+    size_t num_bytes_to_write, 
+    void(*ssl_write_callback)(SSL*, void*, int, void*),
     void* arg
 );
 
