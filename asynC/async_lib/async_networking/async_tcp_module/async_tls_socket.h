@@ -24,4 +24,36 @@ async_tls_socket* async_tls_create_connection(
     void* arg
 );
 
+void async_tls_socket_write(
+    async_tls_socket* tls_socket, 
+    void* buffer, 
+    size_t num_bytes_to_write, 
+    void(*after_tls_socket_write)(async_tls_socket*, void*),
+    void* arg
+);
+
+void async_tls_socket_on_connection(
+    async_tls_socket* tls_socket,
+    void(*connection_callback)(async_tls_socket*, void*),
+    void* arg, 
+    int is_temp_listener,
+    int num_times_listen
+);
+
+void async_tls_socket_on_secure_connect(
+    async_tls_socket* tls_socket,
+    void(*secure_connect_callback)(async_tls_socket*, void*),
+    void* arg, 
+    int is_temp_listener,
+    int num_times_listen
+);
+
+void async_tls_socket_on_data(
+    async_tls_socket* tls_socket,
+    void(*data_callback)(async_tls_socket*, async_byte_buffer*, void*),
+    void* arg,
+    int is_temp_listener,
+    int num_times_listen
+);
+
 #endif

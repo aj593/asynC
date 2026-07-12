@@ -19,7 +19,7 @@ void asynC_cleanup();
 
 void asynC_wait(); //TODO: make this available only among library files, not in driver/main.c code?
 
-int future_task_queue_enqueue(int(*queue_task)(void*), void* arg);
+int future_task_queue_enqueue(int (*queue_task)(void*), void* arg);
 
 size_t min_value(size_t integer_array[], size_t num_entries);
 size_t min(size_t num1, size_t num2);

@@ -43,6 +43,10 @@ typedef struct async_socket {
     int is_queueable_for_writing;
     void* upper_socket_ptr;
     uint32_t curr_events;
+    int(*send_initiator)(void*);
+    void(*recv_initiator)(void*);
+    void* recv_initiator_arg;
+    void(*data_emitter)(void*, size_t);
 } async_socket;
 
 enum async_socket_events {
@@ -68,6 +72,11 @@ typedef struct connect_info {
 typedef struct socket_info {
     async_socket* socket;
 } socket_info;
+
+typedef struct socket_and_byte_stream_ptr_data {
+    void* async_socket_type;
+    async_byte_stream_ptr_data byte_stream_ptr_data;
+} socket_and_byte_stream_ptr_data;
 
 //typedef struct socket_channel async_socket;
 //async_socket* async_socket_create(int domain, int type, int protocol);
@@ -98,7 +107,17 @@ void async_socket_on_end(
     int num_times_listen
 );
 
-void async_socket_init(async_socket* socket_ptr, void* upper_socket_ptr);
+void async_socket_init(
+    async_socket* socket_ptr, 
+    void* upper_socket_ptr, 
+    int(*send_initiator)(void*), 
+    void(*recv_initiator)(void*),
+    void* recv_initiator_arg,
+    void(*data_emitter)(void*, size_t)
+);
+
+void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, void* arg);
+
 void async_socket_write(async_socket* writing_socket, void* buffer_to_write, int num_bytes_to_write, void (*send_callback)(), void* arg);
 
 void async_socket_on_data(
@@ -144,5 +163,7 @@ void async_socket_on_close(
 
 void async_socket_set_server_ptr(async_socket* accepted_socket, async_server* server_ptr);
 int async_socket_is_open(async_socket* checked_socket);
+
+void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sent, void* arg);
 
 #endif

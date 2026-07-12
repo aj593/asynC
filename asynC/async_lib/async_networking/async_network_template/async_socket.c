@@ -48,7 +48,10 @@ void inet_dgram_handler(event_node* curr_socket_node, uint32_t events);
 void async_socket_emit_data(async_socket* data_socket, async_byte_buffer* socket_receive_buffer, int num_bytes);
 
 //TODO: set to socket is_writing after async_socket_write(), not in async_send() call?
-int async_socket_send_initiator(void* socket_arg);
+int async_socket_default_send_initiator(void* socket_arg);
+void async_socket_default_recv_initiator(void* recv_info);
+
+void async_socket_default_data_emitter(void* socket_arg, size_t num_bytes_read);
 
 //#define MAX_IP_ADDR_LEN 50
 //TODO: change these values back later
@@ -56,7 +59,14 @@ int async_socket_send_initiator(void* socket_arg);
 #define DEFAULT_RECV_BUFFER_SIZE 64 * 1024
 
 //initialize this socket's properties
-void async_socket_init(async_socket* socket_ptr, void* upper_socket_ptr){
+void async_socket_init(
+    async_socket* socket_ptr, 
+    void* upper_socket_ptr, 
+    int(*send_initiator)(void*), 
+    void(*recv_initiator)(void*),
+    void* recv_initiator_arg,
+    void(*data_emitter)(void*, size_t)
+){
     //Once socket is initialized, it becomes writable
     socket_ptr->is_writable = 1;
 
@@ -74,6 +84,28 @@ void async_socket_init(async_socket* socket_ptr, void* upper_socket_ptr){
     
     //initialize receive buffer for socket
     socket_ptr->receive_buffer = async_byte_buffer_create(DEFAULT_RECV_BUFFER_SIZE);
+
+    socket_ptr->send_initiator = async_socket_default_send_initiator;
+    if(send_initiator != NULL){
+        socket_ptr->send_initiator = send_initiator;
+    }
+
+    socket_ptr->recv_initiator = async_socket_default_recv_initiator;
+    socket_ptr->recv_initiator_arg = socket_ptr;
+    socket_ptr->data_emitter = async_socket_default_data_emitter;
+
+    if(recv_initiator != NULL){
+        socket_ptr->recv_initiator = recv_initiator;
+    }
+
+    if(recv_initiator_arg != NULL){
+        socket_ptr->recv_initiator_arg = recv_initiator_arg;
+    }
+
+    if(data_emitter != NULL){
+        socket_ptr->data_emitter = data_emitter;
+    }
+    
 }
 
 //Connect the socket to the specified address and port, and register a callback for when the connection is established
@@ -229,8 +261,25 @@ void async_socket_future_send_task_enqueue_attempt(async_socket* connected_socke
         !connected_socket->set_to_destroy &&
         !is_async_byte_stream_empty(&connected_socket->socket_send_stream)
     ){
+        //Set socket status to currently writing
+        //TODO: okay to put this here or in all send initiator functions?
+        connected_socket->is_writing = 1;
+
+        //Get the pointer and number of bytes to send from the socket's send stream
+        async_byte_stream_ptr_data new_ptr_data = 
+            async_byte_stream_get_buffer_stream_ptr(&connected_socket->socket_send_stream);
+
+        socket_and_byte_stream_ptr_data ptr_data = {
+            .byte_stream_ptr_data = new_ptr_data,
+            .async_socket_type = connected_socket
+        };
+
+        //TODO: clean this up later
+        socket_and_byte_stream_ptr_data* copied_ptr_data = calloc(1, sizeof(socket_and_byte_stream_ptr_data));
+        *copied_ptr_data = ptr_data;
+
         //enqueue a send task for this socket in the future task queue
-        future_task_queue_enqueue(async_socket_send_initiator, connected_socket);
+        future_task_queue_enqueue(connected_socket->send_initiator, copied_ptr_data);
         connected_socket->is_queued_for_writing = 1;
     }
 }
@@ -280,6 +329,19 @@ void async_socket_connection_complete_routine(void(*connection_callback)(void), 
     async_socket_connected_handler(type_arg, arg);
 }
 
+void async_socket_default_recv_initiator(void* recv_info){
+    async_socket* curr_socket = (async_socket*)recv_info;
+
+    async_io_uring_recv(
+        curr_socket->socket_fd,
+        async_byte_buffer_internal_array(curr_socket->receive_buffer),
+        async_byte_buffer_capacity(curr_socket->receive_buffer),
+        0,
+        after_socket_recv,
+        curr_socket
+    );
+}
+
 //Event handler for when socket triggers event
 void socket_event_handler(event_node* curr_socket_node, uint32_t events){
     //typecast and get datatypes
@@ -303,14 +365,7 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
         );
 
         //Call async recv() to read data from the socket
-        async_io_uring_recv(
-            curr_socket->socket_fd,
-            async_byte_buffer_internal_array(curr_socket->receive_buffer),
-            async_byte_buffer_capacity(curr_socket->receive_buffer),
-            0,
-            after_socket_recv,
-            curr_socket
-        );
+        curr_socket->recv_initiator(curr_socket->recv_initiator_arg);    
     }
 
     //If peer closed its connection
@@ -338,6 +393,12 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
             async_socket_open_checker(curr_socket);
         }
     }
+}
+
+void async_socket_default_data_emitter(void* socket_arg, size_t num_bytes_read){
+    async_socket* reading_socket = (async_socket*)socket_arg;
+
+    async_socket_emit_data(reading_socket, reading_socket->receive_buffer, num_bytes_read);
 }
 
 //Callback for after async_recv() is called on the socket to read data
@@ -376,7 +437,7 @@ void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, vo
     }
 
     //Emit data with buffer and number of bytes read to registered data callback(s)
-    async_socket_emit_data(reading_socket, reading_socket->receive_buffer, num_bytes_recvd);
+    reading_socket->data_emitter(reading_socket, num_bytes_recvd);
     
     //If there are no data listeners, make the socket not flowing so it won't try to read more data until a new data listener is registered
     if(reading_socket->num_data_listeners == 0){
@@ -616,28 +677,28 @@ void socket_data_routine(void(*data_callback)(void), void* type_arg, void* data 
 }
 
 //Attempt to initiate sending data on the socket if it is open, writable, and has data in its send stream
-int async_socket_send_initiator(void* socket_arg){
-    async_socket* sending_socket = (async_socket*)socket_arg;
+int async_socket_default_send_initiator(void* socket_and_byte_stream){
+    socket_and_byte_stream_ptr_data* socket_and_byte_stream_casted = (socket_and_byte_stream_ptr_data*)socket_and_byte_stream;
 
-    //Set socket status to currently writing
-    sending_socket->is_writing = 1;
-
-    //Get the pointer and number of bytes to send from the socket's send stream
-    async_byte_stream_ptr_data new_ptr_data = async_byte_stream_get_buffer_stream_ptr(&sending_socket->socket_send_stream);
+    async_socket* bare_socket = (async_socket*)(socket_and_byte_stream_casted->async_socket_type);
 
     //initiate async send call
     async_io_uring_send(
-        sending_socket->socket_fd,
-        new_ptr_data.ptr,
-        new_ptr_data.num_bytes,
+        bare_socket->socket_fd,
+        socket_and_byte_stream_casted->byte_stream_ptr_data.ptr,
+        socket_and_byte_stream_casted->byte_stream_ptr_data.num_bytes,
         0,
         after_async_socket_send,
-        sending_socket
+        bare_socket
     );
+
+    //TODO: do this before or after send finished?
+    free(socket_and_byte_stream);
 
     return 0;
 }
 
+//all sockets should call this function after sending data
 void after_async_socket_send(int send_fd, void* send_array, size_t num_bytes_sent, void* arg){
     async_socket* written_socket = (async_socket*)arg;
 
