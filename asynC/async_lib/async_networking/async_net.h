@@ -65,7 +65,7 @@ void async_net_ssl_read(
     SSL* ssl,
     void* buffer, 
     size_t num_bytes_to_read, 
-    void(*ssl_read_callback)(SSL*, void*, int, void*),
+    void(*ssl_read_callback)(SSL*, void*, size_t, int, void*),
     void* arg
 );
 

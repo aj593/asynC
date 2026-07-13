@@ -69,6 +69,7 @@ void async_socket_init(
 ){
     //Once socket is initialized, it becomes writable
     socket_ptr->is_writable = 1;
+    socket_ptr->is_able_to_emit_data = 1;
 
     //TODO: clear this up?
     socket_ptr->upper_socket_ptr = upper_socket_ptr;
@@ -436,8 +437,11 @@ void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, vo
         return; //return early if no data was read
     }
 
+    //printf("about to emit data\n");
     //Emit data with buffer and number of bytes read to registered data callback(s)
-    reading_socket->data_emitter(reading_socket, num_bytes_recvd);
+    if(reading_socket->is_able_to_emit_data){
+        reading_socket->data_emitter(reading_socket, num_bytes_recvd);
+    }
     
     //If there are no data listeners, make the socket not flowing so it won't try to read more data until a new data listener is registered
     if(reading_socket->num_data_listeners == 0){
@@ -609,13 +613,14 @@ void async_socket_on_data(
     void(*new_data_handler)(), 
     void* arg, 
     int is_temp_subscriber, 
-    int num_times_listen
+    int num_times_listen,
+    int data_event
 ){
     //call general event emitter function to register data callback
     async_event_emitter_on_event(
         &reading_socket->socket_event_emitter,
         type_arg,
-        async_socket_data_event,
+        data_event,
         (void(*)(void))new_data_handler,
         socket_data_routine,
         &reading_socket->num_data_listeners,

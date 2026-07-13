@@ -68,8 +68,12 @@ int async_tls_socket_send_initiator(void* tls_socket_info){
     return 0;
 }
 
-void after_socket_ssl_read(SSL* ssl, void* buffer, int num_bytes_recvd, void* arg){
+void after_socket_ssl_read(SSL* ssl, void* buffer, size_t num_bytes_recvd, int ssl_error, void* arg){
     async_socket* inner_socket = (async_socket*)arg;
+
+    if(ssl_error != 0){
+        inner_socket->is_able_to_emit_data = 0;
+    }
 
     after_socket_recv(
         inner_socket->socket_fd, 
@@ -259,7 +263,6 @@ void async_tls_socket_connect_handler(async_tcp_socket* tcp_socket, void* arg){
 
     int ssl_err = SSL_get_error(tls_socket->ssl, ssl_connect_ret);
     if(ssl_err == SSL_ERROR_WANT_READ || ssl_err == SSL_ERROR_WANT_WRITE){
-        //printf("SSL_ERROR_WANT_READ or ssl_err == SSL_ERROR_WANT_WRITE\n");
         int ssl_connect_poll_trigger_fd = eventfd(0, EFD_NONBLOCK);
 
         ssl_connect_loop_info ssl_connect_info = {
@@ -322,7 +325,8 @@ void async_tls_socket_on_data(
         (void(*)())data_callback,
         arg, 
         is_temp_listener, 
-        num_times_listen
+        num_times_listen,
+        async_tls_socket_data_event
     );
 }
 

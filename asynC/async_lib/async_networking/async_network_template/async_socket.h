@@ -47,6 +47,8 @@ typedef struct async_socket {
     void(*recv_initiator)(void*);
     void* recv_initiator_arg;
     void(*data_emitter)(void*, size_t);
+
+    int is_able_to_emit_data;
 } async_socket;
 
 enum async_socket_events {
@@ -126,7 +128,8 @@ void async_socket_on_data(
     void(*new_data_handler)(), 
     void* arg, 
     int is_temp_subscriber, 
-    int num_times_listen
+    int num_times_listen,
+    int data_event
 );
 
 void async_socket_off_data(async_socket* reading_socket, void(*data_handler)());

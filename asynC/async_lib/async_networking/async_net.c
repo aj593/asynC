@@ -46,6 +46,7 @@ typedef struct async_net_info {
 
     SSL* ssl;
     SSL_CTX* ssl_ctx;
+    int ssl_error;
 } async_net_info;
 
 void async_net_bind_template(
@@ -574,13 +575,14 @@ void async_net_after_listen(void* listen_data, void* arg){
 
 void after_ssl_read(void* data, void* arg){
     async_net_info* net_ssl_read_info = (async_net_info*)data;
-    void(*ssl_read_callback)(SSL*, void*, int, void*) =
-        (void(*)(SSL*, void*, int, void*))(net_ssl_read_info->async_net_callback);
+    void(*ssl_read_callback)(SSL*, void*, size_t, int, void*) =
+        (void(*)(SSL*, void*, size_t, int, void*))(net_ssl_read_info->async_net_callback);
 
     ssl_read_callback(
         net_ssl_read_info->ssl,
         net_ssl_read_info->buffer,
         net_ssl_read_info->max_num_bytes,
+        net_ssl_read_info->ssl_error,
         net_ssl_read_info->arg
     );
 }
@@ -588,18 +590,20 @@ void after_ssl_read(void* data, void* arg){
 void async_ssl_read_task(void* data_arg){
     async_net_info* ssl_read_info = (async_net_info*)data_arg;
 
-    SSL_read(
+    int ssl_read_ret = SSL_read(
         ssl_read_info->ssl, 
         ssl_read_info->buffer, 
         ssl_read_info->max_num_bytes
     );
+
+    ssl_read_info->ssl_error = SSL_get_error(ssl_read_info->ssl, ssl_read_ret);
 }
 
 void async_net_ssl_read(
     SSL* ssl,
     void* buffer, 
     size_t num_bytes_to_read, 
-    void(*ssl_read_callback)(SSL*, void*, int, void*),
+    void(*ssl_read_callback)(SSL*, void*, size_t, int, void*),
     void* arg
 ){
      async_net_info ssl_read_info = {
