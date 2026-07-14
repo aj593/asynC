@@ -1,6 +1,6 @@
 #include "async_tls_socket.h"
 #include "../async_network_template/async_socket.h"
-#include "async_tcp_socket.h"
+#include "../async_tcp_module/async_tcp_socket.h"
 #include "../../../async_runtime/async_epoll_ops.h"
 //#include "../../../async_runtime/thread_pool.h"
 
@@ -11,23 +11,6 @@
 #include <sys/epoll.h>
 
 #include <sys/socket.h>
-
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/bio.h>
-
-typedef struct async_tls_socket {
-    async_tcp_socket wrapped_tcp_socket;
-
-    SSL* ssl;
-    SSL_CTX* ssl_ctx;
-
-    //TODO: delete these fields?
-    int connect_ret;
-    int ssl_err_num;
-
-    int num_connection_listeners;
-} async_tls_socket;
 
 enum async_tls_socket_events {
     async_tls_socket_connection_event,
@@ -384,3 +367,5 @@ void async_tls_socket_on_secure_connect(
         num_times_listen
     );
 }
+
+//TODO: ssl_shutdown()

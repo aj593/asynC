@@ -27,7 +27,14 @@ async_tcp_socket* async_tcp_socket_create(char* ip_address, int port){
     async_tcp_socket* new_tcp_socket = calloc(1, sizeof(async_tcp_socket));
     
     //initialize underlying generic socket
-    async_socket_init(&new_tcp_socket->wrapped_socket, new_tcp_socket, NULL);
+    async_socket_init(
+        &new_tcp_socket->wrapped_socket, 
+        new_tcp_socket, 
+        NULL,
+        NULL,
+        NULL,
+        NULL
+    );
 
     //If IP address is available, copy it to the new TCP socket's remote address
     if(ip_address != NULL){
@@ -161,7 +168,10 @@ void async_tcp_socket_on_data(
         &tcp_socket->wrapped_socket,
         tcp_socket,
         (void(*)())data_callback,
-        arg, is_temp_listener, num_times_listen
+        arg, 
+        is_temp_listener, 
+        num_times_listen,
+        async_socket_data_event
     );
 }
 

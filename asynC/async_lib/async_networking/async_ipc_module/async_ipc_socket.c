@@ -20,7 +20,14 @@ typedef struct async_ipc_socket {
 
 async_ipc_socket* async_ipc_socket_create(char* local_path, char* remote_path){
     async_ipc_socket* new_ipc_socket = calloc(1, sizeof(async_ipc_socket));
-    async_socket_init(&new_ipc_socket->wrapped_socket, new_ipc_socket);
+    async_socket_init(
+        &new_ipc_socket->wrapped_socket, 
+        new_ipc_socket,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+    );
 
     if(local_path != NULL){
         strncpy(new_ipc_socket->local_path, local_path, MAX_SOCKET_NAME_LEN);
@@ -75,7 +82,7 @@ void async_ipc_socket_connect(
     );
 }
 
-void after_ipc_socket_callback(int socket_fd, int errno, void* arg){
+void after_ipc_socket_callback(int socket_fd, int socket_errno, void* arg){
     async_ipc_socket* ipc_socket_ptr = (async_ipc_socket*)arg;
     ipc_socket_ptr->wrapped_socket.socket_fd = socket_fd;
 
@@ -135,7 +142,8 @@ void async_ipc_socket_on_data(
         (void(*)())data_callback,
         arg,
         is_temp_listener,
-        num_times_listen
+        num_times_listen,
+        async_socket_data_event
     );
 }
 

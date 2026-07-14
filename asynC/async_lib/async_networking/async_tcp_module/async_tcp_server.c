@@ -11,15 +11,10 @@
 #include "../async_net.h"
 #include "../../../async_runtime/io_uring_ops.h"
 
-typedef struct async_tcp_server {
-    async_server wrapped_server;
-    async_inet_address local_address;
-} async_tcp_server;
-
 //void tcp_server_listen_task(void* listen_task);
 //void tcp_server_accept_task(void* accept_task);
 
-void after_tcp_server_socket(int socket_fd, int errno, void* arg);
+void after_tcp_server_socket(int socket_fd, int socket_errno, void* arg);
 void after_tcp_server_bind(int, char*, int, int, void*);
 void after_tcp_server_listen(int, int, void*);
 
@@ -29,7 +24,9 @@ async_tcp_server* async_tcp_server_create(void){
     async_server_init(
         &new_tcp_server->wrapped_server, 
         new_tcp_server,
-        async_tcp_socket_create_return_wrapped_socket
+        async_tcp_socket_create_return_wrapped_socket,
+        NULL,
+        NULL
     );
 
     return new_tcp_server;
@@ -77,7 +74,7 @@ void async_tcp_server_listen(
     listening_tcp_server->local_address.port = port;
 }
 
-void after_tcp_server_socket(int socket_fd, int errno, void* arg){
+void after_tcp_server_socket(int socket_fd, int socket_errno, void* arg){
     async_tcp_server* tcp_server = (async_tcp_server*)arg;
     tcp_server->wrapped_server.listening_socket = socket_fd;
 

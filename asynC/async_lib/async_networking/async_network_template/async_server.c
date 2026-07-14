@@ -61,12 +61,18 @@ void async_server_emit_connection(async_server* connected_server, async_socket* 
 void async_server_init(
     async_server* new_server, 
     void* server_wrapper,
-    async_socket*(*socket_creator)(struct sockaddr*)
+    async_socket*(*socket_creator)(struct sockaddr*),
+    void(*accept_after_task)(int new_fd, async_socket*, void* data),
+    void* accept_after_task_data
 ){
     new_server->server_wrapper = server_wrapper;
     new_server->socket_creator = socket_creator;
+    new_server->accept_after_task = accept_after_task;
+    new_server->accept_after_task_data = accept_after_task_data;
 
     async_event_emitter_init(&new_server->server_event_emitter);
+
+
 }
 
 void async_server_listen_init_template(
@@ -195,6 +201,14 @@ void accept_callback(
 
     //TODO: emit connection event here
     async_server_emit_connection(accepting_server, new_socket);
+
+    if(accepting_server->accept_after_task != NULL){
+        accepting_server->accept_after_task(
+            new_socket_fd,
+            new_socket,
+            accepting_server->accept_after_task_data
+        );
+    }
 }
 
 void async_server_close(async_server* closing_server){

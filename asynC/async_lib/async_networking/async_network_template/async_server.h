@@ -52,6 +52,11 @@ typedef struct async_server {
     void(*accept_initiator)(struct async_server*);
 
     event_node* event_node_ptr;
+
+    void(*accept_after_task)(int new_fd, async_socket*, void* data);
+    void* accept_after_task_data;
+
+    //TODO: include inet_address?
 } async_server;
 
 #endif
@@ -71,7 +76,9 @@ typedef struct listen_task {
 void async_server_init(
     async_server* new_server, 
     void* server_wrapper,
-    async_socket*(*socket_creator)(struct sockaddr* sockaddr_ptr)
+    async_socket*(*socket_creator)(struct sockaddr* sockaddr_ptr),
+    void(*accept_after_task)(int new_fd, async_socket*, void* data),
+    void* accept_after_task_data
 );
 
 void async_server_listen(async_server* server_ptr);

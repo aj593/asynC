@@ -90,7 +90,7 @@ void async_udp_socket_send(
 );
 
 void async_udp_socket_send_attempt(async_udp_socket* udp_socket);
-void after_socket_before_sendto_callback(int socket_fd, int errno, void* arg);
+void after_socket_before_sendto_callback(int socket_fd, int socket_errno, void* arg);
 void after_udp_sendto(int, void*, size_t, struct sockaddr*, socklen_t, int, void*);
 
 void after_socket_before_connect(int socket_fd, int curr_errno, void* arg);
@@ -99,7 +99,14 @@ void async_udp_socket_emit_connect(async_udp_socket* udp_socket);
 
 async_udp_socket* async_udp_socket_create(void){
     async_udp_socket* new_udp_socket = (async_udp_socket*)calloc(1, sizeof(async_udp_socket));
-    async_socket_init(&new_udp_socket->wrapped_socket, new_udp_socket);
+    async_socket_init(
+        &new_udp_socket->wrapped_socket, 
+        new_udp_socket,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+    );
 
     return new_udp_socket;
 }
@@ -214,7 +221,7 @@ void async_udp_socket_bind(
     udp_call_socket(udp_socket, after_socket_before_bind);
 }
 
-void after_socket_before_bind(int socket_fd, int errno, void* arg){
+void after_socket_before_bind(int socket_fd, int socket_errno, void* arg){
     async_udp_socket* udp_socket = (async_udp_socket*)arg;
     udp_socket->wrapped_socket.socket_fd = socket_fd;
     udp_socket->has_created_socket = 1;
@@ -280,7 +287,7 @@ void async_udp_socket_send_attempt(async_udp_socket* udp_socket){
     wrapped_socket->is_writing = 1;
 }
 
-void after_socket_before_sendto_callback(int socket_fd, int errno, void* arg){
+void after_socket_before_sendto_callback(int socket_fd, int socket_errno, void* arg){
     async_udp_socket* udp_socket = (async_udp_socket*)arg;
     udp_socket->wrapped_socket.socket_fd = socket_fd;
     udp_socket->has_created_socket = 1;

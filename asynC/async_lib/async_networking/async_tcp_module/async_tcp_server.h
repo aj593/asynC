@@ -4,7 +4,10 @@
 #include "../async_network_template/async_server.h"
 #include "async_tcp_socket.h"
 
-typedef struct async_tcp_server async_tcp_server;
+typedef struct async_tcp_server {
+    async_server wrapped_server;
+    async_inet_address local_address;
+} async_tcp_server;
 
 async_tcp_server* async_tcp_server_create(void);
 //void async_tcp_server_listen(async_server* listening_tcp_server, int port, char* ip_address, void(*listen_callback)(async_server*, void*), void* arg);

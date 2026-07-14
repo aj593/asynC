@@ -182,7 +182,9 @@ async_http_server* async_create_http_server(void){
     async_server_init(
         &new_http_server->wrapped_server, 
         new_http_server, 
-        async_tcp_socket_create_return_wrapped_socket
+        async_tcp_socket_create_return_wrapped_socket,
+        NULL,
+        NULL
     );
     
     new_http_server->header_timeout = 10.0f;
@@ -289,7 +291,7 @@ char* async_http_server_request_get(async_http_server_request* http_req, char* h
     return (char*)async_util_hash_map_get(header_map, header_key_name);
 }
 
-void after_socket(int new_socket_fd, int errno, void* arg);
+void after_socket(int new_socket_fd, int socket_errno, void* arg);
 void after_ipv4_bind(
     int socket_fd,
     char* ip_address, 

@@ -2,8 +2,24 @@
 #define ASYNC_TLS_SOCKET_H
 
 #include "../async_network_template/async_socket.h"
+#include "../async_tcp_module/async_tcp_socket.h"
 
-typedef struct async_tls_socket async_tls_socket;
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
+
+typedef struct async_tls_socket {
+    async_tcp_socket wrapped_tcp_socket;
+
+    SSL* ssl;
+    SSL_CTX* ssl_ctx;
+
+    //TODO: delete these fields?
+    int connect_ret;
+    int ssl_err_num;
+
+    int num_connection_listeners;
+} async_tls_socket;
 
 async_tls_socket* async_tls_socket_create(char* ip_address, int port);
 
