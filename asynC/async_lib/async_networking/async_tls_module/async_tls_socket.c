@@ -13,9 +13,12 @@
 #include <sys/socket.h>
 
 enum async_tls_socket_events {
-    async_tls_socket_connection_event,
+    async_tls_socket_connect_event,
+    async_tls_socket_data_event,
+    async_tls_socket_end_event,
+    async_tls_socket_close_event,
     async_tls_socket_secure_connect_event,
-    async_tls_socket_data_event
+    async_tls_socket_num_events
 };
 
 typedef struct async_tls_socket_arg_data {
@@ -23,6 +26,34 @@ typedef struct async_tls_socket_arg_data {
     void(*connection_handler)(async_tls_socket*, void*);
     void* arg;
 } async_tls_socket_arg_data;
+
+void async_tls_socket_connect_handler(async_tcp_socket* tcp_socket, void* arg);
+
+void async_tls_socket_connect(
+    async_tls_socket* connecting_tls_socket,
+    char* ip_address,
+    int port,
+    void(*connection_handler)(async_tls_socket*, void*), 
+    void* arg
+){
+    if(connection_handler != NULL){
+        async_tls_socket_on_connection(
+            connecting_tls_socket,
+            connection_handler,
+            arg, 
+            0,
+            0
+        );
+    }
+
+    async_tcp_socket_connect(
+        &connecting_tls_socket->wrapped_tcp_socket,
+        ip_address,
+        port,
+        async_tls_socket_connect_handler, 
+        arg
+    );
+}
 
 void after_ssl_write_callback(SSL* ssl, void* buffer, int return_val, void* arg){
     async_socket* written_socket = (async_socket*)arg;
@@ -54,6 +85,9 @@ int async_tls_socket_send_initiator(void* tls_socket_info){
 void after_socket_ssl_read(SSL* ssl, void* buffer, size_t num_bytes_recvd, int ssl_error, void* arg){
     async_socket* inner_socket = (async_socket*)arg;
 
+    async_tls_socket* tls_socket = inner_socket->upper_socket_ptr;
+    tls_socket->previous_ssl_error = ssl_error;
+
     if(ssl_error != 0){
         inner_socket->is_able_to_emit_data = 0;
     }
@@ -64,6 +98,18 @@ void after_socket_ssl_read(SSL* ssl, void* buffer, size_t num_bytes_recvd, int s
         num_bytes_recvd, 
         inner_socket
     );
+
+    if(tls_socket->previous_ssl_error == SSL_ERROR_ZERO_RETURN){
+        inner_socket->peer_closed = 1;
+    }
+
+    if(
+        tls_socket->previous_ssl_error == SSL_ERROR_ZERO_RETURN ||
+        tls_socket->previous_ssl_error == SSL_ERROR_SYSCALL ||
+        tls_socket->previous_ssl_error == SSL_ERROR_SSL
+    ){
+        async_socket_destroy(inner_socket);
+    }
 }
 
 
@@ -139,8 +185,6 @@ async_tls_socket* async_tls_socket_create(char* ip_address, int port){
     return new_tls_socket;
 }
 
-void async_tls_socket_connect_handler(async_tcp_socket* tcp_socket, void* arg);
-
 async_socket* async_tls_socket_create_return_wrapped_socket(struct sockaddr* sockaddr_ptr){
     struct sockaddr_in* inet_sockaddr = (struct sockaddr_in*)sockaddr_ptr;
     char ip_address[INET_ADDRSTRLEN];
@@ -199,6 +243,7 @@ void async_ssl_connect_loop_event_handler(event_node* ssl_connect_node, uint32_t
 
     if(ssl_connect_ret == 1){
         //TODO: other cleanup aside from this?
+        remove_curr(ssl_connect_node);
         destroy_event_node(ssl_connect_node);
         //TODO: async_fs_close() eventfd
 
@@ -323,7 +368,7 @@ void async_tls_socket_on_connection(
     async_event_emitter_on_event(
         &tls_socket->wrapped_tcp_socket.wrapped_socket.socket_event_emitter,
         tls_socket,
-        async_tls_socket_connection_event,
+        async_tls_socket_connect_event,
         (void(*)(void))connection_callback,
         tls_socket_connection_routine,
         (unsigned int*)(&tls_socket->num_connection_listeners),
@@ -369,3 +414,39 @@ void async_tls_socket_on_secure_connect(
 }
 
 //TODO: ssl_shutdown()
+
+void async_tls_socket_off_data(
+    async_tls_socket* tls_socket, 
+    void(*data_callback)(async_tls_socket*, async_byte_buffer*, void*)
+){
+    async_socket_off_data(
+        &tls_socket->wrapped_tcp_socket.wrapped_socket,
+        (void(*)())data_callback
+    );
+}
+
+void async_tls_socket_on_close(async_tls_socket* tls_socket,
+    void(*close_callback)(async_tls_socket*, int, void*),
+    void* arg, 
+    int is_temp_listener,
+    int num_times_listen
+){
+    //Call underlying socket's on_close function to register the callback
+    async_socket_on_close(
+        &tls_socket->wrapped_tcp_socket.wrapped_socket,
+        tls_socket,
+        (void(*)())close_callback,
+        arg,
+        is_temp_listener,
+        num_times_listen
+    );
+}
+
+void async_tls_socket_end(async_tls_socket* tls_socket){
+    async_socket_end(&tls_socket->wrapped_tcp_socket.wrapped_socket);
+}
+
+void async_tls_socket_destroy(async_tls_socket* tls_socket){
+    //TODO: do more than this, any other items allocated?
+    async_socket_destroy(&tls_socket->wrapped_tcp_socket.wrapped_socket);
+}

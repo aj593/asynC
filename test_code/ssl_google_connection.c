@@ -4,6 +4,8 @@
 #include <openssl/ssl.h>
 #include <sys/epoll.h>
 
+#include <fcntl.h>
+
 #include <stdio.h>
 
 #define MAX_EVENTS 5
@@ -29,30 +31,25 @@ void main(){
 
     connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr));
 
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);
+
     SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
     SSL* ssl = SSL_new(ctx);
     SSL_set_fd(ssl, sockfd);
     SSL_connect(ssl);
 
-    char* request = "GET / HTTP/1.1\r\nHost: www.google.com\r\nConnection: close\r\n\r\n";
-    SSL_write(ssl, request, strlen(request));
-
-    char buffer[1024];
-
-    int event_count = 0;
+    int num_times = 0;
 
     while(1){
-        event_count = epoll_wait(epoll_fd, events, MAX_EVENTS, 0);
-        if(event_count != 0){
-            printf("event count is %d\n", event_count);
-        }
-
-        for(int i = 0; i < event_count; i++){
-            int ret = SSL_read(ssl, buffer, sizeof(buffer));
-            int SSL_error = SSL_get_error(ssl, ret);
-            printf("SSL error is %d\n", SSL_error);
-        }
+        int num_count = epoll_wait(epoll_fd, events, MAX_EVENTS, 0);
         
-        //printf("Received data: %s\n", buffer);
+        num_times++;
+
+        int ssl_connect_ret_val = SSL_connect(ssl);
+
+        if(ssl_connect_ret_val == 1){
+            printf("took %d times \n", num_times);
+            break;
+        }
     }
 }

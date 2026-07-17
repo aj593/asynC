@@ -19,6 +19,8 @@ typedef struct async_tls_socket {
     int ssl_err_num;
 
     int num_connection_listeners;
+
+    int previous_ssl_error;
 } async_tls_socket;
 
 async_tls_socket* async_tls_socket_create(char* ip_address, int port);
@@ -71,5 +73,21 @@ void async_tls_socket_on_data(
     int is_temp_listener,
     int num_times_listen
 );
+
+void async_tls_socket_off_data(
+    async_tls_socket* tls_socket, 
+    void(*data_callback)(async_tls_socket*, async_byte_buffer*, void*)
+);
+
+void async_tls_socket_on_close(async_tls_socket* tls_socket,
+    void(*close_callback)(async_tls_socket*, int, void*),
+    void* arg, 
+    int is_temp_listener,
+    int num_times_listen
+);
+
+void async_tls_socket_end(async_tls_socket* tls_socket);
+
+void async_tls_socket_destroy(async_tls_socket* tls_socket);
 
 #endif

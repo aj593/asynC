@@ -37,6 +37,7 @@ void async_ssl_accept_loop_event_handler(event_node* ssl_accept_node, uint32_t e
 
     if(ssl_accept_ret == 1){
         //TODO: other cleanup aside from this?
+        remove_curr(ssl_accept_node);
         destroy_event_node(ssl_accept_node);
         //TODO: async_fs_close() eventfd
 

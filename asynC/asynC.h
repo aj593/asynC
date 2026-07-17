@@ -10,7 +10,7 @@
 #include "async_lib/async_networking/async_http_module/async_http_request.h"
 #include "async_lib/async_networking/async_tcp_module/async_tcp_socket.h"
 #include "async_lib/async_networking/async_tcp_module/async_tcp_server.h"
-#include "async_lib/async_networking/async_tcp_module/async_tls_socket.h"
+#include "async_lib/async_networking/async_tls_module/async_tls_socket.h"
 #include "async_lib/async_networking/async_ipc_module/async_ipc_server.h"
 #include "async_lib/async_networking/async_ipc_module/async_ipc_socket.h"
 #include "async_lib/async_dns_module/async_dns.h"

@@ -1,5 +1,7 @@
 #include "async_event_emitter.h"
 
+#include <stdio.h>
+
 /*
 async_util_vector* create_event_listener_vector(void){
     return async_util_vector_create(5, 2, sizeof(event_emitter_handler));
@@ -101,13 +103,14 @@ void async_event_emitter_emit_event(
 
     event_emitter_handler* event_handler_array = 
         (event_emitter_handler*)async_util_vector_internal_array(event_vector);
-    
+  
     for(int i = 0; i < async_util_vector_size(event_vector); i++){
         event_handler_array[i].is_new_subscriber = 0;
     }
 
     event_emitter_handler curr_event_handler;
     for(int i = 0; i < async_util_vector_size(event_vector); i++){
+
         async_util_vector_get(event_vector, i, &curr_event_handler);
         if(curr_event_handler.is_new_subscriber || curr_event_handler.curr_event != event){
             continue;

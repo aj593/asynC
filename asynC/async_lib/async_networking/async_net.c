@@ -587,6 +587,7 @@ void after_ssl_read(void* data, void* arg){
     );
 }
 
+//TODO: lookinto SSL_MODE_ASYNC with ssl_set_mode()?
 void async_ssl_read_task(void* data_arg){
     async_net_info* ssl_read_info = (async_net_info*)data_arg;
 
@@ -596,7 +597,7 @@ void async_ssl_read_task(void* data_arg){
         ssl_read_info->max_num_bytes
     );
 
-    ssl_read_info->ssl_error = SSL_get_error(ssl_read_info->ssl, ssl_read_ret);
+    ssl_read_info->ssl_error = SSL_get_error(ssl_read_info->ssl, ssl_read_ret);    
 }
 
 void async_net_ssl_read(
