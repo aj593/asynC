@@ -1,9 +1,15 @@
 #include "async_dns.h"
 
+#if defined(__unix__)
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#elif defined(_WIN32)
+#include <ws2tcpip.h>
+#include <WinSock2.h>
+#endif
+
 
 #include <string.h>
 #include <stdio.h>

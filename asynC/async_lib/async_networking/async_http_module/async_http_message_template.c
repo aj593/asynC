@@ -121,7 +121,7 @@ void async_http_message_template_clear(async_http_message_template* msg_template
     msg_template_ptr->is_chunked = 0;
     msg_template_ptr->request_url = "/";
 
-    msg_template_ptr->current_method = GET;
+    msg_template_ptr->current_method = GET_HTTP_METHOD;
     strncpy(
         msg_template_ptr->request_method, 
         async_http_method_enum_find(msg_template_ptr->current_method), 

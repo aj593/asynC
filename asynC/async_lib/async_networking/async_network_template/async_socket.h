@@ -2,8 +2,18 @@
 #define ASYNC_SOCKET
 
 #include <stdatomic.h>
+
+
 #include <pthread.h>
-#include <sys/socket.h>
+
+#if defined(__linux__)
+    #include <sys/socket.h>
+#elif defined(_WIN32)
+    #include <winsock.h>
+    #include <WinSock2.h>
+    #include <Windows.h>
+    typedef int socklen_t;
+#endif
 
 #include "async_server.h"
 #include "../../../util/async_util_vector.h"

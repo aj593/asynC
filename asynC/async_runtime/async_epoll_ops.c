@@ -1,5 +1,6 @@
 #include "async_epoll_ops.h"
 
+#if defined(__linux__)
 #include <sys/epoll.h>
 #include <string.h>
 #include <unistd.h>
@@ -48,3 +49,5 @@ void epoll_check(void){
         curr_event_handler(curr_event_node_data, curr_events[i].events);
     }
 }
+
+#endif

@@ -83,8 +83,12 @@ void async_byte_stream_enqueue(async_byte_stream* writable_stream, void* copied_
             num_entries++;
         }
 
-        size_t num_bytes_to_copy = min_value(possible_num_bytes_copied, num_entries);
-
+        size_t num_bytes_to_copy = possible_num_bytes_copied[0];
+        for(int i = 1; i < num_entries; i++){
+            if(possible_num_bytes_copied[i] < num_bytes_to_copy){
+                num_bytes_to_copy = possible_num_bytes_copied[i];
+            }
+        }
         memcpy(&stream_buffer_ptr->buffer[stream_buffer_ptr->in_index], buffer_to_copy, num_bytes_to_copy);
         buffer_to_copy += num_bytes_to_copy;
         stream_buffer_ptr->in_index = (stream_buffer_ptr->in_index + num_bytes_to_copy) % stream_buffer_ptr->buffer_size;
@@ -126,7 +130,9 @@ async_byte_stream_ptr_data async_byte_stream_get_buffer_stream_ptr(async_byte_st
     new_ptr_data.num_bytes = stream_buffer_info->buffer_size - stream_buffer_info->out_index;
     if(stream_buffer_info->in_index > stream_buffer_info->out_index){
         size_t in_and_out_index_difference = stream_buffer_info->in_index - stream_buffer_info->out_index;
-        new_ptr_data.num_bytes =  min(new_ptr_data.num_bytes, in_and_out_index_difference);
+        if(in_and_out_index_difference < new_ptr_data.num_bytes){
+            new_ptr_data.num_bytes = in_and_out_index_difference;
+        }
     }
 
     return new_ptr_data; 

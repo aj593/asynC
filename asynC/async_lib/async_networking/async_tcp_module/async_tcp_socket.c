@@ -3,10 +3,14 @@
 #include "../async_network_template/async_socket.h"
 #include "../async_net.h"
 
+#if defined(__unix__)
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#elif defined(_WIN32)
+#include <ws2tcpip.h>
+#endif
 
 #include <string.h>
 #include <stdio.h>

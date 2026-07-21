@@ -2,21 +2,21 @@
 
 #include <stdio.h>
 
+#if defined(__linux__)
 #include <liburing.h>
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
 
 #include <pthread.h>
-
-#include "async_epoll_ops.h"
-#include "thread_pool.h"
-
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <unistd.h>
 #include <sys/un.h>
 
-#include <sys/epoll.h>
-#include <sys/eventfd.h>
-#include <unistd.h>
+
+#include "async_epoll_ops.h"
+#include "thread_pool.h"
 
 struct io_uring async_uring;
 #define IO_URING_NUM_ENTRIES 100 // TODO: change this later?
@@ -501,3 +501,4 @@ void after_io_uring_socket_handler(async_io_uring_task_args *socket_task_info) {
   socket_callback(socket_task_info->return_val, socket_task_info->arg);
 }
 
+#endif

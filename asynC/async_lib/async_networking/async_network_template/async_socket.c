@@ -1,19 +1,24 @@
 #include "async_socket.h"
 
+#if defined(__unix__)
 #include <sys/socket.h>
 #include <arpa/inet.h>
-
 #include <pthread.h>
-#include <string.h>
 #include <unistd.h>
+#elif defined(__linux__)
 #include <sys/epoll.h>
+#elif defined(_WIN32)
+#include "WinSock2.h"
+#endif
 
 #include <stdio.h>
+#include <string.h>
 
 #include "../../../async_runtime/event_loop.h"
 #include "../../../async_runtime/io_uring_ops.h"
 #include "../../../async_runtime/thread_pool.h"
 #include "../../../async_runtime/async_epoll_ops.h"
+#include "../../../async_runtime/async_runtime_event_checker.h"
 #include "../../event_emitter_module/async_event_emitter.h"
 
 #include "../../../util/async_byte_stream.h"
@@ -235,7 +240,7 @@ async_socket* create_socket_node(
     //We allow the user to pass in a custom event handler and events if they want to handle socket events differently than the default
     if(custom_socket_event_handler == NULL || events == 0){
         custom_socket_event_handler = socket_event_handler;
-        events = EPOLLIN | EPOLLRDHUP;
+        events = ASYNC_RUNTIME_READ | ASYNC_RUNTIME_RDHUP;
     }
 
     //Set the event handler for this socket's event node and add it to epoll with the specified events
@@ -350,13 +355,13 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
     async_socket* curr_socket = new_socket_info->socket;
 
     //If there's data to read on the socket
-    if(events & EPOLLIN){
+    if(events & ASYNC_RUNTIME_READ){
         //set the flags to true
         curr_socket->data_available_to_read = 1;
         curr_socket->is_reading = 1;
         
         //TODO: is this removing socket readable flag from socket?
-        curr_socket->curr_events &= ~EPOLLIN;
+        curr_socket->curr_events &= ~ASYNC_RUNTIME_READ;
         
         //Remove readable flag from epoll so EPOLLIN won't get triggered again until we re-enable it after reading the data
         epoll_mod(
@@ -370,14 +375,14 @@ void socket_event_handler(event_node* curr_socket_node, uint32_t events){
     }
 
     //If peer closed its connection
-    if(events & EPOLLRDHUP){
+    if(events & ASYNC_RUNTIME_RDHUP){
         //TODO: emit peer-closed event here?
         //set flags for peer closed and make it not writable anymore
         curr_socket->peer_closed = 1;
         curr_socket->is_writable = 0;
 
         //remove peer closed flag from socket's events
-        curr_socket->curr_events &= ~EPOLLRDHUP;
+        curr_socket->curr_events &= ~ASYNC_RUNTIME_RDHUP;
         
         epoll_mod(
             curr_socket->socket_fd, 
@@ -412,7 +417,7 @@ void after_socket_recv(int recv_fd, void* recv_array, size_t num_bytes_recvd, vo
     reading_socket->data_available_to_read = 0;
 
     //Add flags to event checker so it will check for readable events on this socket again in the future
-    reading_socket->curr_events |= EPOLLIN;
+    reading_socket->curr_events |= ASYNC_RUNTIME_READ;
 
     epoll_mod(
         reading_socket->socket_fd,
@@ -784,9 +789,18 @@ void async_socket_open_checker(async_socket* checked_socket){
     epoll_remove(checked_socket->socket_fd);
 
     //TODO: try results with different flags?
+
+    int shutdown_flags;
+    #if defined(_WIN32)
+        shutdown_flags = SD_SEND;
+    #elif defined(__unix__)
+        shutdown_flags = SHUT_WR;
+
+    #endif
+
     async_io_uring_shutdown(
         checked_socket->socket_fd,
-        SHUT_WR,
+        shutdown_flags,
         shutdown_callback,
         checked_socket
     );

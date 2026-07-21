@@ -11,10 +11,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(__linux__)
 #include <linux/limits.h>
+#elif defined(__unix__)
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
+#endif
 
 //TODO: make separate queue for writestreams and other items that don't keep event loop from exiting
 typedef struct async_fs_writestream {

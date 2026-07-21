@@ -1,17 +1,22 @@
 #include "async_net.h"
 
+#if defined(__unix__)
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
-
 #include <sys/un.h>
+#elif defined(__linux__)
 #include <sys/epoll.h>
+#elif defined(_WIN32)
+#include <afunix.h>
+#endif
 #include <errno.h>
 
 #include "../../async_runtime/thread_pool.h"
 #include "../../async_runtime/async_epoll_ops.h"
+#include "../../async_runtime/async_runtime_event_checker.h"
 
 #include <stdio.h>
 
@@ -44,8 +49,8 @@ typedef struct async_net_info {
 
     void* arg;
 
-    SSL* ssl;
-    SSL_CTX* ssl_ctx;
+    //SSL* ssl;
+    //SSL_CTX* ssl_ctx;
     int ssl_error;
 } async_net_info;
 
@@ -344,8 +349,14 @@ void async_net_connect_template(
 void async_net_connect_task(void* connect_info_ptr){
     async_net_info* connect_info = (async_net_info*)connect_info_ptr;
 
+    #if defined(__unix__)
     int flags = fcntl(connect_info->socket_fd, F_GETFL);
     fcntl(connect_info->socket_fd, F_SETFL, flags | O_NONBLOCK);
+    //TODO: on windows set it so that user puts in original flags at first
+    #elif defined(_WIN32)
+    u_long mode = 1;
+    ioctlsocket(connect_info->socket_fd, FIONBIO, &mode);
+    #endif
 
     connect(
         connect_info->socket_fd,
@@ -353,12 +364,16 @@ void async_net_connect_task(void* connect_info_ptr){
         connect_info->socket_length 
     );
 
+    #if defined(__unix__)
     fcntl(connect_info->socket_fd, F_SETFL, flags);
+    //TODO: set it so on windows, flags get set back
+    #endif
 }
 
 int async_getsockopt_connect_status(int socket_fd, int* connect_status){
     socklen_t status_info_length = sizeof(*connect_status);
 
+    #if defined(__unix__)
     getsockopt(
         socket_fd,
         SOL_SOCKET,
@@ -366,6 +381,20 @@ int async_getsockopt_connect_status(int socket_fd, int* connect_status){
         connect_status,
         &status_info_length
     );
+    #elif defined(_WIN32)
+    size_t buff_len = sizeof(int) + 1;
+    char connect_status_buff[buff_len];
+    strncpy(connect_status_buff, (char*)connect_status, buff_len);
+    connect_status_buff[buff_len - 1] = '\0';
+    //TODO: am i doing this right? do i use pointer or actual value?
+    getsockopt(
+        socket_fd,
+        SOL_SOCKET,
+        SO_ERROR,
+        connect_status_buff,
+        (int*)&buff_len
+    );
+    #endif
 
     return errno;
 }
@@ -392,7 +421,16 @@ void async_net_after_connect(void* data, void* arg){
     
     connect_node->event_handler = connect_event_handler;
     //TODO: need EPOLLERR in case connect failed?
-    epoll_add(connect_info->socket_fd, connect_node, EPOLLOUT | EPOLLERR);
+    async_runtime_event_item event_item = {
+        .events = ASYNC_RUNTIME_WRITE | ASYNC_RUNTIME_ERR,
+        .event_fd = connect_info->socket_fd,
+        .ptr = connect_node
+    };
+    async_runtime_event_checker_modify(
+        ASYNC_RUNTIME_CTL_ADD,
+        connect_info->socket_fd,
+        &event_item
+    );
 }
 
 void connect_event_handler(event_node* connect_node, uint32_t events){
@@ -571,7 +609,6 @@ void async_net_after_listen(void* listen_data, void* arg){
         arg
     );
 }
-
 
 void after_ssl_read(void* data, void* arg){
     async_net_info* net_ssl_read_info = (async_net_info*)data;

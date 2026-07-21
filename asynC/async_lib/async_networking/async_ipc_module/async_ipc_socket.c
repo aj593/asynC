@@ -3,13 +3,20 @@
 #include "../../async_file_system/async_fs.h"
 #include "../async_net.h"
 
+#if defined(__unix__)
+#include <unistd.h>
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <sys/un.h>
+#elif defined(_WIN32)
+#include <ws2def.h>
+#include <WinSock2.h>
+#include <afunix.h>
+#endif
 
-#include <unistd.h>
 #include <stdio.h>
 
 typedef struct async_ipc_socket {

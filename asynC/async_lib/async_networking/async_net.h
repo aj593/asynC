@@ -1,11 +1,18 @@
 #ifndef ASYNC_NET_UTILITY_H
 #define ASYNC_NET_UTILITY_H
 
+#if defined(__unix__)
 #include <sys/socket.h>
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+#elif defined(_WIN32)
+#include <winsock.h>
+#include <WinSock2.h>
+#include <Windows.h>
+#include <ws2tcpip.h>
+#endif
 
 void async_net_socket(
     int domain, 
@@ -60,7 +67,7 @@ void async_net_ipc_connect(
     void(*connect_callback)(int, char*, int, void*),
     void* arg
 );
-
+/*
 void async_net_ssl_read(
     SSL* ssl,
     void* buffer, 
@@ -75,7 +82,7 @@ void async_net_ssl_write(
     size_t num_bytes_to_write, 
     void(*ssl_write_callback)(SSL*, void*, int, void*),
     void* arg
-);
+);*/
 
 void async_net_listen(
     int socket_fd, 

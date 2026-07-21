@@ -3,13 +3,15 @@
 #include "../../async_file_system/async_fs.h"
 #include "../async_net.h"
 
+#if defined(__unix__)
+#include <unistd.h>
+
 #include <sys/un.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netdb.h>
-
-#include <unistd.h>
+#endif
 
 #include <stdio.h>
 

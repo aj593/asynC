@@ -6,22 +6,39 @@
 #include "../../async_runtime/async_epoll_ops.h"
 #include "../../async_runtime/thread_pool.h"
 #include "../../async_runtime/io_uring_ops.h"
+#include "../../async_runtime/async_runtime_windows_clone_process.h"
+#include "../../async_runtime/async_runtime_event_checker.h"
 #include "../event_emitter_module/async_event_emitter.h"
 
+
+#if defined(__linux__)
 #include <sys/epoll.h>
+#elif defined(__unix__)
 #include <unistd.h>
-#include <string.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <linux/wait.h>
 #include <sys/types.h>
+#include <signal.h>
+#include <sys/socket.h>
+#include <syscall.h>
+#elif defined(_WIN32)
+#include <winsock2.h>
+#include <afunix.h>
+#include <windows.h>
+#include <io.h>
+#endif
 
 #include <stdio.h>
-#include <sys/un.h>
-#include <signal.h>
+#include <string.h>
 
-#include <sys/socket.h>
-
-#include <syscall.h>
+#if defined(_WIN32)
+typedef struct async_windows_process_info {
+    HANDLE hProcess;
+    HANDLE hWaitObject;
+    async_child_process* child_process_ptr;
+} async_windows_process_info;
+#endif
 
 #define MAX_NUM_CHILD_PROCESS_IPC_CONNECTIONS 5
 
@@ -41,6 +58,10 @@ typedef struct async_child_process {
     int has_terminated;
 
     event_node* event_node_ptr;
+
+    #if defined(_WIN32)
+    HANDLE process_handle;
+    #endif
 } async_child_process;
 
 //TODO: make it in /tmp/ directory?
@@ -56,6 +77,13 @@ pid_t forker_pid;
 int forker_pipe[2];
 #define PIPE_READ_END  0
 #define PIPE_WRITE_END 1
+
+#if defined(_WIN32)
+
+HANDLE forker_proc_handle;
+#define PIPE_NUM_BYTES 2 << 15
+
+#endif
 
 #define EXEC_CHAR '0'
 #define FORK_CHAR '1'
@@ -75,13 +103,17 @@ typedef struct func_ptr_holder {
     void(*child_func_ptr)(async_ipc_socket*);
 } func_ptr_holder;
 
+#if defined(__unix__)
 void SIGCHLD_handler(int signal_number){
     while(waitpid(-1, NULL, WNOHANG) > 0);
 }
+#endif
 
+#if defined(__linux__)
 int pidfd_open(pid_t pid, unsigned int flags){
     return syscall(SYS_pidfd_open, pid, flags);
 }
+#endif
 
 typedef struct async_child_process_holder {
     async_child_process* child_process_ptr;
@@ -181,12 +213,25 @@ int child_process_creator_init(void){
     curr_process_pid = getpid();
     main_process_pid = curr_process_pid;
 
+
+    #if defined(__unix__)
     int ret = pipe(forker_pipe);
+    #elif defined(_WIN32)
+    int ret = _pipe(forker_pipe, PIPE_NUM_BYTES, _O_TEXT);
+    #endif
+    
     if(ret == -1){
         return -1;
     }
 
+    #if defined(__unix)
     forker_pid = fork();
+    #elif defined(_WIN32)
+    async_windows_process_stats proc_stats = async_runtime_windows_clone_process();
+    forker_pid = proc_stats.process_id;
+    forker_proc_handle = proc_stats.process_handle;
+    #endif
+
     if(forker_pid == -1){
         return -1;
     }
@@ -209,18 +254,37 @@ int child_process_creator_destroy(void){
     write(forker_pipe[PIPE_WRITE_END], main_term_msg, total_buffer_size);
 
     close(forker_pipe[PIPE_WRITE_END]);
-
+    #if defined(__unix__)
     /*pid_t pid = */waitpid(forker_pid, NULL, 0);
     //printf("%d\n", pid);
+    #elif defined(_WIN32)
+    WaitForSingleObject(forker_proc_handle, INFINITE);
+    //TODO: GetExitCodeProcess()?
+    CloseHandle(forker_proc_handle);
+    #endif
 
     return 0;
 }
+
+#if defined(_WIN32)
+VOID CALLBACK on_process_exit(PVOID lpParameter, BOOLEAN TimerOrWaitFired){
+    if(!TimerOrWaitFired){
+        async_windows_process_info* proc_info = (async_windows_process_info*)lpParameter;
+        CloseHandle(proc_info->hProcess);
+        UnregisterWait(proc_info->hWaitObject);
+        free(proc_info);
+        printf("process finished\n");
+    }
+}
+#endif
 
 void forker_handler(void){
     curr_process_pid = getpid();
 
     //TODO: do cross platform way
+    #if defined(__unix__)
     signal(SIGCHLD, SIGCHLD_handler);
+    #endif
     /*
     struct sigaction child_sigaction_handler;
     child_sigaction_handler.__sigaction_handler.sa_handler = SIGCHLD_handler;
@@ -270,7 +334,15 @@ void forker_handler(void){
         char* child_process_task_flag = strtok(pipe_msg, period_delimiter);
         char* server_name = strtok(NULL, period_delimiter);
 
-        pid_t grand_child_pid = fork();
+        pid_t grand_child_pid;
+
+        #if defined(__unix__)
+        grand_child_pid = fork();
+        #elif defined(_WIN32)
+        async_windows_process_stats proc_stats = async_runtime_windows_clone_process();
+        grand_child_pid = proc_stats.process_id;
+        
+        #endif
         if(grand_child_pid == -1){
             //TODO: error handle here, call sync_connect_ipc_socket() to notify parent's server of failure?
             int fork_error_fd = 
@@ -282,11 +354,33 @@ void forker_handler(void){
                 );
 
             //TODO: send errno to peer socket?
-            shutdown(fork_error_fd, SHUT_RDWR);
+            int shutdown_flags;
+            #if defined(__unix__)
+            shutdown_flags = SHUT_RDWR;
+            #elif defined(_WIN32)
+            shutdown_flags = SD_BOTH;
+            #endif
+            shutdown(fork_error_fd, shutdown_flags);
             close(fork_error_fd);
         }
         else if(grand_child_pid == 0){
             grand_child_handler(pipe_msg, child_process_task_flag, server_name);
+        }
+        else{
+            #if defined(_WIN32)
+            async_windows_process_info* process_info = malloc(sizeof(async_windows_process_info));
+            
+            //TODO: error check this
+            RegisterWaitForSingleObject(
+                process_info->hWaitObject,
+                proc_stats.process_handle,
+                on_process_exit,
+                process_info,
+                INFINITE,
+                WT_EXECUTEONLYONCE
+            );
+
+            #endif
         }
     }
     
@@ -512,7 +606,12 @@ async_child_process* async_child_process_exec(char* executable_name, char* args[
 }
 
 int async_child_process_kill(async_child_process* child_process, int signal){
+    #if defined(__unix__)
     int result = kill(child_process->subprocess_pid, signal);
+    #elif defined(_WIN32)
+    //TODO: second argument is correct?
+    BOOL result = TerminateProcess(child_process->process_handle, 1);
+    #endif
 
     if(result == -1){
         //TODO: emit error here
@@ -578,6 +677,8 @@ void async_child_process_on_custom_connection(async_child_process* child_process
     async_child_process_on_socket_connection(child_process, ipc_socket_custom_connection_handler, custom_arg, CUSTOM_IPC_SOCKET_FLAG);
 }
 
+#if defined(__linux__)
+
 void after_pidfd_close(int close_fd, int close_errno, void* arg){
     async_child_process* child_proc = (async_child_process*)arg;
 
@@ -589,7 +690,7 @@ void after_pidfd_close(int close_fd, int close_errno, void* arg){
 }
 
 void child_process_event_handler(event_node* process_node, uint32_t events){
-    if(events & EPOLLIN){
+    if(events & ASYNC_RUNTIME_READ){
         async_child_process_holder* proc_holder = (async_child_process_holder*)process_node->data_ptr;
         async_child_process* child_proc = proc_holder->child_process_ptr;
 
@@ -597,7 +698,7 @@ void child_process_event_handler(event_node* process_node, uint32_t events){
 
         siginfo_t sig_catcher;
         int ret = waitid(P_PIDFD, child_proc->pid_fd, &sig_catcher, 0);
-
+        
         //TODO: emit child process terminate event here
         printf("child process terminated with ret %d!\n", ret);
         perror("waitid()");
@@ -607,6 +708,32 @@ void child_process_event_handler(event_node* process_node, uint32_t events){
         async_fs_close(child_proc->pid_fd, after_pidfd_close, child_proc);
     }
 }
+
+#endif
+
+
+#if defined(_WIN32)
+VOID CALLBACK waiter_callback(PVOID lpParameter, BOOLEAN TimerOrWaitFired){
+    async_windows_process_info* process_info = (async_windows_process_info*)lpParameter;
+    
+    UnregisterWait(process_info->hWaitObject);
+
+    //TODO: make this close async?
+    CloseHandle(process_info->hProcess);
+
+    async_child_process* child_proc = process_info->child_process_ptr;
+
+    child_proc->has_terminated = 1;
+
+    event_node* removed_process_event = remove_curr(child_proc->event_node_ptr);
+    destroy_event_node(removed_process_event);
+
+    child_process_destroy(child_proc);
+    
+    free(process_info);
+}
+
+#endif
 
 void async_ipc_socket_data_handler(
     async_ipc_socket* ipc_socket, 
@@ -649,9 +776,6 @@ void async_ipc_socket_data_handler(
         return;
     }
 
-    new_child_process->subprocess_pid = *(pid_t*)(internal_socket_buffer + 1);
-    new_child_process->pid_fd = pidfd_open(new_child_process->subprocess_pid, 0);
-
     async_child_process_holder process_holder = { .child_process_ptr = new_child_process };
 
     event_node* child_process_node = 
@@ -660,11 +784,30 @@ void async_ipc_socket_data_handler(
             sizeof(async_child_process_holder)
         );
 
+    #if defined(__linux__)
+    new_child_process->subprocess_pid = *(pid_t*)(internal_socket_buffer + 1);
+    new_child_process->pid_fd = pidfd_open(new_child_process->subprocess_pid, 0);
+
     new_child_process->event_node_ptr = child_process_node;
     
     //TODO: need EPOLLONESHOT?
-    epoll_add(new_child_process->pid_fd, child_process_node, EPOLLIN);
+    epoll_add(new_child_process->pid_fd, child_process_node, ASYNC_RUNTIME_READ);
     child_process_node->event_handler = child_process_event_handler;
+    #elif defined(_WIN32)
+    async_windows_process_info* process_info = malloc(sizeof(async_windows_process_info));
+
+    process_info->child_process_ptr = new_child_process;
+
+    RegisterWaitForSingleObject(
+        process_info->hWaitObject,
+        new_child_process->process_handle,
+        waiter_callback,
+        process_info,
+        INFINITE,
+        WT_EXECUTEONLYONCE
+    );
+
+    #endif
 
     async_ipc_server_close(new_child_process->ipc_server);
     //TODO: make and use server_on_end handler here

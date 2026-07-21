@@ -22,7 +22,8 @@ typedef struct async_fs_task_info {
     void* array;
     async_byte_buffer* buffer; //use void* instead?
     unsigned long max_num_bytes;
-    int offset;
+    unsigned long num_bytes_read;
+    unsigned long offset;
 
     int uid;
     int gid;
@@ -42,11 +43,25 @@ void async_fs_close(int close_fd, void(*close_callback)(int, int, void*), void* 
 void async_fs_close_thread_task(void* close_task);
 void async_fs_after_thread_close(void* close_info, void* arg);
 
-void async_fs_read(int read_fd, void* read_array, size_t num_bytes_to_read, void(*read_callback)(int, void*, size_t, int, void*), void* cb_arg);
+void async_fs_read(
+    int read_fd, 
+    void* read_array, 
+    size_t num_bytes_to_read, 
+    void(*read_callback)(int, void*, size_t, int, void*), 
+    void* cb_arg
+);
+
 void async_fs_read_thread_task(void* read_task);
 void async_fs_after_thread_read(void* read_info, void* arg);
 
-void async_fs_buffer_read(int read_fd, async_byte_buffer* read_buff_ptr, size_t num_bytes_to_read, void(*read_callback)(int, async_byte_buffer*, size_t, int, void*), void* cb_arg);
+void async_fs_buffer_read(
+    int read_fd, 
+    async_byte_buffer* read_buff_ptr, 
+    size_t num_bytes_to_read, 
+    void(*read_callback)(int, async_byte_buffer*, size_t, int, void*), 
+    void* cb_arg
+);
+
 void async_fs_buffer_read_thread_task(void* read_task);
 void async_fs_after_thread_buffer_read(void* buffer_read_info, void* arg);
 
@@ -148,7 +163,7 @@ void async_fs_after_thread_close(void* close_info, void* arg){
 void async_fs_read(
     int read_fd, 
     void* read_array, 
-    unsigned long num_bytes_to_read, 
+    size_t num_bytes_to_read, 
     void(*read_callback)(int, void*, size_t, int, void*), 
     void* cb_arg
 ){
@@ -197,7 +212,7 @@ void async_fs_after_thread_read(void* read_info, void* arg){
 void async_fs_buffer_read(
     int read_fd, 
     async_byte_buffer* read_buff_ptr, 
-    unsigned long num_bytes_to_read, 
+    size_t num_bytes_to_read, 
     void(*read_callback)(int, async_byte_buffer*, size_t, int, void*), 
     void* cb_arg
 ){
@@ -278,13 +293,27 @@ void async_fs_pread(
 void async_fs_pread_thread_task(void* async_pread_task_info){
     async_fs_task_info* pread_params = (async_fs_task_info*)async_pread_task_info;
 
+#if defined(__unix__)
     pread_params->return_val = pread(
         pread_params->fs_task_fd,
         async_byte_buffer_internal_array(pread_params->buffer),
         pread_params->max_num_bytes,
         pread_params->offset
     );
+#elif defined(_WIN32)
+    OVERLAPPED read_file_overlapped = {
+        .Offset = pread_params->offset
+    };
 
+    ReadFile(
+        (HANDLE)_get_osfhandle(pread_params->fs_task_fd),
+        async_byte_buffer_internal_array(pread_params->buffer),
+        pread_params->max_num_bytes,
+        &pread_params->num_bytes_read,
+        &read_file_overlapped
+    );
+#endif
+    //TODO: do something different for windows?
     pread_params->task_errno = errno;
 }
 
@@ -316,6 +345,8 @@ void async_fs_buffer_pread(
 void async_fs_buffer_pread_thread_task(void* async_pread_task_info){
     async_fs_task_info* pread_params = (async_fs_task_info*)async_pread_task_info;
 
+    #if defined(__unix__)
+
     size_t num_bytes_to_read = min(pread_params->max_num_bytes, async_byte_buffer_capacity(pread_params->buffer));
     
     pread_params->return_val = pread(
@@ -324,6 +355,22 @@ void async_fs_buffer_pread_thread_task(void* async_pread_task_info){
         num_bytes_to_read,
         pread_params->offset
     );
+
+    #elif defined(_WIN32)
+
+    OVERLAPPED read_file_overlapped = {
+        .Offset = pread_params->offset
+    };
+
+    ReadFile(
+        (HANDLE)_get_osfhandle(pread_params->fs_task_fd),
+        async_byte_buffer_internal_array(pread_params->buffer),
+        pread_params->max_num_bytes,
+        &pread_params->num_bytes_read,
+        &read_file_overlapped
+    );
+
+    #endif
 
     pread_params->task_errno = errno;
 }

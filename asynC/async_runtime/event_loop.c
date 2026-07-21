@@ -17,13 +17,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#if defined(__linux__)
+    #include <sys/wait.h>
+    #include <sys/epoll.h>
+#elif defined(_WIN32)
+
+#endif
+
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/wait.h>
 #include <sys/types.h>
 #include <pthread.h>
 #include <string.h>
-#include <sys/epoll.h>
 #include <limits.h>
 
 //TODO: should this go in .c or .h file for visibility?
@@ -72,26 +77,6 @@ void asynC_cleanup(){
 
     thread_pool_destroy(); //TODO: uncomment later
     io_uring_exit();
-}
-
-size_t min_value(size_t integer_array[], size_t num_entries){
-    size_t running_min = UINT_MAX;
-
-    for(int i = 0; i < num_entries; i++){
-        size_t curr_num = integer_array[i];
-        
-        if(curr_num < running_min){
-            running_min = curr_num;
-        }
-    }
-
-    return running_min;
-}
-
-size_t min(size_t num1, size_t num2){
-    size_t num_array[] = {num1, num2};
-
-    return min_value(num_array, 2);
 }
 
 //TODO: need defer queue size check here when event loop goes into separate thread?

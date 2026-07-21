@@ -8,8 +8,16 @@
 #include "async_socket.h"
 #include "../../event_emitter_module/async_event_emitter.h"
 
-#include <sys/socket.h>
-#include <arpa/inet.h>
+#if defined(__linux__)
+    #include <sys/socket.h>
+    #include <arpa/inet.h>
+#elif defined(_WIN32)
+    #include <winsock.h>
+    #include <WinSock2.h>
+    #include <Windows.h>
+    #define INET_ADDRSTRLEN 50
+    typedef int socklen_t;
+#endif
 
 enum inet_family {
     ipv4,

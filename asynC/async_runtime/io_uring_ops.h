@@ -4,7 +4,14 @@
 #include "../async_lib/async_file_system/async_fs.h"
 #include "../util/async_byte_buffer.h"
 
-#include <sys/socket.h>
+#if defined(__linux__)
+    #include <sys/socket.h>
+#elif defined(_WIN32)
+    #include <winsock.h>
+    #include <WinSock2.h>
+    #include <Windows.h>
+    typedef int socklen_t;
+#endif
 
 void io_uring_init(void);
 void io_uring_exit(void);

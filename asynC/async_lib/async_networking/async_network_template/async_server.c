@@ -4,16 +4,22 @@
 #include "../../../async_runtime/event_loop.h"
 #include "../../../async_runtime/io_uring_ops.h"
 #include "../../../async_runtime/async_epoll_ops.h"
+#include "../../../async_runtime/async_runtime_event_checker.h"
 #include "../async_net.h"
 
-#include <sys/epoll.h>
-#include <stdlib.h>
-#include <sys/types.h>
+#if defined(__linux__)
+    #include <sys/epoll.h>
+#elif defined(__unix__)
+    #include <sys/types.h>
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <netdb.h>
+    #include <arpa/inet.h>
+    #include <netinet/in.h>
+    #include <sys/socket.h>
+    #include <netdb.h>
+#endif
+
+#include <stdlib.h>
+
 
 #include <string.h>
 #include <stdio.h>
@@ -137,10 +143,17 @@ void after_server_listen(int socket_fd, int listen_errno, void* arg){
 
     //TODO: put following two statements in same function?
     server_node->event_handler = async_server_event_handler;
-    epoll_add(
-        server_ptr->listening_socket, 
-        server_node, 
-        EPOLLIN | EPOLLONESHOT
+    
+    async_runtime_event_item server_onetime_read_event = {
+        .event_fd = server_ptr->listening_socket,
+        .ptr = server_node,
+        .events = ASYNC_RUNTIME_READ | ASYNC_RUNTIME_ONESHOT
+    };
+
+    async_runtime_event_checker_modify(
+        ASYNC_RUNTIME_CTL_ADD,
+        server_ptr->listening_socket,
+        &server_onetime_read_event
     );
 }
 
@@ -148,7 +161,7 @@ void async_server_event_handler(event_node* server_info_node, uint32_t events){
     server_info* server_info_ptr = (server_info*)server_info_node->data_ptr;
     async_server* curr_server = server_info_ptr->listening_server;
 
-    if(events & EPOLLIN){
+    if(events & ASYNC_RUNTIME_READ){
         curr_server->has_connection_waiting = 1;
         curr_server->is_currently_accepting = 1;
 
@@ -169,10 +182,16 @@ void accept_callback(
 ){
     async_server* accepting_server = (async_server*)arg;
 
-    epoll_mod(
-        accepting_server->listening_socket, 
-        accepting_server->event_node_ptr,
-        EPOLLIN | EPOLLONESHOT
+    async_runtime_event_item server_onetime_read_event = {
+        .event_fd = accepting_server->listening_socket,
+        .ptr = accepting_server->event_node_ptr,
+        .events = ASYNC_RUNTIME_READ | ASYNC_RUNTIME_ONESHOT
+    };
+
+    async_runtime_event_checker_modify(
+        ASYNC_RUNTIME_CTL_MOD,
+        accepting_server->listening_socket,
+        &server_onetime_read_event
     );
 
     accepting_server->is_currently_accepting = 0;

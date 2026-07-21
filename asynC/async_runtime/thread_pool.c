@@ -2,11 +2,24 @@
 
 #include "../util/linked_list.h"
 #include "async_epoll_ops.h"
+#include "wepoll.h"
 
-#include <sys/epoll.h>
+#if defined(__linux__)
+    #include <sys/epoll.h>
+
+    #include <sys/eventfd.h>
+    int num_event_tasks_done_fd;
+#elif defined(_WIN32)
+    #include <io.h>
+    #define NUM_FDS 2
+    int windows_pipe[NUM_FDS];
+    #define NUM_BYTES_FOR_PIPE 2 << 15
+    enum PIPES { READ, WRITE };
+    char pipe_buffer[NUM_BYTES_FOR_PIPE];
+#endif
+
 #include <pthread.h>
 #include <string.h>
-#include <sys/eventfd.h>
 
 #include <unistd.h>
 
@@ -24,8 +37,6 @@ typedef struct task_handler_block {
 } task_block;
 
 #endif
-
-int num_event_tasks_done_fd;
 
 pthread_t thread_id_array[NUM_THREADS];
 
@@ -72,10 +83,13 @@ int placeholder(void* arg){
 }
 
 void thread_pool_event_handler(event_node* thread_pool_node, uint32_t events){
-    int thread_pool_eventfd = *(int*)thread_pool_node->data_ptr;
-
-    eventfd_t num_tasks_done;
-    eventfd_read(thread_pool_eventfd, &num_tasks_done);
+    #if defined(__linux__)
+        int thread_pool_eventfd = *(int*)thread_pool_node->data_ptr;
+        eventfd_t num_tasks_done;
+        eventfd_read(thread_pool_eventfd, &num_tasks_done);
+    #elif defined(_WIN32)
+        int num_tasks_done = _read(windows_pipe[READ], pipe_buffer, NUM_BYTES_FOR_PIPE);
+    #endif
 
     for(int i = 0; i < num_tasks_done; i++){
         pthread_mutex_lock(&finished_queue_mutex);
@@ -89,17 +103,33 @@ void thread_pool_event_handler(event_node* thread_pool_node, uint32_t events){
 
 //TODO: also make thread_pool_destroy() function to terminate all threads
 void thread_pool_init(void){
-    num_event_tasks_done_fd = eventfd(0, EFD_NONBLOCK);
+    int* fd_to_copy;
+    size_t size_of_fd;
+
+    #if defined(__linux__)
+        num_event_tasks_done_fd = eventfd(0, EFD_NONBLOCK);
+        fd_to_copy = &num_event_tasks_done_fd;
+        size_of_fd = sizeof(num_event_tasks_done_fd);
+    #elif defined(_WIN32)
+        _pipe(windows_pipe, NUM_BYTES_FOR_PIPE, _O_TEXT);
+        fd_to_copy = windows_pipe;
+        size_of_fd = sizeof(int) * NUM_FDS;
+    #endif
 
     //TODO: add after task done handler?
     event_node* thread_pool_node = 
-        async_event_loop_create_new_unbound_event(
-            &num_event_tasks_done_fd, 
-            sizeof(num_event_tasks_done_fd)
-        );
-
-    epoll_add(num_event_tasks_done_fd, thread_pool_node, EPOLLIN);
-    thread_pool_node->event_handler = thread_pool_event_handler;
+        async_event_loop_create_new_unbound_event(fd_to_copy, size_of_fd);
+    
+        #if defined(__linux__)
+            epoll_add(num_event_tasks_done_fd, thread_pool_node, EPOLLIN);
+        #elif defined(_WIN32)
+            /*wepoll_ctl(HANDLE ephnd,
+                            int op,
+                            SOCKET sock,
+                            struct epoll_event* event);*/
+        #endif
+    
+        thread_pool_node->event_handler = thread_pool_event_handler;
 
     linked_list_init(&task_queue);
     linked_list_init(&defer_task_queue);
@@ -126,7 +156,12 @@ void thread_pool_destroy(void){
         pthread_join(thread_id_array[i], NULL);
     }
 
-    close(num_event_tasks_done_fd);
+    #if defined(__linux__)
+        close(num_event_tasks_done_fd);    
+    #elif defined(_WIN32)
+        _close(windows_pipe[READ]);
+        _close(windows_pipe[WRITE]);
+    #endif
 }
 
 void after_task_finished(void* thread_event){
@@ -278,7 +313,11 @@ void* task_waiter(void* arg){
         pthread_mutex_lock(&finished_queue_mutex);
 
         append(&finished_queue, remove_curr(exec_task_block->event_node_ptr));
-        eventfd_write(num_event_tasks_done_fd, 1);
+        #if defined(__linux__)
+            eventfd_write(num_event_tasks_done_fd, 1);
+        #elif defined(_WIN32)
+            _write(windows_pipe[WRITE], "1", 1);
+        #endif
 
         pthread_mutex_unlock(&unfinished_queue_mutex);
         pthread_mutex_unlock(&finished_queue_mutex);

@@ -1,9 +1,11 @@
 #include "async_tcp_server.h"
 
+#if defined(__unix__)
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#endif
 
 #include <string.h>
 #include <stdio.h>
