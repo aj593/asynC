@@ -70,7 +70,7 @@ async_signal* async_signal_create(int signal){
         return NULL;
     }
 
-    epoll_add(new_signal->signal_fd, new_signal->event_node_ptr, EPOLLIN);
+    //epoll_add(new_signal->signal_fd, new_signal->event_node_ptr, EPOLLIN);
     //TODO: set event handler here new_signal->event_node_ptr->event_handler;
 
     return new_signal;

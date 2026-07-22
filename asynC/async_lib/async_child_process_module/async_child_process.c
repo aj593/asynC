@@ -13,6 +13,14 @@
 
 #if defined(__linux__)
 #include <sys/epoll.h>
+#include <unistd.h>
+#include <sys/un.h>
+#include <sys/wait.h>
+#include <linux/wait.h>
+#include <sys/types.h>
+#include <signal.h>
+#include <sys/socket.h>
+#include <syscall.h>
 #elif defined(__unix__)
 #include <unistd.h>
 #include <sys/un.h>
@@ -476,14 +484,16 @@ void fork_task(char* server_name){
 
     async_ipc_socket* ipc_socket = (async_ipc_socket*)new_socket->upper_socket_ptr;
 
-    async_epoll_init();
+    //async_epoll_init();
+    async_runtime_event_checker_create(0);
     thread_pool_init();
     io_uring_init();
 
     child_func->child_func_ptr(ipc_socket);
     asynC_wait();
 
-    async_epoll_destroy();
+    //async_epoll_destroy();
+    async_runtime_event_checker_destroy();
     thread_pool_destroy();
     io_uring_exit();
 
@@ -690,7 +700,7 @@ void after_pidfd_close(int close_fd, int close_errno, void* arg){
 }
 
 void child_process_event_handler(event_node* process_node, uint32_t events){
-    if(events & ASYNC_RUNTIME_READ){
+    if(events & ASYNC_RUNTIME_EVENT_READ){
         async_child_process_holder* proc_holder = (async_child_process_holder*)process_node->data_ptr;
         async_child_process* child_proc = proc_holder->child_process_ptr;
 
@@ -702,9 +712,14 @@ void child_process_event_handler(event_node* process_node, uint32_t events){
         //TODO: emit child process terminate event here
         printf("child process terminated with ret %d!\n", ret);
         perror("waitid()");
-        
-        epoll_remove(child_proc->pid_fd);
-        
+
+        async_runtime_event_checker_modify(
+            ASYNC_RUNTIME_CTL_DEL,
+            child_proc->pid_fd,
+            NULL,
+            0
+        );
+
         async_fs_close(child_proc->pid_fd, after_pidfd_close, child_proc);
     }
 }
@@ -791,7 +806,13 @@ void async_ipc_socket_data_handler(
     new_child_process->event_node_ptr = child_process_node;
     
     //TODO: need EPOLLONESHOT?
-    epoll_add(new_child_process->pid_fd, child_process_node, ASYNC_RUNTIME_READ);
+    async_runtime_event_checker_modify(
+        ASYNC_RUNTIME_CTL_ADD,
+        new_child_process->pid_fd,
+        child_process_node,
+        ASYNC_RUNTIME_EVENT_READ
+    );
+    
     child_process_node->event_handler = child_process_event_handler;
     #elif defined(_WIN32)
     async_windows_process_info* process_info = malloc(sizeof(async_windows_process_info));

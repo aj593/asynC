@@ -1,6 +1,7 @@
 #include "async_tls_server.h"
 
 #include "../../../async_runtime/async_epoll_ops.h"
+#include "../../../async_runtime/async_runtime_event_checker.h"
 
 #include "../async_net.h"
 
@@ -111,8 +112,14 @@ void async_net_tls_server_accept_after_task(int new_fd, async_socket* base_socke
             sizeof(ssl_accept_loop_info)
         );
 
-        epoll_add(ssl_accept_poll_trigger_fd, ssl_accept_node, EPOLLIN);
         ssl_accept_node->event_handler = async_ssl_accept_loop_event_handler;
+
+        async_runtime_event_checker_modify(
+            ASYNC_RUNTIME_CTL_ADD,
+            ssl_accept_poll_trigger_fd,
+            ssl_accept_node,
+            ASYNC_RUNTIME_EVENT_READ
+        );
 
         eventfd_write(ssl_accept_poll_trigger_fd, 1);
     }

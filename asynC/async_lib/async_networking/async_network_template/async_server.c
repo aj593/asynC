@@ -143,17 +143,12 @@ void after_server_listen(int socket_fd, int listen_errno, void* arg){
 
     //TODO: put following two statements in same function?
     server_node->event_handler = async_server_event_handler;
-    
-    async_runtime_event_item server_onetime_read_event = {
-        .event_fd = server_ptr->listening_socket,
-        .ptr = server_node,
-        .events = ASYNC_RUNTIME_READ | ASYNC_RUNTIME_ONESHOT
-    };
 
     async_runtime_event_checker_modify(
         ASYNC_RUNTIME_CTL_ADD,
         server_ptr->listening_socket,
-        &server_onetime_read_event
+        server_node,
+        ASYNC_RUNTIME_EVENT_READ | ASYNC_RUNTIME_EVENT_ONESHOT
     );
 }
 
@@ -161,7 +156,7 @@ void async_server_event_handler(event_node* server_info_node, uint32_t events){
     server_info* server_info_ptr = (server_info*)server_info_node->data_ptr;
     async_server* curr_server = server_info_ptr->listening_server;
 
-    if(events & ASYNC_RUNTIME_READ){
+    if(events & ASYNC_RUNTIME_EVENT_READ){
         curr_server->has_connection_waiting = 1;
         curr_server->is_currently_accepting = 1;
 
@@ -182,16 +177,11 @@ void accept_callback(
 ){
     async_server* accepting_server = (async_server*)arg;
 
-    async_runtime_event_item server_onetime_read_event = {
-        .event_fd = accepting_server->listening_socket,
-        .ptr = accepting_server->event_node_ptr,
-        .events = ASYNC_RUNTIME_READ | ASYNC_RUNTIME_ONESHOT
-    };
-
     async_runtime_event_checker_modify(
         ASYNC_RUNTIME_CTL_MOD,
         accepting_server->listening_socket,
-        &server_onetime_read_event
+        accepting_server->event_node_ptr,
+        ASYNC_RUNTIME_EVENT_READ | ASYNC_RUNTIME_EVENT_ONESHOT
     );
 
     accepting_server->is_currently_accepting = 0;
@@ -233,7 +223,12 @@ void accept_callback(
 void async_server_close(async_server* closing_server){
     closing_server->is_listening = 0;
 
-    epoll_remove(closing_server->listening_socket);
+    async_runtime_event_checker_modify(
+        ASYNC_RUNTIME_CTL_DEL,
+        closing_server->listening_socket,
+        NULL,
+        0
+    );
 
     //make async call to close listening file descriptor for server
     async_fs_close(closing_server->listening_socket, closing_server_callback, NULL);

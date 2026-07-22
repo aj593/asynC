@@ -1,10 +1,10 @@
 #include "async_tls_socket.h"
+#include "../async_net.h"
 #include "../async_network_template/async_socket.h"
 #include "../async_tcp_module/async_tcp_socket.h"
 #include "../../../async_runtime/async_epoll_ops.h"
+#include "../../../async_runtime/async_runtime_event_checker.h"
 //#include "../../../async_runtime/thread_pool.h"
-
-#include "../async_net.h"
 
 #include <fcntl.h>
 #include <sys/eventfd.h>
@@ -203,7 +203,6 @@ async_tls_socket* async_tls_create_connection(
     void(*connection_handler)(async_tls_socket*, void*), 
     void* arg
 ){
-    printf("Creating TLS connection to %s:%d\n", ip_address, port);
     async_tls_socket* new_socket = async_tls_socket_create(ip_address, port);
 
     async_tls_socket_arg_data tls_socket_arg = {
@@ -215,7 +214,6 @@ async_tls_socket* async_tls_create_connection(
     async_tls_socket_arg_data* tls_socket_arg_ptr = malloc(sizeof(async_tls_socket_arg_data));
     *tls_socket_arg_ptr = tls_socket_arg;
 
-    printf("Connecting to %s:%d\n", ip_address, port);
     async_tcp_socket_connect(
         &new_socket->wrapped_tcp_socket,
         ip_address,
@@ -284,7 +282,6 @@ void async_tls_socket_connect_handler(async_tcp_socket* tcp_socket, void* arg){
     if(ssl_connect_ret == 1){
         //TODO: emit secureConnect here
         async_tls_socket_emit_secure_connect(tls_socket);
-        
 
         return;
     }
@@ -305,8 +302,14 @@ void async_tls_socket_connect_handler(async_tcp_socket* tcp_socket, void* arg){
             sizeof(ssl_connect_loop_info)
         );
 
-        epoll_add(ssl_connect_poll_trigger_fd, ssl_connect_node, EPOLLIN);
         ssl_connect_node->event_handler = async_ssl_connect_loop_event_handler;
+
+        async_runtime_event_checker_modify(
+            ASYNC_RUNTIME_CTL_ADD,
+            ssl_connect_poll_trigger_fd,
+            ssl_connect_node,
+            ASYNC_RUNTIME_EVENT_READ
+        );
 
         eventfd_write(ssl_connect_poll_trigger_fd, 1);
     }

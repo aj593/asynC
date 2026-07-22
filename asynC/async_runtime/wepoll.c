@@ -114,6 +114,8 @@ WEPOLL_EXPORT int wepoll_wait(HANDLE ephnd,
 #define WEPOLL_INTERNAL static
 #define WEPOLL_INTERNAL_EXTERN static
 
+#if defined(_WIN32)
+
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnonportable-system-include-path"
@@ -127,6 +129,7 @@ WEPOLL_EXPORT int wepoll_wait(HANDLE ephnd,
 
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x0600
+
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -2251,3 +2254,5 @@ SOCKET ws_get_base_socket(SOCKET socket) {
       return_set_error(INVALID_SOCKET, error);
   }
 }
+
+#endif

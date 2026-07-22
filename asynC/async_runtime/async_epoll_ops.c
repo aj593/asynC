@@ -1,5 +1,6 @@
 #include "async_epoll_ops.h"
 
+/*
 #if defined(__linux__)
 #include <sys/epoll.h>
 #include <string.h>
@@ -50,4 +51,5 @@ void epoll_check(void){
     }
 }
 
-#endif
+
+#endif*/

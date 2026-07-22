@@ -2,7 +2,7 @@
 
 #include "../util/linked_list.h"
 #include "async_epoll_ops.h"
-#include "wepoll.h"
+#include "async_runtime_event_checker.h"
 
 #if defined(__linux__)
     #include <sys/epoll.h>
@@ -119,18 +119,16 @@ void thread_pool_init(void){
     //TODO: add after task done handler?
     event_node* thread_pool_node = 
         async_event_loop_create_new_unbound_event(fd_to_copy, size_of_fd);
-    
-        #if defined(__linux__)
-            epoll_add(num_event_tasks_done_fd, thread_pool_node, EPOLLIN);
-        #elif defined(_WIN32)
-            /*wepoll_ctl(HANDLE ephnd,
-                            int op,
-                            SOCKET sock,
-                            struct epoll_event* event);*/
-        #endif
-    
-        thread_pool_node->event_handler = thread_pool_event_handler;
 
+    thread_pool_node->event_handler = thread_pool_event_handler;
+
+    async_runtime_event_checker_modify(
+        ASYNC_RUNTIME_CTL_ADD,
+        num_event_tasks_done_fd,
+        thread_pool_node,
+        ASYNC_RUNTIME_EVENT_READ
+    );
+    
     linked_list_init(&task_queue);
     linked_list_init(&defer_task_queue);
 

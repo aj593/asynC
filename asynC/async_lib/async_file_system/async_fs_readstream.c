@@ -210,10 +210,11 @@ void async_fs_readstream_attempt_read(async_fs_readstream* readstream_ptr){
     size_t num_bytes_to_read = readstream_ptr->options_info.high_watermark;
 
     if(!readstream_ptr->options_info.is_infinite){
-        num_bytes_to_read = min(
-            readstream_ptr->options_info.end - readstream_ptr->curr_file_offset,
-            num_bytes_to_read
-        );
+        size_t offset_difference = readstream_ptr->options_info.end - readstream_ptr->curr_file_offset;
+        if(offset_difference < num_bytes_to_read){
+            num_bytes_to_read = offset_difference;
+        }
+
     }
     
     if(!readstream_ptr->is_currently_reading && 

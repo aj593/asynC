@@ -320,7 +320,11 @@ int async_net_https_incoming_message_chunk_handler(
     if(*is_reading_chunk_size_ptr){
         int num_chunk_str_len_bytes_left = CHUNK_SIZE_STR_CAPACITY - *chunk_size_str_len_ptr;
 
-        int num_chars_to_copy = min(num_chunk_str_len_bytes_left, ptr_to_data->num_bytes);
+        int num_chars_to_copy = num_chunk_str_len_bytes_left; 
+        if(ptr_to_data->num_bytes < num_chars_to_copy){
+            num_chars_to_copy = ptr_to_data->num_bytes;
+        }
+
         memcpy(incoming_msg_ptr->chunk_size_str + *chunk_size_str_len_ptr, ptr_to_data->ptr, num_chars_to_copy);
         int length_before_copy = *chunk_size_str_len_ptr;
         *chunk_size_str_len_ptr += num_chars_to_copy;
@@ -398,7 +402,10 @@ int async_net_https_incoming_message_chunk_handler(
     }
     else{
         int* reached_end_of_chunk_ptr = &incoming_msg_ptr->reached_end_of_chunk;
-        *num_bytes_to_dequeue_ptr = min(ptr_to_data->num_bytes, *chunk_size_left_ptr);
+        *num_bytes_to_dequeue_ptr = ptr_to_data->num_bytes;
+        if(*chunk_size_left_ptr < *num_bytes_to_dequeue_ptr){
+            *num_bytes_to_dequeue_ptr = *chunk_size_left_ptr;
+        }
 
         if(!(*reached_end_of_chunk_ptr)){
             *num_bytes_to_emit = *num_bytes_to_dequeue_ptr;

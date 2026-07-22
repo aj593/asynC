@@ -1,5 +1,7 @@
 #include "io_uring_ops.h"
 
+#include "async_runtime_event_checker.h"
+
 #include <stdio.h>
 
 #if defined(__linux__)
@@ -160,29 +162,42 @@ void uring_event_handler(event_node *uring_node, uint32_t events) {
 void uring_submit_task_handler(void *uring_submit_task);
 
 void io_uring_init(void) {
-  int uring_init_ret =
-      io_uring_queue_init(IO_URING_NUM_ENTRIES, &async_uring, 0);
+    int uring_init_ret =
+        io_uring_queue_init(IO_URING_NUM_ENTRIES, &async_uring, 0);
 
-  // TODO: add proper error handling
-  if (uring_init_ret != 0) {
-    exit(0);
-  }
+    // TODO: add proper error handling
+    if (uring_init_ret != 0) {
+      exit(0);
+    }
 
-  io_uring_eventfd = eventfd(0, O_NONBLOCK);
-  io_uring_register_eventfd(&async_uring, io_uring_eventfd);
+    io_uring_eventfd = eventfd(0, O_NONBLOCK);
+    io_uring_register_eventfd(&async_uring, io_uring_eventfd);
 
-  event_node *io_uring_node =
-      async_event_loop_create_new_unbound_event(NULL, 0);
+    event_node *io_uring_node =
+        async_event_loop_create_new_unbound_event(NULL, 0);
 
-  io_uring_node->event_handler = uring_event_handler;
-  epoll_add(io_uring_eventfd, io_uring_node, EPOLLIN);
+    io_uring_node->event_handler = uring_event_handler;
 
-  pthread_spin_init(&uring_spinlock, 0);
+    async_runtime_event_checker_modify(
+      ASYNC_RUNTIME_CTL_ADD,
+      io_uring_eventfd,
+      io_uring_node,
+      ASYNC_RUNTIME_EVENT_READ
+    );
+
+    pthread_spin_init(&uring_spinlock, 0);
 }
 
 void io_uring_exit(void) {
   io_uring_unregister_eventfd(&async_uring);
-  epoll_remove(io_uring_eventfd);
+
+  async_runtime_event_checker_modify(
+    ASYNC_RUNTIME_CTL_DEL,
+    io_uring_eventfd,
+    NULL,
+    0
+  );
+
   close(io_uring_eventfd);
 
   io_uring_queue_exit(&async_uring);

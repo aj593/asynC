@@ -291,7 +291,11 @@ ssize_t async_http2_data_source_read_callback(
     //async_http2_client_stream* stream_ptr = (async_http2_client_stream*)user_data;
     async_http2_buffer* http2_buffer = (async_http2_buffer*)source->ptr;
 
-    ssize_t num_bytes_copied = min(http2_buffer->num_bytes, length);
+    ssize_t num_bytes_copied = http2_buffer->num_bytes;
+    if(length < num_bytes_copied){
+        num_bytes_copied = length;
+    }
+    
     memcpy(buf, http2_buffer->buffer, num_bytes_copied);
 
     return num_bytes_copied;

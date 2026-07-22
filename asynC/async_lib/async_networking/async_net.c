@@ -49,8 +49,8 @@ typedef struct async_net_info {
 
     void* arg;
 
-    //SSL* ssl;
-    //SSL_CTX* ssl_ctx;
+    SSL* ssl;
+    SSL_CTX* ssl_ctx;
     int ssl_error;
 } async_net_info;
 
@@ -421,15 +421,12 @@ void async_net_after_connect(void* data, void* arg){
     
     connect_node->event_handler = connect_event_handler;
     //TODO: need EPOLLERR in case connect failed?
-    async_runtime_event_item event_item = {
-        .events = ASYNC_RUNTIME_WRITE | ASYNC_RUNTIME_ERR,
-        .event_fd = connect_info->socket_fd,
-        .ptr = connect_node
-    };
+    //TODO: remove from event checker after done connecting?
     async_runtime_event_checker_modify(
         ASYNC_RUNTIME_CTL_ADD,
         connect_info->socket_fd,
-        &event_item
+        connect_node,
+        ASYNC_RUNTIME_EVENT_WRITE | ASYNC_RUNTIME_EVENT_ERR
     );
 }
 
@@ -442,7 +439,12 @@ void connect_event_handler(event_node* connect_node, uint32_t events){
         &connect_status
     );
 
-    epoll_remove(connect_info->socket_fd);
+    async_runtime_event_checker_modify(
+        ASYNC_RUNTIME_CTL_DEL,
+        connect_info->socket_fd,
+        NULL,
+        0
+    );
 
     connect_info->after_connect_complete(connect_info);
     

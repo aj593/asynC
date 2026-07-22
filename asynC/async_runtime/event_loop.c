@@ -10,6 +10,7 @@
 
 #include "../async_lib/async_file_system/async_fs.h"
 #include "../async_lib/async_child_process_module/async_child_process.h"
+#include "../async_runtime/async_runtime_event_checker.h"
 
 #include "async_epoll_ops.h"
 
@@ -55,7 +56,8 @@ void asynC_init(){
     //TODO: add error checking with this
     child_process_creator_init();
 
-    async_epoll_init();
+    //async_epoll_init();
+    async_runtime_event_checker_create(0);
 
     thread_pool_init(); //TODO: uncomment later
     io_uring_init();
@@ -73,7 +75,7 @@ void asynC_cleanup(){
     
     child_process_creator_destroy();
 
-    async_epoll_destroy();
+    async_runtime_event_checker_destroy();
 
     thread_pool_destroy(); //TODO: uncomment later
     io_uring_exit();
@@ -97,7 +99,8 @@ void asynC_wait(){
         uring_try_submit_task();
         submit_thread_tasks();
 
-        epoll_check(); //TODO: keep this at beginning or end of iteration of loop?
+        //epoll_check();
+        async_runtime_event_check(); //TODO: keep this at beginning or end of iteration of loop?
     }
 }
 

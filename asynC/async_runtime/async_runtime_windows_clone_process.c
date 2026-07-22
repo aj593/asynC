@@ -1,5 +1,7 @@
 #include "async_runtime_windows_clone_process.h"
 
+int dummy_variable = 0;
+
 #if defined(_WIN32)
 #define _WIN32_WINNT 0x0600
 #define WIN32_LEAN_AND_MEAN
@@ -10,9 +12,6 @@
 #include <assert.h>
 #include <process.h>
 
-#endif
-
-#if defined(_WIN32)
 typedef struct _CLIENT_ID {
   PVOID UniqueProcess;
 	PVOID UniqueThread;
@@ -55,11 +54,7 @@ typedef NTSTATUS (*RtlCloneUserProcess_f)(ULONG ProcessFlags,
 	HANDLE DebugPort /* optional */,
 	PRTL_USER_PROCESS_INFORMATION ProcessInformation);
 
-#endif
-
-async_windows_process_stats async_runtime_windows_clone_process(void)
-{
-    #if defined(_WIN32)
+async_windows_process_stats async_runtime_windows_clone_process(void){
 	HMODULE mod;
 	RtlCloneUserProcess_f clone_p;
 	RTL_USER_PROCESS_INFORMATION process_info;
@@ -135,5 +130,7 @@ async_windows_process_stats async_runtime_windows_clone_process(void)
 
     return stats;
 
-    #endif
+   
 }
+
+ #endif

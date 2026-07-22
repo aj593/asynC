@@ -235,7 +235,10 @@ void async_fs_buffer_read(
 void async_fs_buffer_read_thread_task(void* read_task){
     async_fs_task_info* read_info = (async_fs_task_info*)read_task;
 
-    size_t num_bytes_to_read = min(read_info->max_num_bytes, async_byte_buffer_capacity(read_info->buffer));
+    size_t num_bytes_to_read = read_info->max_num_bytes;
+    if(async_byte_buffer_capacity(read_info->buffer) < num_bytes_to_read){
+        num_bytes_to_read = async_byte_buffer_capacity(read_info->buffer);
+    }
 
     read_info->return_val = read(
         read_info->fs_task_fd,
@@ -347,7 +350,10 @@ void async_fs_buffer_pread_thread_task(void* async_pread_task_info){
 
     #if defined(__unix__)
 
-    size_t num_bytes_to_read = min(pread_params->max_num_bytes, async_byte_buffer_capacity(pread_params->buffer));
+    size_t num_bytes_to_read = pread_params->max_num_bytes;
+    if(async_byte_buffer_capacity(pread_params->buffer) < num_bytes_to_read){
+        num_bytes_to_read = async_byte_buffer_capacity(pread_params->buffer);
+    }
     
     pread_params->return_val = pread(
         pread_params->fs_task_fd,
@@ -451,10 +457,10 @@ void async_fs_buffer_write(
 void async_fs_buffer_write_thread_task(void* write_task){
     async_fs_task_info* write_task_info = (async_fs_task_info*)write_task;
 
-    size_t num_bytes_to_write = min(
-        write_task_info->max_num_bytes, 
-        async_byte_buffer_capacity(write_task_info->buffer)
-    );
+    size_t num_bytes_to_write = write_task_info->max_num_bytes;
+    if(async_byte_buffer_capacity(write_task_info->buffer) < num_bytes_to_write){
+        num_bytes_to_write = async_byte_buffer_capacity(write_task_info->buffer);
+    }
 
     write_task_info->return_val = write(
         write_task_info->fs_task_fd,

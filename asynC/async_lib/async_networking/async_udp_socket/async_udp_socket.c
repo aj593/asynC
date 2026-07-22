@@ -161,7 +161,7 @@ void async_udp_socket_emit_bind_attempt(async_udp_socket* udp_socket){
         &udp_socket->wrapped_socket,
         udp_socket->wrapped_socket.socket_fd,
         inet_dgram_handler,
-        ASYNC_RUNTIME_READ | ASYNC_RUNTIME_ONESHOT
+        ASYNC_RUNTIME_EVENT_READ | ASYNC_RUNTIME_EVENT_ONESHOT
         
     );
     //EPOLLIN | EPOLLONESHOT
@@ -386,7 +386,7 @@ void inet_dgram_handler(event_node* curr_socket_node, uint32_t events){
     socket_info* new_socket_info = (socket_info*)curr_socket_node->data_ptr;
     async_socket* curr_socket = new_socket_info->socket;
 
-    if(events & ASYNC_RUNTIME_READ){
+    if(events & ASYNC_RUNTIME_EVENT_READ){
         async_net_recvfrom(
             curr_socket->socket_fd,
             async_byte_buffer_internal_array(curr_socket->receive_buffer),
@@ -426,16 +426,11 @@ void recvfrom_callback(
         port
     );
 
-    async_runtime_event_item event_item = {
-        .event_fd = wrapped_udp_socket->socket_fd,
-        .events = ASYNC_RUNTIME_READ | ASYNC_RUNTIME_ONESHOT,
-        .ptr = wrapped_udp_socket->socket_event_node_ptr
-    };
-
     async_runtime_event_checker_modify(
         ASYNC_RUNTIME_CTL_MOD,
         wrapped_udp_socket->socket_fd,
-        &event_item
+        wrapped_udp_socket->socket_event_node_ptr,
+        ASYNC_RUNTIME_EVENT_READ | ASYNC_RUNTIME_EVENT_ONESHOT
     );
 }
 

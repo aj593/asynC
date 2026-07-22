@@ -1,4 +1,4 @@
-#include "../../asynC/asynC.h"
+#include <asynC/asynC.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -8,7 +8,7 @@ void after_tls_socket_write(async_tls_socket* tls_socket, void* arg){
 }
 
 void async_tls_socket_data_callback(async_tls_socket* socket, async_byte_buffer* buffer, void* arg){
-    printf("Response: %s\n", (char*)async_byte_buffer_internal_array(buffer));
+    printf("got response: %s\n", (char*)async_byte_buffer_internal_array(buffer));
 }
 
 void async_tls_secure_connect_callback(async_tls_socket* tls_socket, void* arg){

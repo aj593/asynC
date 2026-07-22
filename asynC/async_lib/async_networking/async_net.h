@@ -67,7 +67,7 @@ void async_net_ipc_connect(
     void(*connect_callback)(int, char*, int, void*),
     void* arg
 );
-/*
+
 void async_net_ssl_read(
     SSL* ssl,
     void* buffer, 
@@ -82,7 +82,7 @@ void async_net_ssl_write(
     size_t num_bytes_to_write, 
     void(*ssl_write_callback)(SSL*, void*, int, void*),
     void* arg
-);*/
+);
 
 void async_net_listen(
     int socket_fd, 

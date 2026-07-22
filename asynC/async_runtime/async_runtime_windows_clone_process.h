@@ -10,10 +10,8 @@ typedef struct async_windows_process_stats {
     pid_t  process_id;
 } async_windows_process_stats;
 
-#endif
-
 async_windows_process_stats async_runtime_windows_clone_process(void);
 
-
+#endif
 
 #endif

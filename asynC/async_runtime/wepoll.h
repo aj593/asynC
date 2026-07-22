@@ -38,7 +38,7 @@
 
 #include <stdint.h>
 
-enum EPOLL_EVENTS {
+enum WEPOLL_EVENTS {
   WEPOLLIN      = (int) (1U <<  0),
   WEPOLLPRI     = (int) (1U <<  1),
   WEPOLLOUT     = (int) (1U <<  2),
